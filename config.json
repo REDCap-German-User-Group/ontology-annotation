@@ -1,0 +1,42 @@
+{
+	"name": "Ontologies Made Easy",
+	"namespace": "DE\\RUB\\OntologiesMadeEasyExternalModule",
+	"description": "A REDCap external module that facilitates adding and editing ontology annotations.",
+	"documentation": "README.md",
+	"authors": [
+		{
+			"name": "Günther Rezniczek",
+			"email": "guenther.rezniczek@rub.de",
+			"institution": "St. Elisabethgruppe GmbH - Marien Hospital Herne | Klinikum der Ruhr-Universität Bochum"
+		}
+	],
+	"framework-version": 16,
+	"action-tags": [
+		{
+			"tag": "@ONTOLOGY",
+			"description": "To be completed."
+		}
+	],
+	"system-settings": [
+	],
+	"project-settings": [
+		{
+			"key": "javascript-debug",
+			"name": "Output debug information to the browser console",
+			"type": "checkbox"
+		}
+	],
+	"auth-ajax-actions": [
+		"search"
+	],
+	"links": {
+		"project": [
+			{
+				"name": "Ontologies Made Easy",
+				"icon": "fa-solid fa-tree",
+				"url": "plugin/index.php",
+				"show-header-and-footer": true
+			}
+		]
+	}
+}
