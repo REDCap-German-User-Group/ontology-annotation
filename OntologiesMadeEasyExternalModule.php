@@ -23,22 +23,22 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Hooks
 
-	function redcap_every_page_top($project_id) 
+	function redcap_every_page_top($project_id)
 	{
 		if ($project_id == null) return; // Only run in project context
 		$this->init_proj($project_id);
 
 		$page = defined("PAGE") ? PAGE : null;
 		$form = isset($_GET['page']) && array_key_exists($_GET['page'], $this->proj->forms) ? $_GET['page'] : null;
-		
+
 		if ($page == "Design/online_designer.php" && $form != null) {
 			$this->init_online_designer($form);
 		}
 	}
 
-	function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance, $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id) 
+	function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance, $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id)
 	{
-		
+
 		$breakpoint = "here";
 	}
 
@@ -46,10 +46,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Online Designer
 
-	private function init_online_designer($form) {
+	private function init_online_designer($form)
+	{
 		$this->init_config();
 		$this->framework->initializeJavascriptModuleObject();
 		$jsmo_name = $this->framework->getJavascriptModuleObjectName();
+		$this->add_strings("online_designer");
 		$config = [
 			"debug" => $this->js_debug,
 			"version" => $this->VERSION,
@@ -58,10 +60,50 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$ih = InjectionHelper::init($this);
 		$ih->js("js/OntologiesMadeEasy.js");
 		$ih->css("css/OntologiesMadeEasy.css");
-		print RCView::script(self::NS_PREFIX . self::EM_NAME . ".init(".json_encode($config).", $jsmo_name);");
+		print RCView::script(self::NS_PREFIX . self::EM_NAME . ".init(" . json_encode($config) . ", $jsmo_name);");
 	}
 
 	#endregion
+
+
+	private function add_strings($view)
+	{
+		$jsmo = $this->framework->getJavascriptModuleObjectName();
+		if ($view == "online_designer") {
+			$this->framework->tt_transferToJavascriptModuleObject([
+				"module_name",
+				"fieldedit_05",
+				"fieldedit_06",
+			]);
+			?>
+			<template id="rome-em-fieldedit-ui-template">
+				<div class="rome-edit-field-ui-container">
+					<h1><?=$this->tt("fieldedit_01")?></h1>
+					<div class="d-flex align-items-baseline gap-2">
+						<span><?=$this->tt("fieldedit_08")?></span>
+						<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm " placeholder="<?= $this->tt("fieldedit_02") ?>">
+						<span><?=$this->tt("fieldedit_09")?></span>
+						<select class="form-select form-select-sm w-auto">
+							<option>Field</option>
+							<option>Choice A</option>
+							<option>Choice B</option>
+						</select>
+						<button type="button" class="btn btn-rcgreen btn-xs"><?=$this->tt("fieldedit_10")?></button>
+					</div>
+					<div class="rome-edit-field-ui-list">
+						<h2><?= $this->tt("fieldedit_03") ?></h2>
+					</div>
+					<div class="rome-edit-field-ui-list-empty">
+						<?= $this->tt("fieldedit_07") ?>
+					</div>
+					<div class="rome-edit-field-ui-footer">
+						<?=RCView::interpolateLanguageString($this->tt("fieldedit_04"), ["<a href='javascript:;' onclick='simpleDialog($jsmo.tt(\"fieldedit_06\"), $jsmo.tt(\"fieldedit_05\"));'>", "</a>"], false)?>
+					</div>
+				</div>
+			</template>
+			<?php
+		}
+	}
 
 
 	#region Private Helpers
@@ -81,9 +123,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			foreach ($GLOBALS["pageFields"][$page] as $field_name) {
 				$fields[$field_name] = $this->get_field_metadata($field_name);
 			}
-		}
-		else {
-			foreach($this->get_form_fields($form) as $field_name) {
+		} else {
+			foreach ($this->get_form_fields($form) as $field_name) {
 				$fields[$field_name] = $this->get_field_metadata($field_name);
 			}
 		}

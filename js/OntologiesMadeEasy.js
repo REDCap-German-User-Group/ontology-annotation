@@ -37,22 +37,25 @@ function initialize(config_data, jsmo = null) {
 		orig_fitDialog(ob);
 		if (ob && ob['id'] && ob.id == 'div_add_field') {
 			const $dlg = $(ob);
-			const $container = $dlg.find('#div_field_annotation');
-			if ($container.find('.rome-edit-field-ui').length == 0) {
-				addEditFieldUI($container);
-			}
+			addEditFieldUI($dlg);
 		}
 	}
-	
+
 	//#endregion
 }
 
 
 //#region Edit Field UI
 
-function addEditFieldUI($container) {
-	log('Adding Edit Field UI', $container);
-	$container.append('<div class="rome-edit-field-ui">ROME</div>');
+function addEditFieldUI($dlg) {
+	if ($dlg.find('.rome-edit-field-ui-container').length > 0) return;
+	log('Adding Edit Field UI');
+	const $ui = $($('#rome-em-fieldedit-ui-template').html());
+	// Setup event handlers
+
+	// Insert after Action Tags / Field Annotation
+	const $actiontags = $dlg.find('#div_field_annotation');
+	$ui.insertAfter($actiontags);
 }
 
 //#endregion

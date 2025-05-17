@@ -1,5 +1,6 @@
 {
-	"name": "Ontologies Made Easy",
+	"name": "ROME: REDCap Ontologies Made Easy",
+	"tt_name": "module_name",
 	"namespace": "DE\\RUB\\OntologiesMadeEasyExternalModule",
 	"description": "A REDCap external module that facilitates adding and editing ontology annotations.",
 	"documentation": "README.md",
@@ -14,7 +15,8 @@
 	"action-tags": [
 		{
 			"tag": "@ONTOLOGY",
-			"description": "To be completed."
+			"description": "See English.ini",
+			"tt_description": "conf_at_ontology"
 		}
 	],
 	"system-settings": [

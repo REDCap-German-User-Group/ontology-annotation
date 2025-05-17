@@ -1,6 +1,35 @@
 /* CSS for ROME (REDCap Ontologies Made Easy EM) */
-.rome-edit-field-ui {
+.rome-edit-field-ui-container {
+	font-size: 13px;
+	margin-top: 10px;
+	border: 1px solid #ccc;
+	padding: 6px 8px 10px 8px;
+	max-width: 700px;
+}
+.rome-edit-field-ui-container h1 {
 	font-size: 13px;
 	font-weight: bold;
-	color: #FF0000;
-}	
+	margin: 0 0 5px 0;
+}
+.rome-edit-field-ui-container h2 {
+	font-size: 13px;
+	font-weight: 500;
+	margin: 5px 0 2px 0;
+}
+.rome-edit-field-ui-container input[type="search"] {
+	max-width: 300px;
+}
+
+.rome-edit-field-ui-list-empty {
+	color: #999;
+	font-style: italic;
+}
+
+.rome-edit-field-ui-footer {
+	font-size: 11px;
+	color: #808080;
+	margin-top: 10px;
+}
+.rome-edit-field-ui-footer a {
+	text-decoration: underline;
+}
