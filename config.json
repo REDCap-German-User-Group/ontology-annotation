@@ -29,7 +29,8 @@
 		}
 	],
 	"auth-ajax-actions": [
-		"search"
+		"search",
+		"parse"
 	],
 	"links": {
 		"project": [

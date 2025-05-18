@@ -38,8 +38,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance, $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id)
 	{
-
-		$breakpoint = "here";
+		$this->init_proj($project_id);
+		switch($action) {
+			case "search":
+				return $this->search_ontologies($payload);
+			case "parse":
+				$ontology = $this->parse_ontology($payload);
+				return $ontology;
+		}
 	}
 
 	#endregion
@@ -62,9 +68,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$ih->css("css/OntologiesMadeEasy.css");
 		print RCView::script(self::NS_PREFIX . self::EM_NAME . ".init(" . json_encode($config) . ", $jsmo_name);");
 	}
-
-	#endregion
-
 
 	private function add_strings($view)
 	{
@@ -105,6 +108,20 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
+
+	private function search_ontologies($payload) {
+
+
+
+		return [];
+	}
+
+	#endregion
+
+
+	private function parse_ontology($payload) {
+		return [];
+	}
 
 	#region Private Helpers
 
