@@ -30,7 +30,8 @@
 	],
 	"auth-ajax-actions": [
 		"search",
-		"parse"
+		"parse",
+		"get-fieldhelp"
 	],
 	"links": {
 		"project": [

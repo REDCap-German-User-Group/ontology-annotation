@@ -9,7 +9,8 @@ const NS_PREFIX = 'DE_RUB_';
 
 // @ts-ignore
 const EM = window[NS_PREFIX + EM_NAME] ?? {
-	init: initialize
+	init: initialize,
+	showFieldHelp: showFieldHelp
 };
 // @ts-ignore
 window[NS_PREFIX + EM_NAME] = EM;
@@ -37,28 +38,44 @@ function initialize(config_data, jsmo = null) {
 	const orig_fitDialog = window['fitDialog'];
 	window['fitDialog'] = function(ob) {
 		orig_fitDialog(ob);
-		if (ob && ob['id'] && ob.id == 'div_add_field') {
+		if (ob && ob['id'] && ['div_add_field', 'addMatrixPopup'].includes(ob.id)) {
 			const $dlg = $(ob);
-			addEditFieldUI($dlg);
-
+			addEditFieldUI($dlg, ob.id == 'addMatrixPopup');
 		}
 	}
 
 	//#endregion
 }
 
+function showFieldHelp() {
+	if (!data.fieldHelpContent) {
+		config.JSMO.ajax('get-fieldhelp').then(response => {
+			data.fieldHelpContent = response;
+			showFieldHelp();
+		}).catch(err => {
+			error(err);
+		});
+	}
+	else {
+		log('Showing field help');
+		simpleDialog(data.fieldHelpContent, config.moduleDisplayName);
+	}
+}
+
 
 //#region Edit Field UI
 
-function addEditFieldUI($dlg) {
+function addEditFieldUI($dlg, isMatrix) {
 	if ($dlg.find('.rome-edit-field-ui-container').length > 0) return;
-	log('Adding Edit Field UI');
+	log('Adding Edit Field UI' + (isMatrix ? ' (matrix)' : ''));
 	const $ui = $($('#rome-em-fieldedit-ui-template').html());
 	
 	//#region Setup event handlers
 	
 	// Track changes to the choices
-	const $enum = $dlg.find('textarea[name="element_enum"]');
+	const $enum = isMatrix 
+		? $dlg.find('textarea[name="element_enum_matrix"]')
+		: $dlg.find('textarea[name="element_enum"]');
 	// Detect user input
 	$enum[0].addEventListener('change', () => {
 		trackEnumChange($enum.val());
@@ -99,22 +116,41 @@ function addEditFieldUI($dlg) {
 		}
 	}).trigger('change');
 	
-	// Mirror visibility of the Action Tags / Field Annotation DIV
-	const actiontagsDIV = document.getElementById('div_field_annotation') 
-		?? document.createElement('div');
-	const observer = new MutationObserver(() => {
-		const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-   	 	$ui.css('display', actiontagsVisible ? 'block' : 'none');
-	});
-	observer.observe(actiontagsDIV, { attributes: true, attributeFilter: ['style'] });
-	// Initial sync
-	const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-	$ui.css('display', actiontagsVisible ? 'block' : 'none');
-	// Setup event handlers
+        // const throttledUISearch = throttle(performUISearch, 200, { leading: false })
+        // $('input[data-mlm-config="ui-search"]').on('input change keyup paste click search', function(e) {
+        //     const val = ($(e.target).val() ?? '').toString().toLowerCase()
+        //     if (val == '') {
+        //         performUISearch()
+        //     }
+        //     else {
+        //         throttledUISearch()
+        //     }
+        // })
+
 	//#endregion
 
-	// Insert after Action Tags / Field Annotation
-	$ui.insertAfter(actiontagsDIV);
+	if (isMatrix) {
+		// Insert at end of the dialog
+		$dlg.append($ui);
+	}
+	else {
+		// Mirror visibility of the Action Tags / Field Annotation DIV
+		const actiontagsDIV = document.getElementById('div_field_annotation') 
+			?? document.createElement('div');
+		const observer = new MutationObserver(() => {
+			const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
+				$ui.css('display', actiontagsVisible ? 'block' : 'none');
+		});
+		observer.observe(actiontagsDIV, { attributes: true, attributeFilter: ['style'] });
+		// Initial sync
+		const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
+		$ui.css('display', actiontagsVisible ? 'block' : 'none');
+		// Insert after Action Tags / Field Annotation
+		$ui.insertAfter(actiontagsDIV);
+	}
+	
+
+
 }
 
 

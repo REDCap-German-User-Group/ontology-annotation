@@ -6,10 +6,13 @@
 	padding: 6px 8px 10px 8px;
 	max-width: 700px;
 }
+#addMatrixPopup .rome-edit-field-ui-container {
+	max-width: unset;
+}
 .rome-edit-field-ui-container h1 {
 	font-size: 13px;
 	font-weight: bold;
-	margin: 0 0 5px 0;
+	margin: 2px 0 5px 0;
 }
 .rome-edit-field-ui-container h2 {
 	font-size: 13px;
@@ -32,4 +35,14 @@
 }
 .rome-edit-field-ui-footer a {
 	text-decoration: underline;
+}
+.rome-edit-field-ui-header {
+	display: flex;
+}
+
+#div_add_field .rome-em-fieldedit-exclude-matrix {
+	display: none;
+}
+#addMatrixPopup .rome-em-fieldedit-exclude-field {
+	display: none;
 }

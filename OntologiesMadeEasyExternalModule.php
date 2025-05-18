@@ -23,6 +23,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Hooks
 
+	// Injection
 	function redcap_every_page_top($project_id)
 	{
 		if ($project_id == null) return; // Only run in project context
@@ -36,6 +37,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
+
+	// AJAX handler
 	function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance, $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id)
 	{
 		$this->init_proj($project_id);
@@ -45,6 +48,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			case "parse":
 				$ontology = $this->parse_ontology($payload);
 				return $ontology;
+			case "get-fieldhelp":
+				return $this->get_fieldhelp();
 		}
 	}
 
@@ -57,10 +62,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$this->init_config();
 		$this->framework->initializeJavascriptModuleObject();
 		$jsmo_name = $this->framework->getJavascriptModuleObjectName();
-		$this->add_strings("online_designer");
+		$this->add_templates("online_designer");
 		$config = [
 			"debug" => $this->js_debug,
 			"version" => $this->VERSION,
+			"moduleDisplayName" => $this->tt("module_name"),
+			"atName" => self::AT_ONTOLOGY,
 		];
 		require_once "classes/InjectionHelper.php";
 		$ih = InjectionHelper::init($this);
@@ -69,38 +76,49 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		print RCView::script(self::NS_PREFIX . self::EM_NAME . ".init(" . json_encode($config) . ", $jsmo_name);");
 	}
 
-	private function add_strings($view)
+	private function add_templates($view)
 	{
-		$jsmo = $this->framework->getJavascriptModuleObjectName();
 		if ($view == "online_designer") {
-			$this->framework->tt_transferToJavascriptModuleObject([
-				"module_name",
-				"fieldedit_05",
-				"fieldedit_06",
-			]);
 			?>
 			<template id="rome-em-fieldedit-ui-template">
 				<div class="rome-edit-field-ui-container">
-					<h1><?=$this->tt("fieldedit_01")?></h1>
-					<div class="d-flex align-items-baseline gap-2">
-						<span><?=$this->tt("fieldedit_08")?></span>
-						<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm " placeholder="<?= $this->tt("fieldedit_02") ?>">
-						<span><?=$this->tt("fieldedit_09")?></span>
-						<select class="form-select form-select-sm w-auto">
-							<option>Field</option>
-							<option>Choice A</option>
-							<option>Choice B</option>
-						</select>
-						<button type="button" class="btn btn-rcgreen btn-xs"><?=$this->tt("fieldedit_10")?></button>
+					<div class="rome-edit-field-ui-header">
+						<h1><?=$this->tt("fieldedit_01")?></h1>
+						<input id="rome-em-fieldedit-exclude" type="checkbox" class="form-check-input ms-3">
+						<label class="form-check-label ms-1" for="rome-em-fieldedit-exclude">
+							<span class="rome-em-fieldedit-exclude-field">
+								<?=$this->tt("fieldedit_11")?>
+							</span>
+							<span class="rome-em-fieldedit-exclude-matrix">
+								<?=$this->tt("fieldedit_12")?>
+							</span>
+						</label>
 					</div>
-					<div class="rome-edit-field-ui-list">
-						<h2><?= $this->tt("fieldedit_03") ?></h2>
-					</div>
-					<div class="rome-edit-field-ui-list-empty">
-						<?= $this->tt("fieldedit_07") ?>
+					<div class="rome-edit-field-ui-body">
+						<div class="d-flex align-items-baseline gap-2">
+							<span><?=$this->tt("fieldedit_08")?></span>
+							<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm " placeholder="<?= $this->tt("fieldedit_02") ?>">
+							<span><?=$this->tt("fieldedit_09")?></span>
+							<select class="form-select form-select-sm w-auto">
+								<option>Field</option>
+								<option>Choice A</option>
+								<option>Choice B</option>
+							</select>
+							<button type="button" class="btn btn-rcgreen btn-xs"><?=$this->tt("fieldedit_10")?></button>
+						</div>
+						<div class="rome-edit-field-ui-list">
+							<h2><?= $this->tt("fieldedit_03") ?></h2>
+						</div>
+						<div class="rome-edit-field-ui-list-empty">
+							<?= $this->tt("fieldedit_07") ?>
+						</div>
 					</div>
 					<div class="rome-edit-field-ui-footer">
-						<?=RCView::interpolateLanguageString($this->tt("fieldedit_04"), ["<a href='javascript:;' onclick='simpleDialog($jsmo.tt(\"fieldedit_06\"), $jsmo.tt(\"fieldedit_05\"));'>", "</a>"], false)?>
+						<?=RCView::interpolateLanguageString($this->tt("fieldedit_04"), [
+								"<a href='javascript:;' onclick='".$this->get_js_module_name().".showFieldHelp();'>",
+								"</a>"
+							], false)
+						?>
 					</div>
 				</div>
 			</template>
@@ -116,6 +134,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return [];
 	}
 
+
+	/**
+	 * Gets the "Learn about using Ontology Annotations" content 
+	 * @return string 
+	 */
+	private function get_fieldhelp() {
+		return $this->tt("fieldedit_06");
+	}
+
 	#endregion
 
 
@@ -124,6 +151,16 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	#region Private Helpers
+
+
+	/**
+	 * Gets the JS module name
+	 * @return string 
+	 */
+	private function get_js_module_name()
+	{
+		return self::NS_PREFIX . self::EM_NAME;
+	}
 
 	/**
 	 * Gets a list of field on the page
