@@ -17,6 +17,8 @@ window[NS_PREFIX + EM_NAME] = EM;
 /** Configuration data supplied from the server */
 let config = {};
 
+const data = {};
+
 //#endregion
 
 /**
@@ -38,6 +40,7 @@ function initialize(config_data, jsmo = null) {
 		if (ob && ob['id'] && ob.id == 'div_add_field') {
 			const $dlg = $(ob);
 			addEditFieldUI($dlg);
+
 		}
 	}
 
@@ -51,14 +54,90 @@ function addEditFieldUI($dlg) {
 	if ($dlg.find('.rome-edit-field-ui-container').length > 0) return;
 	log('Adding Edit Field UI');
 	const $ui = $($('#rome-em-fieldedit-ui-template').html());
+	
+	//#region Setup event handlers
+	
+	// Track changes to the choices
+	const $enum = $dlg.find('textarea[name="element_enum"]');
+	// Detect user input
+	$enum[0].addEventListener('change', () => {
+		trackEnumChange($enum.val());
+	});
+	// Detect programmatic changes by redefining .value
+	const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+	Object.defineProperty($enum.get(0), 'value', {
+		get() {
+			return descriptor['get'].call(this);
+		},
+		set(newVal) {
+			descriptor.set.call(this, newVal);
+			trackEnumChange(newVal);
+		}
+	});
+	// Keep track of changes
+	function trackEnumChange(val) {
+		if (val !== data.enum) {
+			const fieldType = getFieldType();
+			if (['select','radio','checkbox'].includes(fieldType)) {
+				setEnum(val);
+			}
+		}
+	}
+	// Track changes of the field type and set enum
+	$dlg.find('select[name="field_type"]').on('change', () => {
+		data.fieldType = getFieldType();
+		log('Field type changed:', data.fieldType);
+		if (data.fieldType == 'yesno' || data.fieldType == 'truefalse') {
+			const val = $('#div_element_'+data.fieldType+'_enum div').last().html().trim().replace('<br>', '\n');
+			setEnum(val);
+		}
+		else if (['select','radio','checkbox'].includes(data.fieldType)) {
+			trackEnumChange($enum.val());
+		}
+		else {
+			setEnum('');
+		}
+	}).trigger('change');
+	
+	// Mirror visibility of the Action Tags / Field Annotation DIV
+	const actiontagsDIV = document.getElementById('div_field_annotation') 
+		?? document.createElement('div');
+	const observer = new MutationObserver(() => {
+		const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
+   	 	$ui.css('display', actiontagsVisible ? 'block' : 'none');
+	});
+	observer.observe(actiontagsDIV, { attributes: true, attributeFilter: ['style'] });
+	// Initial sync
+	const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
+	$ui.css('display', actiontagsVisible ? 'block' : 'none');
 	// Setup event handlers
+	//#endregion
 
 	// Insert after Action Tags / Field Annotation
-	const $actiontags = $dlg.find('#div_field_annotation');
-	$ui.insertAfter($actiontags);
+	$ui.insertAfter(actiontagsDIV);
 }
 
+
 //#endregion
+
+/**
+ * Gets the current field type
+ * @returns {string}
+ */
+function getFieldType() {
+	return $('select#field_type').val()?.toString() ?? '';
+}
+
+/**
+ * Updates the enum value store
+ * @param {string} val 
+ */
+function setEnum(val) {
+	if (data.enum !== val) {
+		data.enum = val;
+		log('Enum updated:', data.enum);
+	}
+}
 
 //#region Debug Logging
 
