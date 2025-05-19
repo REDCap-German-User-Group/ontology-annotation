@@ -40,10 +40,43 @@ function initialize(config_data, jsmo = null) {
 		orig_fitDialog(ob);
 		if (ob && ob['id'] && ['div_add_field', 'addMatrixPopup'].includes(ob.id)) {
 			const $dlg = $(ob);
-			addEditFieldUI($dlg, ob.id == 'addMatrixPopup');
+			updateEditFieldUI($dlg, ob.id == 'addMatrixPopup');
 		}
 	}
 
+	//#endregion
+
+	//#region AJAX Hooks
+
+	$.ajaxPrefilter(function(options, originalOptions, jqXHR) {
+		if (options.url?.includes('Design/edit_matrix.php')) {
+			// Matrix saving
+			const matrixGroupName = $('#grid_name').val();
+			const exclude = $('#rome-em-fieldedit-exclude-matrix').prop('checked');
+			const originalSuccess = options.success;
+			options.success = function(data, textStatus, jqXHR) {
+				saveMatrixFormExclusion(matrixGroupName, exclude);
+				if (originalSuccess) {
+					originalSuccess.call(this, data, textStatus, jqXHR);
+				}
+			}
+		}
+		else if (options.url?.includes('Design/online_designer_render_fields.php')) {
+			// Design table reloading - get updated exclusion
+			const originalSuccess = options.success 
+			options.success = function(data, textStatus, jqXHR) {
+				config.JSMO.ajax('refresh-exclusions', config.form).then(function(response) {
+					log('Updated config data:', response);
+					config.fieldsExcluded = response.fieldsExcluded;
+					config.matrixGroupsExcluded = response.matrixGroupsExcluded;
+				}).finally(function() {
+					if (originalSuccess) {
+						originalSuccess.call(this, data, textStatus, jqXHR);
+					}
+				});
+			}
+		}
+	});
 	//#endregion
 }
 
@@ -64,6 +97,24 @@ function showFieldHelp() {
 
 
 //#region Edit Field UI
+
+function updateEditFieldUI($dlg, isMatrix) {
+	if ($dlg.find('.rome-edit-field-ui-container').length == 0) {
+		addEditFieldUI($dlg, isMatrix);
+	}
+	log('Updating Edit Field UI');
+	// Exclusion checkbox
+	let excluded = false;
+	if (isMatrix) {
+		const matrixGroupName = '' + $dlg.find('#grid_name').val();
+		excluded = config.matrixGroupsExcluded.includes(matrixGroupName);
+	}
+	else {
+		const fieldName = '' + $dlg.find('input[name="field_name"]').val();
+		excluded = config.fieldsExcluded.includes(fieldName);
+	}
+	$dlg.find('input.rome-em-fieldedit-exclude').prop('checked', excluded);
+}
 
 function addEditFieldUI($dlg, isMatrix) {
 	if ($dlg.find('.rome-edit-field-ui-container').length > 0) return;
@@ -115,6 +166,26 @@ function addEditFieldUI($dlg, isMatrix) {
 			setEnum('');
 		}
 	}).trigger('change');
+	// Init and track "Do not annotate this field/matrix"
+	$ui.find('.rome-em-fieldedit-exclude').each(function() {
+		const $this = $(this);
+		const id = 'rome-em-fieldedit-exclude-' + (isMatrix ? 'matrix' : 'field');
+		if ($this.is('input')) {
+			$this.attr('id', id);
+			$this.on('change', function() {
+				const checked = $(this).prop('checked');
+				if (!isMatrix) {
+					// Store exclusion
+					$dlg.find('[name="rome-em-fieldedit-exclude"]').val(checked ? 1 : 0);
+				}
+				log('Do not annotate is ' + (checked ? 'checked' : 'not checked'));
+				if (checked) performExclusionCheck($dlg, isMatrix);
+			});
+		}
+		else if ($this.is('label')) {
+			$this.attr('for', id);
+		}
+	});
 	
         // const throttledUISearch = throttle(performUISearch, 200, { leading: false })
         // $('input[data-mlm-config="ui-search"]').on('input change keyup paste click search', function(e) {
@@ -145,16 +216,43 @@ function addEditFieldUI($dlg, isMatrix) {
 		// Initial sync
 		const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
 		$ui.css('display', actiontagsVisible ? 'block' : 'none');
+		// Add a hidden field to transfer exclusion
+		$dlg.find('#addFieldForm').prepend('<input type="hidden" name="rome-em-fieldedit-exclude" value="0">');
 		// Insert after Action Tags / Field Annotation
 		$ui.insertAfter(actiontagsDIV);
 	}
-	
-
 
 }
 
 
 //#endregion
+
+function performExclusionCheck($dlg, isMatrix) {
+	const misc = [];
+	$dlg.find(isMatrix ? '[name="addFieldMatrixRow-annotation"]' : '[name="field_annotation"]').each(function() {
+		misc.push($(this).val() ?? '');
+	});
+	if (misc.join(' ').includes(config.atName)) {
+		simpleDialog(config.JSMO.tt(isMatrix ? 'fieldedit_15' : 'fieldedit_14', config.atName), config.JSMO.tt('fieldedit_13'));
+	}
+}
+
+function saveMatrixFormExclusion(matrixGroupName, exclude) {
+	log('Saving exclusion for matrix group "' + matrixGroupName + '": ', exclude);
+	config.JSMO.ajax('set-matrix-exclusion', {
+		grid_name: matrixGroupName,
+		exclude: exclude ? '1' : '0'
+	});
+	// Update config
+	if (exclude) {
+		if (!config.matrixGroupsExcluded.includes(matrixGroupName)) {
+			config.matrixGroupsExcluded.push(matrixGroupName);
+		}
+	}
+	else {
+		config.matrixGroupsExcluded = config.matrixGroupsExcluded.filter(val => val != matrixGroupName);
+	}
+}
 
 /**
  * Gets the current field type

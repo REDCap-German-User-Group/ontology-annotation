@@ -31,7 +31,6 @@
 .rome-edit-field-ui-footer {
 	font-size: 11px;
 	color: #808080;
-	margin-top: 10px;
 }
 .rome-edit-field-ui-footer a {
 	text-decoration: underline;
@@ -44,5 +43,11 @@
 	display: none;
 }
 #addMatrixPopup .rome-em-fieldedit-exclude-field {
+	display: none;
+}
+.rome-edit-field-ui-body {
+	margin-bottom: 10px;
+}
+.rome-edit-field-ui-container:has(input.rome-em-fieldedit-exclude:checked) .rome-edit-field-ui-body {
 	display: none;
 }
