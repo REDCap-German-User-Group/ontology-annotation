@@ -114,6 +114,7 @@ function updateEditFieldUI($dlg, isMatrix) {
 		excluded = config.fieldsExcluded.includes(fieldName);
 	}
 	$dlg.find('input.rome-em-fieldedit-exclude').prop('checked', excluded);
+	$dlg.find('input[name="rome-em-fieldedit-search"]').val("");
 }
 
 function addEditFieldUI($dlg, isMatrix) {
@@ -186,17 +187,50 @@ function addEditFieldUI($dlg, isMatrix) {
 			$this.attr('for', id);
 		}
 	});
-	
-        // const throttledUISearch = throttle(performUISearch, 200, { leading: false })
-        // $('input[data-mlm-config="ui-search"]').on('input change keyup paste click search', function(e) {
-        //     const val = ($(e.target).val() ?? '').toString().toLowerCase()
-        //     if (val == '') {
-        //         performUISearch()
-        //     }
-        //     else {
-        //         throttledUISearch()
-        //     }
-        // })
+	// Init auto completion
+	const $searchInput = $ui.find('input[name="rome-em-fieldedit-search"]');
+	const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
+	$searchInput.autocomplete({
+		source: function(request, response) {
+			const payload = {
+				"term": request.term,
+				"isMatrix": isMatrix,
+				"name": isMatrix ? $dlg.find('input[name="grid_name"]').val() : $dlg.find('input[name="field_name"]').val()
+			};
+			$searchSpinner.addClass('busy');
+			config.JSMO.ajax('search', payload)
+				.then(searchResult => {
+					log('Search result:', searchResult);
+					response(searchResult);
+				})
+				.catch(err => error(err))
+				.finally(() => $searchSpinner.removeClass('busy'));
+		},
+		minLength: 2,
+		delay: 0,
+		open: function(event, ui) {
+			// For some reason, the z-index of the parent dialog keeps shifting up
+			const z = '' + (Number.parseInt($dlg.parents('[role="dialog"]').css('z-index') ?? '199') + 1);
+			const action = ('' + $searchInput.val()).length == 0 ? 'hide' : 'show';
+			$('.ui-autocomplete, .ui-menu-item').css('z-index', z)[action]();
+		},
+		focus: function(event, ui) {
+			return false;
+		},
+		select: function(event, ui) {
+			log('Autosuggest selected:', ui);
+			if (ui.item.value !== '') {
+				$searchInput.val(ui.item.label);
+			}
+			return false;
+		}
+	})
+	.data('ui-autocomplete')._renderItem = function(ul, item) {
+		return $("<li></li>")
+			.data("item", item)
+			.append("<a>"+item.display+"</a>")
+			.appendTo(ul);
+	};
 
 	//#endregion
 

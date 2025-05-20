@@ -120,7 +120,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 						<div class="d-flex align-items-baseline gap-2">
 							<span><?=$this->tt("fieldedit_08")?></span>
 							<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm " placeholder="<?= $this->tt("fieldedit_02") ?>">
-							<span><?=$this->tt("fieldedit_09")?></span>
+							<span class="rome-edit-field-ui-spinner">
+								<i class="fa-solid fa-spinner fa-spin-pulse rome-edit-field-ui-spinner-spinning"></i>
+								<i class="fa-solid fa-arrow-right fa-lg rome-edit-field-ui-spinner-not-spinning"></i>
+							</span>
 							<select class="form-select form-select-sm w-auto">
 								<option>Field</option>
 								<option>Choice A</option>
@@ -208,9 +211,46 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	private function search_ontologies($payload) {
 
+		$term = trim($payload["term"] ?? "");
+		if ($term == "") return null;
+		$dummy_data = [
+			"1001" => "Test 1",
+			"1002" => "Test 2",
+			"1003" => "Test 3",
+			"1004" => "Other item 4",
+			"1005" => "Other ontology test example 5",
+		];
+		
+		$result = [];
+		foreach ($dummy_data as $val => $label) {
 
+			$display_item = "[$val] $label";
+			$display_item = filter_tags(label_decode($display_item));
+			$pos = stripos($display_item, $term);
+			if ($pos !== false) {
+				$term_length = strlen($term);
+				$display_item = substr($display_item, 0, $pos) . 
+					"<b style=\"color:#319AFF;\">".substr($display_item, $pos, $term_length)."</b>" . 
+					substr($display_item, $pos + $term_length);
+				$result[] = [
+					"value" => $val,
+					"label" => $label,
+					"display" => $display_item,
+				];
+			}
+		}
+		if (count($result) == 0) {
+			$result[] = [
+				"value" => "",
+				"label" => "",
+				"display" => $this->tt("fieldedit_16"),
+			];
+		}
 
-		return [];
+		// Artificial pause
+		sleep(.5);
+
+		return $result;
 	}
 
 

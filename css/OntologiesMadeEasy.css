@@ -51,3 +51,19 @@
 .rome-edit-field-ui-container:has(input.rome-em-fieldedit-exclude:checked) .rome-edit-field-ui-body {
 	display: none;
 }
+
+.rome-edit-field-ui-spinner {
+	display: inline-block;
+	width: 20px;
+	text-align: center;
+}
+.rome-edit-field-ui-spinner .rome-edit-field-ui-spinner-spinning { 
+	color: gray;
+	display: none;
+}
+.rome-edit-field-ui-spinner.busy .rome-edit-field-ui-spinner-spinning { 
+	display: inline-block;
+}
+.rome-edit-field-ui-spinner.busy .rome-edit-field-ui-spinner-not-spinning {
+	display: none;
+}
