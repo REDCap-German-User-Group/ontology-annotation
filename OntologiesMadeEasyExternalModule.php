@@ -230,7 +230,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			if ($pos !== false) {
 				$term_length = strlen($term);
 				$display_item = substr($display_item, 0, $pos) . 
-					"<b style=\"color:#319AFF;\">".substr($display_item, $pos, $term_length)."</b>" . 
+					"<span class=\"rome-edit-field-ui-search-match\">".substr($display_item, $pos, $term_length)."</span>" . 
 					substr($display_item, $pos + $term_length);
 				$result[] = [
 					"value" => $val,

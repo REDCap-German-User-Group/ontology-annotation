@@ -67,3 +67,7 @@
 .rome-edit-field-ui-spinner.busy .rome-edit-field-ui-spinner-not-spinning {
 	display: none;
 }
+.rome-edit-field-ui-search-match {
+	color: #319aff;
+	font-weight: bold;
+}
