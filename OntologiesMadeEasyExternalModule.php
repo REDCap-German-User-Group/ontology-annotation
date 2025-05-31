@@ -213,17 +213,35 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		$term = trim($payload["term"] ?? "");
 		if ($term == "") return null;
-		$dummy_data = [
-			"1001" => "Test 1",
-			"1002" => "Test 2",
-			"1003" => "Test 3",
-			"1004" => "Other item 4",
-			"1005" => "Other ontology test example 5",
-		];
-		
-		$result = [];
-		foreach ($dummy_data as $val => $label) {
 
+
+		$bioportal_api_token = $GLOBALS["bioportal_api_token"] ?? "";
+		if ($bioportal_api_token == "") return null;
+
+		$bioportal_api_url = $GLOBALS["bioportal_api_url"] ?? "";
+		if ($bioportal_api_url == '') return null;
+
+		// Fixed
+		$ontology_acronym = "SNOMEDCT";
+
+		$result = [];
+
+			// Build URL to call
+		$url = $bioportal_api_url . "search?q=".urlencode($term)."&ontologies=".urlencode($ontology_acronym)
+			 . "&suggest=true&include=prefLabel,notation,cui&display_links=false&display_context=false&format=json&apikey=" . $bioportal_api_token;
+		// Call the URL
+		$json = http_get($url);
+		
+		$response = json_decode($json, true);
+
+		if (!$response || !$response["collection"]) return null;
+		
+		$dummy_data = [];
+		foreach ($response["collection"] as $item) {
+			$dummy_data[$item["notation"]] = $item["prefLabel"];
+		}
+	
+		foreach ($dummy_data as $val => $label) {
 			$display_item = "[$val] $label";
 			$display_item = filter_tags(label_decode($display_item));
 			$pos = stripos($display_item, $term);

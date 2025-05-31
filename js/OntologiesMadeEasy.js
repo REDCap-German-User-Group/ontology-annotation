@@ -1,4 +1,8 @@
 // Ontology Made Easy EM
+
+/// <reference types="jquery" />
+/// <reference types="jqueryui" />
+
 // @ts-check
 ;(function() {
 
@@ -57,6 +61,7 @@ function initialize(config_data, jsmo = null) {
 			options.success = function(data, textStatus, jqXHR) {
 				saveMatrixFormExclusion(matrixGroupName, exclude);
 				if (originalSuccess) {
+					// @ts-ignore
 					originalSuccess.call(this, data, textStatus, jqXHR);
 				}
 			}
@@ -71,6 +76,7 @@ function initialize(config_data, jsmo = null) {
 					config.matrixGroupsExcluded = response.matrixGroupsExcluded;
 				}).finally(function() {
 					if (originalSuccess) {
+						// @ts-ignore
 						originalSuccess.call(this, data, textStatus, jqXHR);
 					}
 				});
@@ -91,6 +97,7 @@ function showFieldHelp() {
 	}
 	else {
 		log('Showing field help');
+		// @ts-ignore REDCap base.js
 		simpleDialog(data.fieldHelpContent, config.moduleDisplayName);
 	}
 }
@@ -136,9 +143,11 @@ function addEditFieldUI($dlg, isMatrix) {
 	const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
 	Object.defineProperty($enum.get(0), 'value', {
 		get() {
+			// @ts-ignore
 			return descriptor['get'].call(this);
 		},
 		set(newVal) {
+			// @ts-ignore
 			descriptor.set.call(this, newVal);
 			trackEnumChange(newVal);
 		}
@@ -195,7 +204,8 @@ function addEditFieldUI($dlg, isMatrix) {
 			const payload = {
 				"term": request.term,
 				"isMatrix": isMatrix,
-				"name": isMatrix ? $dlg.find('input[name="grid_name"]').val() : $dlg.find('input[name="field_name"]').val()
+				"name": isMatrix ? $dlg.find('input[name="grid_name"]').val() : $dlg.find('input[name="field_name"]').val(),
+				// TODO - maybe need add value from target dropdown, in case this affect what we do here
 			};
 			$searchSpinner.addClass('busy');
 			config.JSMO.ajax('search', payload)
@@ -267,6 +277,7 @@ function performExclusionCheck($dlg, isMatrix) {
 		misc.push($(this).val() ?? '');
 	});
 	if (misc.join(' ').includes(config.atName)) {
+		// @ts-ignore REDCap base.js
 		simpleDialog(config.JSMO.tt(isMatrix ? 'fieldedit_15' : 'fieldedit_14', config.atName), config.JSMO.tt('fieldedit_13'));
 	}
 }
