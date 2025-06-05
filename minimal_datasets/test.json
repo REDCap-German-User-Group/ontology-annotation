@@ -1,3 +1,30 @@
 {
-	"name": "Example"
+  "name": "Example",
+  "items": [
+    {
+      "name": "Diabetes mellitus",
+      "coding": [
+        {
+          "system": "urn:oid:1.2.276.0.76.5.409",
+          "code": "E14",
+          "display": "Nicht näher bezeichneter Diabetes mellitus"
+        },
+        {
+          "system": "http://snomed.info/sct",
+          "code": "73211009",
+          "display": "Diabetes mellitus (disorder)"
+        }
+      ]
+    },
+    {
+      "name": "Imaging procedures",
+      "coding": [
+        {
+          "system": "http://snomed.info/sct",
+          "code": "363679005",
+          "display": "Imaging (procedure)"
+        }
+      ]
+    }
+  ]
 }

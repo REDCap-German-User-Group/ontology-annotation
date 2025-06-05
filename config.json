@@ -26,6 +26,11 @@
 			"key": "javascript-debug",
 			"name": "Output debug information to the browser console",
 			"type": "checkbox"
+		},
+		{	"key": "minimal-dataset",
+			"name": "Minimal Dataset (a json with keys 'name', and 'items')",
+			"type": "json",
+			"repeatable": "true"
 		}
 	],
 	"auth-ajax-actions": [

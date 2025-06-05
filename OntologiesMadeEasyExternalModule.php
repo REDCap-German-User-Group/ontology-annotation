@@ -214,6 +214,23 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$term = trim($payload["term"] ?? "");
 		if ($term == "") return null;
 
+		$result = [];
+
+		// search configured minimal datasets first
+		foreach ($this->getProjectSetting("minimal-dataset") as $minimal_dataset_string) {
+            $minimal_dataset = json_decode($minimal_dataset_string, true);
+		    foreach (array_filter($minimal_dataset["items"],
+                                  fn($item)  =>  preg_match("/$term/", $item["name"]))
+                     as $found_item) {
+                $result[] = [
+                    "value" => json_encode($found_item["coding"]),
+                    "label" => $found_item["name"],
+                    "display" => "<b>" . $minimal_dataset["name"] . "</b>: " . $found_item["name"]
+                ];
+		    }	
+            
+		}		
+		
 
 		$bioportal_api_token = $GLOBALS["bioportal_api_token"] ?? "";
 		if ($bioportal_api_token == "") return null;
@@ -223,8 +240,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		// Fixed
 		$ontology_acronym = "SNOMEDCT";
+        $ontology_system  = "http://snomed.info/sct";
 
-		$result = [];
 
 			// Build URL to call
 		$url = $bioportal_api_url . "search?q=".urlencode($term)."&ontologies=".urlencode($ontology_acronym)
@@ -251,9 +268,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					"<span class=\"rome-edit-field-ui-search-match\">".substr($display_item, $pos, $term_length)."</span>" . 
 					substr($display_item, $pos + $term_length);
 				$result[] = [
-					"value" => $val,
+					"value" => json_encode(["system" => $ontology_system, "code" => $val, "display" => $label]),
 					"label" => $label,
-					"display" => $display_item,
+					"display" => "<b>" . $ontology_acronym . "</b>: " . $display_item,
 				];
 			}
 		}
