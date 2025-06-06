@@ -129,7 +129,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 								<option>Choice A</option>
 								<option>Choice B</option>
 							</select>
-							<button type="button" class="btn btn-rcgreen btn-xs"><?=$this->tt("fieldedit_10")?></button>
+							<button id="rome-add-button" type="button" class="btn btn-rcgreen btn-xs"><?=$this->tt("fieldedit_10")?></button>
 						</div>
 						<div class="rome-edit-field-ui-list">
 							<h2><?= $this->tt("fieldedit_03") ?></h2>

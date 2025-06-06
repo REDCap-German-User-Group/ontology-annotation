@@ -228,9 +228,13 @@ function addEditFieldUI($dlg, isMatrix) {
 			return false;
 		},
 		select: function(event, ui) {
-			log('Autosuggest selected:', ui);
+		        log('Autosuggest selected:', ui);
+		        
 			if (ui.item.value !== '') {
-				$searchInput.val(ui.item.label);
+			    $searchInput.val(ui.item.label);
+			    document.getElementById("rome-add-button").onclick=function() {
+		               updateOntologyActionTag(ui.item);
+		            };
 			}
 			return false;
 		}
@@ -318,6 +322,27 @@ function setEnum(val) {
 	}
 }
 
+//#region Update Ontology Action Tag
+
+function updateOntologyActionTag(item) {
+    let actionTagsArea = document.getElementById('field_annotation');
+    let actionTags = actionTagsArea.value;
+    if  (actionTags.indexOf("@ONTOLOGY='") == -1) {
+	actionTagsArea.value = `@ONTOLOGY='${item.value}'`;
+    } else {
+	let codings = JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "[]");
+	codings = [... new Set(codings.concat(JSON.parse(item.value)))]; // append and remove duplicates
+	actionTagsArea.value = actionTags
+	    .replace(/@ONTOLOGY='([^']*)'/,
+		     `@ONTOLOGY='${JSON.stringify(codings)}'`);
+    }
+}
+
+//#endregion    
+
+    
+
+    
 //#region Debug Logging
 
 /**
