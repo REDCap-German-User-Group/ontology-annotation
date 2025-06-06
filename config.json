@@ -27,8 +27,14 @@
 			"name": "Output debug information to the browser console",
 			"type": "checkbox"
 		},
+		{
+			"key": "minimal-dataset-file-test",
+			"name": "Use the \"Test\" Minimal dataset",
+			"type": "checkbox"
+		},
+	    
 		{	"key": "minimal-dataset",
-			"name": "Minimal Dataset (a json with keys 'name', and 'items')",
+			"name": "Additional Minimal Dataset (a json with keys 'name', and 'items')",
 			"type": "json",
 			"repeatable": "true"
 		}

@@ -216,8 +216,21 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		$result = [];
 
-		// search configured minimal datasets first
-		foreach ($this->getProjectSetting("minimal-dataset") as $minimal_dataset_string) {
+        // search configured minimal datasets first
+        $minmal_datasets  = [];
+        // project specific jsons
+        foreach ($this->getProjectSetting("minimal-dataset") as $minimal_dataset_string) {
+            $minimal_datasets[] = $minimal_dataset_string;
+        }
+        // enabled standard minimal datasets
+        foreach (glob(__DIR__ . "/minimal_datasets/*.json") as $filename) {
+            if ($this->getProjectSetting("minimal-dataset-file-" . basename($filename, ".json"))) {
+                $minimal_datasets[] = file_get_contents($filename);
+            }
+        }
+                
+
+		foreach ($minimal_datasets as $minimal_dataset_string) {
             $minimal_dataset = json_decode($minimal_dataset_string, true);
 		    foreach (array_filter($minimal_dataset["items"],
                                   fn($item)  =>  preg_match("/$term/", $item["name"]))
@@ -228,7 +241,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
                     "display" => "<b>" . $minimal_dataset["name"] . "</b>: " . $found_item["name"]
                 ];
 		    }	
-            
 		}		
 		
 
