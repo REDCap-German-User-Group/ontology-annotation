@@ -199,23 +199,25 @@ function addEditFieldUI($dlg, isMatrix) {
 	// Init auto completion
 	const $searchInput = $ui.find('input[name="rome-em-fieldedit-search"]');
 	const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
+	const throttledSearch = throttle(function(request, response) {
+		const payload = {
+			"term": request.term,
+			"isMatrix": isMatrix,
+			"name": isMatrix ? $dlg.find('input[name="grid_name"]').val() : $dlg.find('input[name="field_name"]').val(),
+			// TODO - maybe need add value from target dropdown, in case this affect what we do here
+		};
+		$searchSpinner.addClass('busy');
+		log('Search request:', payload);
+		config.JSMO.ajax('search', payload)
+			.then(searchResult => {
+				log('Search result:', searchResult);
+				response(searchResult);
+			})
+			.catch(err => error(err))
+			.finally(() => $searchSpinner.removeClass('busy'));
+	}, 500, { leading: false, trailing: true });
 	$searchInput.autocomplete({
-		source: function(request, response) {
-			const payload = {
-				"term": request.term,
-				"isMatrix": isMatrix,
-				"name": isMatrix ? $dlg.find('input[name="grid_name"]').val() : $dlg.find('input[name="field_name"]').val(),
-				// TODO - maybe need add value from target dropdown, in case this affect what we do here
-			};
-			$searchSpinner.addClass('busy');
-			config.JSMO.ajax('search', payload)
-				.then(searchResult => {
-					log('Search result:', searchResult);
-					response(searchResult);
-				})
-				.catch(err => error(err))
-				.finally(() => $searchSpinner.removeClass('busy'));
-		},
+		source: throttledSearch,
 		minLength: 2,
 		delay: 0,
 		open: function(event, ui) {
@@ -343,6 +345,47 @@ function updateOntologyActionTag(item) {
     
 
     
+/**
+ * The throttle implementation from underscore.js
+ * See https://stackoverflow.com/a/27078401
+ * @param {function} func 
+ * @param {Number} wait 
+ * @param {Object} options 
+ * @returns 
+ */
+function throttle(func, wait, options) {
+    let context, args, result;
+    let timeout = null;
+    let previous = 0;
+    if (!options) options = {};
+    const later = function() {
+        previous = options.leading === false ? 0 : Date.now();
+        timeout = null;
+        result = func.apply(context, args);
+        if (!timeout) context = args = null;
+    };
+    return function() {
+        const now = Date.now();
+        if (!previous && options.leading === false) previous = now;
+        const remaining = wait - (now - previous);
+        context = this;
+        args = arguments;
+        if (remaining <= 0 || remaining > wait) {
+            if (timeout) {
+                clearTimeout(timeout);
+                timeout = null;
+            }
+            previous = now;
+            result = func.apply(context, args);
+            if (!timeout) context = args = null;
+        } else if (!timeout && options.trailing !== false) {
+            timeout = setTimeout(later, remaining);
+        }
+        return result;
+    };
+};
+
+
 //#region Debug Logging
 
 /**
