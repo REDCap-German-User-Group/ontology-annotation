@@ -294,9 +294,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			];
 		}
 
-		// Artificial pause
-		sleep(.5);
-
 		return $result;
 	}
 
