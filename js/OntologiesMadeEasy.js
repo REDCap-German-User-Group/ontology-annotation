@@ -330,11 +330,15 @@ function updateOntologyActionTag(item) {
     if  (actionTags.indexOf("@ONTOLOGY='") == -1) {
 	actionTagsArea.value = `@ONTOLOGY='${item.value}'`;
     } else {
-	let codings = JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "[]");
-	codings = [... new Set(codings.concat(JSON.parse(item.value)))]; // append and remove duplicates
+	let annotation = JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "{\"item\": []}");
+	if (annotation.item) {
+	    annotation.item = [... new Set(annotation.item.concat(JSON.parse(item.value)))]; // append and remove duplicates
+	} else {
+	    annotation.item = [JSON.parse(item.value)];
+	}
 	actionTagsArea.value = actionTags
 	    .replace(/@ONTOLOGY='([^']*)'/,
-		     `@ONTOLOGY='${JSON.stringify(codings)}'`);
+		     `@ONTOLOGY='${JSON.stringify(annotation)}'`);
     }
 }
 

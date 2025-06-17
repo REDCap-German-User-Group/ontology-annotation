@@ -66,6 +66,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return $this->set_matrix_exclusion($payload);
 			case "refresh-exclusions":
 				return $this->refresh_exclusions($payload);
+            case "discover":
+                return $this->discover_ontologies($payload);
 		}
 	}
 
@@ -315,6 +317,58 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	private function parse_ontology($payload) {
 		return [];
 	}
+
+
+    private function discover_ontologies($payload) {
+        # JSON object containing all the relevant projects and fields
+        # for now, return all the data, in the future $payload might
+        # restrict search for example to projects in production etc.
+        $sql = <<<SQL
+            with
+    -- all projects that have the module installed and metadata marked as 'discoverable'
+    project_ids as
+       (select exs.project_id
+           from redcap_external_modules ex inner join redcap_external_module_settings exs
+	   on ex.external_module_id=exs.external_module_id and
+	   ex.directory_prefix = 'rome' and exs.key = 'discoverable' and
+	   exs.value='true'),
+    -- name + contact info of the projects
+    project_infos as
+       (select rp.project_id, app_title, coalesce(project_contact_email, ru.user_email) as email,
+               coalesce(project_contact_name, concat(ru.user_firstname, ' ', ru.user_lastname)) as contact
+               from redcap_projects rp inner join project_ids on rp.project_id=project_ids.project_id
+	       left join redcap_user_information ru on rp.created_by=ru.ui_id),
+    -- all the fields from these projects with an @ONTOLOGY annotation	        
+    fields as
+     (select project_id, field_name,
+      regexp_replace(misc, ".*@ONTOLOGY='([^']*)'.*", "\\\\1") as ontology
+      from redcap_metadata where project_id in (select project_id from project_ids) and
+      misc like '%@ONTOLOGY%'),
+    -- all the annotations for these fields
+    annotations as 
+    (select project_id, field_name, j.system, j.code, j.display from
+           fields, json_table(ontology,
+                   '$.item[*]' columns(system varchar(255) path '$.system',
+		               code   varchar(255) path '$.code',
+			       display varchar(255) path '$.display')) j),
+    -- grouped annotations
+    grouped_annotations as
+    (select system, code, display,
+            json_arrayagg(json_object('project_id', project_id, 'field_name', field_name)) as field_names,
+	    json_arrayagg(project_id) as projects
+    from annotations group by system, code, display)
+    -- putting it all together: project_info and grouped annotated fields
+    select json_object('projects',
+                       (select json_objectagg(project_id,
+		                    json_object('app_title', app_title, 'email', email, 'contact', contact))
+				from project_infos),
+		       'fields',
+		              (select json_arrayagg(json_object('field_names', field_names, 'system', system,
+			                                       'code', code, 'display', display, 'projects', projects))
+		               from grouped_annotations)) as info;
+SQL;
+        return ($this->query($sql, [])->fetch_assoc())["info"];
+    }
 
 	#region Private Helpers
 
