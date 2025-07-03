@@ -340,18 +340,18 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
      (select project_id, field_name,
       regexp_replace(misc, ".*@ONTOLOGY='([^']*)'.*", "\\\\1") as ontology
       from redcap_metadata where project_id in (select project_id from project_ids) and
-      misc like '%@ONTOLOGY%'),
+      misc like '%@ONTOLOGY%'),    
     -- all the annotations for these fields
     annotations as 
     (select project_id, field_name, j.system, j.code, j.display from
            fields, json_table(ontology,
                    '$.item[*]' columns(system varchar(255) path '$.system',
 		               code   varchar(255) path '$.code',
-			       display varchar(255) path '$.display')) j),
+            display varchar(255) path '$.display')) j where json_valid(ontology)),
     -- grouped annotations
     grouped_annotations as
     (select system, code, display,
-            json_arrayagg(json_object('project_id', project_id, 'field_name', field_name)) as field_names,
+            json_objectagg(project_id, field_name) as field_names,
 	    json_arrayagg(project_id) as projects
     from annotations group by system, code, display)
     -- putting it all together: project_info and grouped annotated fields

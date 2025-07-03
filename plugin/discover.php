@@ -29,12 +29,17 @@
                 let sets   = values.map(field_index => (new Set(rome_info.fields[field_index].projects)));
                 let project_ids = sets.pop();
                 while (project_ids.size > 0 && sets.length > 0) {
-                    console.log("project_ids is " + project_ids);
                     project_ids = project_ids.intersection(sets.pop());
+                }
+                function fieldnamesForProject(project_id) {
+                    return values
+                        .filter(i => rome_info.fields[i].field_names[project_id])
+                        .map(i => `${rome_info.fields[i].display}: ${rome_info.fields[i].field_names[project_id]}`)
+                        .join("<br>")
                 }
                 var html = `<table class="table">
                               <thead>
-                                 <tr><th>PID</th><th>Project Name</th><th>Contact</th><th>Email</th></tr>
+                                 <tr><th>PID</th><th>Project Name</th><th>Contact</th><th>Email</th><th>Fields</th></tr>
                               </thead>
                               <tbody>` + 
                    [...project_ids].map(project_id => `<tr>
@@ -42,6 +47,7 @@
                                                   <td>${rome_info.projects[project_id].app_title}</td>
                                                   <td>${rome_info.projects[project_id].contact}</td>
                                                   <td>${rome_info.projects[project_id].email}</td>
+                                                  <td>${fieldnamesForProject(project_id)}</td>
                                                </tr>`).join("") +
                     `</tbody></table>`;
                 $("#resulttable").html(html);
