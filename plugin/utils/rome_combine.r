@@ -55,6 +55,6 @@ rome_combine <- function(datasets, only_annotated=FALSE, use_names = c()) {
                 mutate(new_name = coalesce(new_name, paste(dataset, field_name, sep="_")))
         }
         names(rest) <- new_names$new_name
-        rest
+        cbind(result, rest)
     }) |> bind_rows()
 }
