@@ -21,7 +21,7 @@ rome_combine <- function(datasets, only_annotated=FALSE, use_names = c()) {
     #'              only_annotated=TRUE, use_names=c("gecco"))
 
    extract_ontologies <- function(metadata) {
-      fields <- metadata |> mutate(ontology_txt = gsub("@ONTOLOGY='([^']+)'", "\\1", misc)) |>
+      fields <- metadata |> mutate(ontology_txt = gsub("@ONTOLOGY='([^']+)'", "\\1",  field_annotation)) |>
          filter(!is.na(ontology_txt)) |> select(field_name, ontology_txt)
       purrr::map2(fields$field_name, fields$ontology_txt, \(field_name, ontology_txt) 
          tryCatch({fromJSON(ontology_txt)$item}, error = function(e) {data.frame()}) |>
