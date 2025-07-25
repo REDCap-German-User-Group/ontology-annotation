@@ -416,15 +416,13 @@ function extractOntologyJSON(text) {
 }
 
 function getOntologyAnnotation() {
-	const actionTagsArea = document.getElementById('field_annotation');
-	const actionTags = actionTagsArea.value;
-	return extractOntologyJSON(actionTags);
+	const content = $('#field_annotation').val() ?? '';
+	return extractOntologyJSON(content);
 }
 
 
 function updateAnnotationTable() {
 	// use the ontology annotation action tag to
-	debugger
 	const annotation = getOntologyAnnotation();
 	if (!annotation) return;
 	let items = annotation.item
