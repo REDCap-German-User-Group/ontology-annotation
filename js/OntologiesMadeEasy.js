@@ -198,8 +198,8 @@ function addEditFieldUI($dlg, isMatrix) {
 	});
 	// Init auto completion
 	const $searchInput = $ui.find('input[name="rome-em-fieldedit-search"]');
-	const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
-	const throttledSearch = throttle(function(request, response) {
+        const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
+    	const throttledSearch = throttle(function(request, response) {
 		const payload = {
 			"term": request.term,
 			"isMatrix": isMatrix,
@@ -216,7 +216,7 @@ function addEditFieldUI($dlg, isMatrix) {
 			.catch(err => error(err))
 			.finally(() => $searchSpinner.removeClass('busy'));
 	}, 500, { leading: false, trailing: true });
-	$searchInput.autocomplete({
+        $searchInput.autocomplete({
 		source: throttledSearch,
 		minLength: 2,
 		delay: 0,
@@ -269,7 +269,9 @@ function addEditFieldUI($dlg, isMatrix) {
 		// Add a hidden field to transfer exclusion
 		$dlg.find('#addFieldForm').prepend('<input type="hidden" name="rome-em-fieldedit-exclude" value="0">');
 		// Insert after Action Tags / Field Annotation
-		$ui.insertAfter(actiontagsDIV);
+	        $ui.insertAfter(actiontagsDIV);
+                // initial sync from the action tag
+	        updateAnnotationTable()
 	}
 
 }
@@ -324,27 +326,72 @@ function setEnum(val) {
 	}
 }
 
-//#region Update Ontology Action Tag
+//#region Update Ontology Action Tags and table
 
+function escapeHTML(str) { // probably exists as a utility function somewhere already?
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+    
 function updateOntologyActionTag(item) {
     let actionTagsArea = document.getElementById('field_annotation');
     let actionTags = actionTagsArea.value;
     if  (actionTags.indexOf("@ONTOLOGY='") == -1) {
 	actionTagsArea.value = `@ONTOLOGY='${item.value}'`;
     } else {
-	let codings = JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "[]");
-	codings = [... new Set(codings.concat(JSON.parse(item.value)))]; // append and remove duplicates
+	let annotation = JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "{\"item\": []}");
+	if (annotation.item) {
+	    annotation.item = [... new Set(annotation.item.concat(JSON.parse(item.value)))]; // append and remove duplicates
+	} else {
+	    annotation.item = [JSON.parse(item.value)];
+	}
 	actionTagsArea.value = actionTags
 	    .replace(/@ONTOLOGY='([^']*)'/,
-		     `@ONTOLOGY='${JSON.stringify(codings)}'`);
+		     `@ONTOLOGY='${JSON.stringify(annotation)}'`);
     }
+    updateAnnotationTable()
 }
 
+function getOntologyAnnotation() {
+    let actionTagsArea = document.getElementById('field_annotation');
+    let actionTags = actionTagsArea.value;
+    if  (actionTags.indexOf("@ONTOLOGY='") == -1) {
+        return {};
+    }
+    return JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "{\"item\": []}");
+}
+    
+	
+
+function updateAnnotationTable() {
+    // use the ontology annotation action tag to
+    let annotation = getOntologyAnnotation()
+    let items = annotation.item
+    if (items.length == 0) {
+	$(".rome-edit-field-ui-list").hide()
+	$(".rome-edit-field-ui-list-empty").show()
+	return;
+    }
+    $(".rome-edit-field-ui-list-empty").hide()
+    
+    let html = `<table style="margin-top: 12px">
+                  <thead>
+                    <tr><th>Ontology</th><th>Code</th><th>Display</th><th>Action</th></tr>
+                  </thead>
+                  <tbody>` +
+	items.map((item) => `<tr>` +
+		  [item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
+                   `<td><span onclick="alert('about to delete this...')"><i class="fa fa-trash"></i></span></td>
+                  </tr>`).join("") +
+	`</tbody>
+       </table>`
+    $(".rome-edit-field-ui-list").html(html).show() 
+}
+    
 //#endregion    
 
-    
-
-    
 /**
  * The throttle implementation from underscore.js
  * See https://stackoverflow.com/a/27078401
@@ -384,8 +431,9 @@ function throttle(func, wait, options) {
         return result;
     };
 };
+    
 
-
+    
 //#region Debug Logging
 
 /**
