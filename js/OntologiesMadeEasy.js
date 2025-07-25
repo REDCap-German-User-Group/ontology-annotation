@@ -198,8 +198,8 @@ function addEditFieldUI($dlg, isMatrix) {
 	});
 	// Init auto completion
 	const $searchInput = $ui.find('input[name="rome-em-fieldedit-search"]');
-        const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
-    	const throttledSearch = throttle(function(request, response) {
+		const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
+		const throttledSearch = throttle(function(request, response) {
 		const payload = {
 			"term": request.term,
 			"isMatrix": isMatrix,
@@ -216,7 +216,7 @@ function addEditFieldUI($dlg, isMatrix) {
 			.catch(err => error(err))
 			.finally(() => $searchSpinner.removeClass('busy'));
 	}, 500, { leading: false, trailing: true });
-        $searchInput.autocomplete({
+		$searchInput.autocomplete({
 		source: throttledSearch,
 		minLength: 2,
 		delay: 0,
@@ -230,13 +230,13 @@ function addEditFieldUI($dlg, isMatrix) {
 			return false;
 		},
 		select: function(event, ui) {
-		        log('Autosuggest selected:', ui);
-		        
+				log('Autosuggest selected:', ui);
+				
 			if (ui.item.value !== '') {
-			    $searchInput.val(ui.item.label);
-			    document.getElementById("rome-add-button").onclick=function() {
-		               updateOntologyActionTag(ui.item);
-		            };
+				$searchInput.val(ui.item.label);
+				document.getElementById("rome-add-button").onclick=function() {
+					updateOntologyActionTag(ui.item);
+					};
 			}
 			return false;
 		}
@@ -269,9 +269,9 @@ function addEditFieldUI($dlg, isMatrix) {
 		// Add a hidden field to transfer exclusion
 		$dlg.find('#addFieldForm').prepend('<input type="hidden" name="rome-em-fieldedit-exclude" value="0">');
 		// Insert after Action Tags / Field Annotation
-	        $ui.insertAfter(actiontagsDIV);
-                // initial sync from the action tag
-	        updateAnnotationTable()
+			$ui.insertAfter(actiontagsDIV);
+				// initial sync from the action tag
+			updateAnnotationTable()
 	}
 
 }
@@ -329,67 +329,126 @@ function setEnum(val) {
 //#region Update Ontology Action Tags and table
 
 function escapeHTML(str) { // probably exists as a utility function somewhere already?
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	return String(str)
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+		.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-    
+	
 function updateOntologyActionTag(item) {
-    let actionTagsArea = document.getElementById('field_annotation');
-    let actionTags = actionTagsArea.value;
-    if  (actionTags.indexOf("@ONTOLOGY='") == -1) {
-	actionTagsArea.value = `@ONTOLOGY='${item.value}'`;
-    } else {
-	let annotation = JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "{\"item\": []}");
-	if (annotation.item) {
-	    annotation.item = [... new Set(annotation.item.concat(JSON.parse(item.value)))]; // append and remove duplicates
-	} else {
-	    annotation.item = [JSON.parse(item.value)];
+	const actionTagsArea = document.getElementById('field_annotation');
+	const actionTags = actionTagsArea.value;
+	if (actionTags.indexOf(config.atName) == -1) {
+		const annotation = {
+			"item": JSON.parse(item.value)
+		};
+		actionTagsArea.value = (actionTags.length > 0 ? actionTags + '\n' : '') + 
+			`${config.atName}=${JSON.stringify(annotation, null, 2)}`;
+	} 
+	else {
+		const annotation = JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "{\"item\": []}");
+		if (annotation.item) {
+			annotation.item = [... new Set(annotation.item.concat(JSON.parse(item.value)))]; // append and remove duplicates
+		} else {
+			annotation.item = [JSON.parse(item.value)];
+		}
+		actionTagsArea.value = actionTags
+			.replace(/@ONTOLOGY='([^']*)'/,
+				`@ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`);
 	}
-	actionTagsArea.value = actionTags
-	    .replace(/@ONTOLOGY='([^']*)'/,
-		     `@ONTOLOGY='${JSON.stringify(annotation)}'`);
-    }
-    updateAnnotationTable()
+	updateAnnotationTable()
+}
+
+function extractOntologyJSON(text) {
+	const name = config.atName;
+	const startIdx = text.indexOf(name);
+	if (startIdx === -1) return null;
+
+	const afterEquals = text.slice(startIdx + name.length);
+	const eqMatch = afterEquals.match(/^\s*=\s*/);
+	if (!eqMatch) return null;
+
+	let jsonStart = startIdx + name.length + eqMatch[0].length;
+	let braceCount = 0;
+	let inString = false;
+	let escapeNext = false;
+	let endIdx = -1;
+
+	for (let i = jsonStart; i < text.length; i++) {
+		const char = text[i];
+
+		if (inString) {
+			if (escapeNext) {
+				escapeNext = false;
+			} else if (char === '\\') {
+				escapeNext = true;
+			} else if (char === '"') {
+				inString = false;
+			}
+		} else {
+			if (char === '"') {
+				inString = true;
+			} else if (char === '{') {
+				if (braceCount === 0) jsonStart = i;
+				braceCount++;
+			} else if (char === '}') {
+				braceCount--;
+				if (braceCount === 0) {
+					endIdx = i + 1;
+					break;
+				}
+			}
+		}
+	}
+
+	if (braceCount !== 0 || endIdx === -1) {
+		console.error("Unbalanced braces in JSON");
+		return null;
+	}
+
+	const jsonText = text.slice(jsonStart, endIdx);
+	try {
+		return JSON.parse(jsonText);
+	} catch (e) {
+		console.error("Failed to parse JSON:", e);
+		return null;
+	}
 }
 
 function getOntologyAnnotation() {
-    let actionTagsArea = document.getElementById('field_annotation');
-    let actionTags = actionTagsArea.value;
-    if  (actionTags.indexOf("@ONTOLOGY='") == -1) {
-        return {};
-    }
-    return JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "{\"item\": []}");
+	const actionTagsArea = document.getElementById('field_annotation');
+	const actionTags = actionTagsArea.value;
+	return extractOntologyJSON(actionTags);
 }
-    
-	
+
 
 function updateAnnotationTable() {
-    // use the ontology annotation action tag to
-    let annotation = getOntologyAnnotation()
-    let items = annotation.item
-    if (items.length == 0) {
+	// use the ontology annotation action tag to
+	debugger
+	const annotation = getOntologyAnnotation();
+	if (!annotation) return;
+	let items = annotation.item
+	if (items.length == 0) {
 	$(".rome-edit-field-ui-list").hide()
 	$(".rome-edit-field-ui-list-empty").show()
 	return;
-    }
-    $(".rome-edit-field-ui-list-empty").hide()
-    
-    let html = `<table style="margin-top: 12px">
-                  <thead>
-                    <tr><th>Ontology</th><th>Code</th><th>Display</th><th>Action</th></tr>
-                  </thead>
-                  <tbody>` +
+	}
+	$(".rome-edit-field-ui-list-empty").hide()
+	
+	let html = `<table style="margin-top: 12px">
+				<thead>
+					<tr><th>Ontology</th><th>Code</th><th>Display</th><th>Action</th></tr>
+				</thead>
+				<tbody>` +
 	items.map((item) => `<tr>` +
-		  [item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
-                   `<td><span onclick="alert('about to delete this...')"><i class="fa fa-trash"></i></span></td>
-                  </tr>`).join("") +
+		[item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
+				`<td><span onclick="alert('about to delete this...')"><i class="fa fa-trash"></i></span></td>
+				</tr>`).join("") +
 	`</tbody>
-       </table>`
-    $(".rome-edit-field-ui-list").html(html).show() 
+	</table>`
+	$(".rome-edit-field-ui-list").html(html).show() 
 }
-    
+	
 //#endregion    
 
 /**
@@ -401,39 +460,39 @@ function updateAnnotationTable() {
  * @returns 
  */
 function throttle(func, wait, options) {
-    let context, args, result;
-    let timeout = null;
-    let previous = 0;
-    if (!options) options = {};
-    const later = function() {
-        previous = options.leading === false ? 0 : Date.now();
-        timeout = null;
-        result = func.apply(context, args);
-        if (!timeout) context = args = null;
-    };
-    return function() {
-        const now = Date.now();
-        if (!previous && options.leading === false) previous = now;
-        const remaining = wait - (now - previous);
-        context = this;
-        args = arguments;
-        if (remaining <= 0 || remaining > wait) {
-            if (timeout) {
-                clearTimeout(timeout);
-                timeout = null;
-            }
-            previous = now;
-            result = func.apply(context, args);
-            if (!timeout) context = args = null;
-        } else if (!timeout && options.trailing !== false) {
-            timeout = setTimeout(later, remaining);
-        }
-        return result;
-    };
+	let context, args, result;
+	let timeout = null;
+	let previous = 0;
+	if (!options) options = {};
+	const later = function() {
+		previous = options.leading === false ? 0 : Date.now();
+		timeout = null;
+		result = func.apply(context, args);
+		if (!timeout) context = args = null;
+	};
+	return function() {
+		const now = Date.now();
+		if (!previous && options.leading === false) previous = now;
+		const remaining = wait - (now - previous);
+		context = this;
+		args = arguments;
+		if (remaining <= 0 || remaining > wait) {
+			if (timeout) {
+				clearTimeout(timeout);
+				timeout = null;
+			}
+			previous = now;
+			result = func.apply(context, args);
+			if (!timeout) context = args = null;
+		} else if (!timeout && options.trailing !== false) {
+			timeout = setTimeout(later, remaining);
+		}
+		return result;
+	};
 };
-    
+	
 
-    
+	
 //#region Debug Logging
 
 /**
