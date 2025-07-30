@@ -8,72 +8,72 @@ Example radio field - _Education Level_
 
 ```jsonc
 {
-"resourceType": "OntologyAnnotation",
-"meta": {
-	"version": "1.0.0",
-	"created": "2025-07-25T12:45:00+02:00",
-	"updated": "2025-07-25T13:05:00+02:00",
-	"creator": "ROME v1.0.0",
-	"language": "de",
-	"profile": [
-	"https://..."
-	]
-},
-"dataElement": {
-	// name and label can/should be omitted - will be generated when exporting ontology annotations for multiple fields
-	"name": "education_level",
-	"label": "Höchster Bildungsabschluss",
-	"type": "radio",
-	"coding": [
-	{
-		"system": "http://loinc.org",
-		"code": "82589-3",
-		"display": "Highest level of education"
-	},
-	{
-		"system": "https://snomed.info/sct",
-		"code": "276031006",
-		"display": "Details of education (observable entity)"
-	}
-	],
-	"text": "Höchster erreichter Bildungsabschluss",
-	"valueCodingMap": {
-	"1": {
-		"label": "Kein Abschluss", // label is the REDCap label - only added for multi-field export (derived from REDCap metadata)
-		"coding": [
-		{
-			"system": "http://snomed.info/sct",
-			"code": "410594000",
-			"display": "No formal education"
-		}
-		],
-		"text": "Kein formaler Abschluss"
+    "resourceType": "OntologyAnnotation",
+    "meta": {
+        "version": "1.0.0",
+        "created": "2025-07-25T12:45:00+02:00",
+        "updated": "2025-07-25T13:05:00+02:00",
+        "creator": "ROME v1.0.0",
+        "language": "de",
+        "profile": [
+            "https://..."
+        ]
+    },
+    "dataElement": {
+        // name and label can/should be omitted - will be generated when exporting ontology annotations for multiple fields
+        "name": "education_level",
+        "label": "Höchster Bildungsabschluss",
+        "type": "radio",
+        "coding": [
+            {
+                "system": "http://loinc.org",
+                "code": "82589-3",
+                "display": "Highest level of education"
+            },
+            {
+                "system": "https://snomed.info/sct",
+                "code": "276031006",
+                "display": "Details of education (observable entity)"
+            }
+        ],
+        "text": "Höchster erreichter Bildungsabschluss",
+        "valueCodingMap": {
+            "1": {
+                "label": "Kein Abschluss", // label is the REDCap label - only added for multi-field export (derived from REDCap metadata)
+                "coding": [
+                {
+                    "system": "http://snomed.info/sct",
+                    "code": "410594000",
+                    "display": "No formal education"
+                }
+                ],
+                "text": "Kein formaler Abschluss"
 
-	},
-	"2": {
-		"label": "Schulabschluss",
-		"coding": [
-		{
-			"system": "http://snomed.info/sct",
-			"code": "289131004",
-			"display": "Completed secondary education"
-		}
-		],
-		"text": "Abschluss einer weiterführenden Schule"
-	},
-	"3": {
-		"label": "Hochschulabschluss",
-		"coding": [
-		{
-			"system": "http://snomed.info/sct",
-			"code": "229710002",
-			"display": "Completed higher education"
-		}
-		],
-		"text": "Abschluss einer Hochschule oder Universität"
-	}
-	}
-}
+            },
+            "2": {
+                "label": "Schulabschluss",
+                "coding": [
+                {
+                    "system": "http://snomed.info/sct",
+                    "code": "289131004",
+                    "display": "Completed secondary education"
+                }
+                ],
+                "text": "Abschluss einer weiterführenden Schule"
+            },
+            "3": {
+                "label": "Hochschulabschluss",
+                "coding": [
+                {
+                    "system": "http://snomed.info/sct",
+                    "code": "229710002",
+                    "display": "Completed higher education"
+                }
+                ],
+                "text": "Abschluss einer Hochschule oder Universität"
+            }
+        }
+    }
 }
 ```
 
@@ -85,14 +85,14 @@ Notes:
 
 ```jsonc
 "meta": {
-"version": "1.0.0",                       // Format/schema version
-"created": "2025-07-25T12:25:00+02:00",   // Initial annotation
-"updated": "2025-07-25T14:00:00+02:00",   // When this field's annotation was last changed
-"creator": "ROME v1.0.0",                 // Tool used to create the annotation
-"language": "de",                         // The language used for 
-"profile": [
-	"https://..."
-]
+    "version": "1.0.0",                       // Format/schema version
+    "created": "2025-07-25T12:25:00+02:00",   // Initial annotation
+    "updated": "2025-07-25T14:00:00+02:00",   // When this field's annotation was last changed
+    "creator": "ROME v1.0.0",                 // Tool used to create the annotation
+    "language": "de",                         // The language used for 
+    "profile": [
+        "https://..."
+    ]
 }
 ```
 
@@ -101,28 +101,28 @@ Example of a text field with email validation
 
 ```jsonc
 {
-"resourceType": "OntologyAnnotation",
-"meta": {
-	"version": "1.0.0",
-	"created": "2025-07-25T12:50:00+02:00",
-	"updated": "2025-07-25T13:10:00+02:00",
-	"creator": "ROME v1.0.0",
-	"language": "de"
-},
-"dataElement": {
-	"name": "email",           // optional
-	"label": "E-Mail-Adresse", // optional
-	"type": "text",
-	"format": "email",
-	"coding": [
-	{
-		"system": "http://snomed.info/sct",
-		"code": "424966008",
-		"display": "Patient email address"
-	}
-	],
-	"text": "E-Mail-Adresse des Patienten"
-}
+    "resourceType": "OntologyAnnotation",
+    "meta": {
+        "version": "1.0.0",
+        "created": "2025-07-25T12:50:00+02:00",
+        "updated": "2025-07-25T13:10:00+02:00",
+        "creator": "ROME v1.0.0",
+        "language": "de"
+    },
+    "dataElement": {
+        "name": "email",           // optional
+        "label": "E-Mail-Adresse", // optional
+        "type": "text",
+        "format": "email",
+        "coding": [
+            {
+                "system": "http://snomed.info/sct",
+                "code": "424966008",
+                "display": "Patient email address"
+            }
+        ],
+        "text": "E-Mail-Adresse des Patienten"
+    }
 }
 ```
 
@@ -130,39 +130,39 @@ Example of a numerical data type (height) with a unit
 
 ```jsonc
 {
-"resourceType": "OntologyAnnotation",
-"meta": {
-	"version": "1.0.0",
-	"created": "2025-07-25T12:55:00+02:00",
-	"updated": "2025-07-25T13:15:00+02:00",
-	"creator": "ROME v1.0.0",
-	"language": "de"
-},
-"dataElement": {
-	"name": "body_height",
-	"label": "Körpergröße",
-	"type": "number",
-	"numericType": "decimal",
-	"precision": 1,
-	"unit": {
-	"coding": [
-		{
-		"system": "http://unitsofmeasure.org",
-		"code": "cm",
-		"display": "Zentimeter"
-		}
-	],
-	"text": "cm"
-	},
-	"coding": [
-	{
-		"system": "http://loinc.org",
-		"code": "8302-2",
-		"display": "Body height"
-	}
-	],
-	"text": "Körpergröße in cm (auf mm genau)"
-}
+    "resourceType": "OntologyAnnotation",
+    "meta": {
+        "version": "1.0.0",
+        "created": "2025-07-25T12:55:00+02:00",
+        "updated": "2025-07-25T13:15:00+02:00",
+        "creator": "ROME v1.0.0",
+        "language": "de"
+    },
+    "dataElement": {
+        "name": "body_height",
+        "label": "Körpergröße",
+        "type": "number",
+        "numericType": "decimal",
+        "precision": 1,
+        "unit": {
+            "coding": [
+                {
+                "system": "http://unitsofmeasure.org",
+                "code": "cm",
+                "display": "Zentimeter"
+                }
+            ],
+            "text": "cm"
+        },
+        "coding": [
+            {
+                "system": "http://loinc.org",
+                "code": "8302-2",
+                "display": "Body height"
+            }
+        ],
+        "text": "Körpergröße in cm (auf mm genau)"
+    }
 }
 ```
 
@@ -219,185 +219,185 @@ Ontology annotations can be validated, e.g., in the browser with the [Ajv JSON s
 
 ```json
 {
-"$schema": "https://json-schema.org/draft/2020-12/schema",
-"$id": "https://example.org/schemas/ontology-annotation.schema.json",
-"title": "OntologyAnnotation",
-"type": "object",
-"required": [
-	"resourceType",
-	"meta",
-	"dataElement"
-],
-"properties": {
-	"resourceType": {
-	"const": "OntologyAnnotation"
-	},
-	"meta": {
-	"type": "object",
-	"required": [
-		"version",
-		"created",
-		"creator"
-	],
-	"properties": {
-		"version": {
-		"type": "string"
-		},
-		"created": {
-		"type": "string",
-		"format": "date-time"
-		},
-		"updated": {
-		"type": "string",
-		"format": "date-time"
-		},
-		"creator": {
-		"type": "string"
-		},
-		"language": {
-		"type": "string"
-		},
-		"profile": {
-		"type": "array",
-		"items": {
-			"type": "string",
-			"format": "uri"
-		}
-		}
-	},
-	"additionalProperties": false
-	},
-	"dataElement": {
-	"type": "object",
-	"required": [
-		"coding",
-		"text"
-	],
-	"properties": {
-		"name": {
-		"type": "string"
-		},
-		"label": {
-		"type": "string"
-		},
-		"type": {
-		"type": "string",
-		"enum": [
-			"radio",
-			"checkbox",
-			"dropdown",
-			"number",
-			"text",
-			"date",
-			"datetime",
-			"yesno",
-			"truefalse"
-		]
-		},
-		"coding": {
-		"type": "array",
-		"items": {
-			"$ref": "#/$defs/Coding"
-		},
-		"minItems": 1
-		},
-		"text": {
-		"type": "string"
-		},
-		"format": {
-		"type": "string",
-		"enum": [
-			"email",
-			"url",
-			"phone"
-		]
-		},
-		"numericType": {
-		"type": "string",
-		"enum": [
-			"integer",
-			"decimal"
-		]
-		},
-		"precision": {
-		"type": "integer",
-		"minimum": 0
-		},
-		"unit": {
-		"type": "object",
-		"required": [
-			"coding",
-			"text"
-		],
-		"properties": {
-			"coding": {
-			"type": "array",
-			"items": {
-				"$ref": "#/$defs/Coding"
-			},
-			"minItems": 1
-			},
-			"text": {
-			"type": "string"
-			}
-		},
-		"additionalProperties": false
-		},
-		"valueCodingMap": {
-		"type": "object",
-		"patternProperties": {
-			"^[^\\s]+$": {
-			"type": "object",
-			"required": [
-				"text",
-				"coding"
-			],
-			"properties": {
-				"label": {
-				"type": "string"
-				},
-				"text": {
-				"type": "string"
-				},
-				"coding": {
-				"type": "array",
-				"items": {
-					"$ref": "#/$defs/Coding"
-				},
-				"minItems": 1
-				}
-			},
-			"additionalProperties": false
-			}
-		},
-		"additionalProperties": false
-		}
-	},
-	"additionalProperties": false
-	}
-},
-"additionalProperties": false,
-"$defs": {
-	"Coding": {
-	"type": "object",
-	"required": [
-		"system",
-		"code"
-	],
-	"properties": {
-		"system": {
-		"type": "string",
-		"format": "uri"
-		},
-		"code": {
-		"type": "string"
-		},
-		"display": {
-		"type": "string"
-		}
-	},
-	"additionalProperties": false
-	}
-}
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.org/schemas/ontology-annotation.schema.json",
+    "title": "OntologyAnnotation",
+    "type": "object",
+    "required": [
+        "resourceType",
+        "meta",
+        "dataElement"
+    ],
+    "properties": {
+        "resourceType": {
+            "const": "OntologyAnnotation"
+        },
+        "meta": {
+            "type": "object",
+            "required": [
+                "version",
+                "created",
+                "creator"
+            ],
+            "properties": {
+                "version": {
+                    "type": "string"
+                },
+                "created": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "updated": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "creator": {
+                    "type": "string"
+                },
+                "language": {
+                    "type": "string"
+                },
+                "profile": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "uri"
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
+        "dataElement": {
+            "type": "object",
+            "required": [
+                "coding",
+                "text"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "radio",
+                        "checkbox",
+                        "dropdown",
+                        "number",
+                        "text",
+                        "date",
+                        "datetime",
+                        "yesno",
+                        "truefalse"
+                    ]
+                },
+                "coding": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/Coding"
+                    },
+                    "minItems": 1
+                },
+                "text": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "email",
+                        "url",
+                        "phone"
+                    ]
+                },
+                "numericType": {
+                    "type": "string",
+                    "enum": [
+                        "integer",
+                        "decimal"
+                    ]
+                },
+                "precision": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "unit": {
+                    "type": "object",
+                    "required": [
+                        "coding",
+                        "text"
+                    ],
+                    "properties": {
+                        "coding": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/Coding"
+                            },
+                            "minItems": 1
+                        },
+                        "text": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "valueCodingMap": {
+                "type": "object",
+                "patternProperties": {
+                    "^[^\\s]+$": {
+                    "type": "object",
+                    "required": [
+                        "text",
+                        "coding"
+                    ],
+                    "properties": {
+                        "label": {
+                        "type": "string"
+                        },
+                        "text": {
+                        "type": "string"
+                        },
+                        "coding": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/$defs/Coding"
+                        },
+                        "minItems": 1
+                        }
+                    },
+                    "additionalProperties": false
+                    }
+                },
+                "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+            }
+        },
+    "additionalProperties": false,
+    "$defs": {
+        "Coding": {
+            "type": "object",
+            "required": [
+                "system",
+                "code"
+            ],
+            "properties": {
+                "system": {
+                    "type": "string",
+                    "format": "uri"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "display": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        }
+    }
 }
 ```
