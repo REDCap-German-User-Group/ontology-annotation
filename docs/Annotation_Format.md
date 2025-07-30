@@ -6,7 +6,7 @@ This document describes the format of the `@ONTOLOGY` action tag parameter (a JS
 
 Example radio field - _Education Level_
 
-```json
+```jsonc
 {
   "resourceType": "OntologyAnnotation",
   "meta": {
@@ -83,7 +83,7 @@ Notes:
 
 ## Metadata (`meta`)
 
-```json
+```jsonc
 "meta": {
   "version": "1.0.0",                       // Format/schema version
   "created": "2025-07-25T12:25:00+02:00",   // Initial annotation
@@ -99,7 +99,7 @@ Notes:
 
 Example of a text field with email validation
 
-```json
+```jsonc
 {
   "resourceType": "OntologyAnnotation",
   "meta": {
@@ -128,7 +128,7 @@ Example of a text field with email validation
 
 Example of a numerical data type (height) with a unit
 
-```json
+```jsonc
 {
   "resourceType": "OntologyAnnotation",
   "meta": {
