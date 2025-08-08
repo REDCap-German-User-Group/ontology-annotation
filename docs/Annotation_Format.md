@@ -201,6 +201,7 @@ Similarly for common units.
 - Annotate for each field separately?
 - Separate UI for general annotations?
 - Override for specific fields? (Obey `@NOMISSING`)
+- Coded in `valueCodingMap` (which can then exist for non-radio/checkbox/dropdown types)
 
 Provide standard generic annotations for REDCap-built-in Missing Data Codes.
 
