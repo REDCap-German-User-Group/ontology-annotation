@@ -28,7 +28,8 @@ Example radio field - _Education Level_
             {
                 "system": "http://loinc.org",
                 "code": "82589-3",
-                "display": "Highest level of education"
+                "display": "Highest level of education",
+                "version": "Version of the Ontology" // Optional/when available
             },
             {
                 "system": "https://snomed.info/sct",
