@@ -193,6 +193,18 @@ Example of a numerical data type (height) with a unit
 | `valueCodingMap` | `"radio"`, `"checkbox"`, `"dropdown"` | Maps codes to concept labels and codes      |
 
 
+**TODO**: Define/Provide a list of basic data types (e.g., yesno -> Yes) with appropriate annotations. These will be offered by the UI as annotations for the user to assign.
+Similarly for common units.
+
+## Missing Data Codes
+
+- Annotate for each field separately?
+- Separate UI for general annotations?
+- Override for specific fields? (Obey `@NOMISSING`)
+
+Provide standard generic annotations for REDCap-built-in Missing Data Codes.
+
+
 ## Example Mapping: REDCap → Ontology
 
 | REDCap Field Type  | Ontology `type`                                        | Notes                          |
