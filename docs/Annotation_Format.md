@@ -146,6 +146,7 @@ Example of a numerical data type (height) with a unit
         "numericType": "decimal",
         "precision": 1,
         "unit": {
+            // Optional, this could also reference another field if the unit is flexible - TODO: Which keyword? Maybe: "ref": "fieldname"
             "coding": [
                 {
                 "system": "http://unitsofmeasure.org",
