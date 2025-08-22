@@ -346,7 +346,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
     annotations as 
     (select project_id, field_name, j.system, j.code, j.display from
            fields, json_table(ontology,
-                   '$.item[*]' columns(system varchar(255) path '$.system',
+                   '$.dataElement.coding[*]' columns(system varchar(255) path '$.system',
 		               code   varchar(255) path '$.code',
             display varchar(255) path '$.display')) j where json_valid(ontology)),
     -- grouped annotations
