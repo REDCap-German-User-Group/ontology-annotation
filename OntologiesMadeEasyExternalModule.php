@@ -189,7 +189,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$grid_name = $args["grid_name"] ?? "";
 		$exclude = $args["exclude"] == "1";
 		$fields = [];
-		foreach ($this->proj->getMetadata() as $field_name => $field_data) {
+		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->getMetadata();
+		foreach ($metadata as $field_name => $field_data) {
 			if ($field_data["grid_name"] === $grid_name) {
 				$fields[] = $field_name;
 			}
@@ -198,10 +199,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	private function refresh_exclusions($form) {
-		$form_fields = $this->get_form_fields($form);
+		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->getMetadata();
+		$form_fields = array_filter($metadata, function($field_data) use ($form) { return $field_data["form_name"] === $form; });
 		$excluded = array_intersect($this->get_excluded_fields(), $form_fields);
 		$mg_excluded = [];
-		$metadata = $this->proj->getMetadata();
 		foreach ($excluded as $field) {
 			if (isset($metadata[$field]) && $metadata[$field]["grid_name"]) {
 				$mg_excluded[$metadata[$field]["grid_name"]] = true;
@@ -381,60 +382,7 @@ SQL;
 		return self::NS_PREFIX . self::EM_NAME;
 	}
 
-	/**
-	 * Gets a list of field on the page
-	 * @param string $form 
-	 * @param boolean $is_survey
-	 * @return array<string, array> 
-	 */
-	private function get_page_fields($form, $is_survey = false) {
-		$this->require_proj();
-		$fields = [];
-		if ($is_survey) {
-			$page = $_GET["__page__"];
-			foreach ($GLOBALS["pageFields"][$page] as $field_name) {
-				$fields[$field_name] = $this->get_field_metadata($field_name);
-			}
-		} else {
-			foreach ($this->get_form_fields($form) as $field_name) {
-				$fields[$field_name] = $this->get_field_metadata($field_name);
-			}
-		}
-		return $fields;
-	}
 
-	private function get_project_forms() {
-		$this->require_proj();
-		return $this->is_draft_preview() ? $this->proj->forms_temp : $this->proj->getForms();
-	}
-
-	private function get_form_fields($form_name) {
-		$this->require_proj();
-		$forms = $this->get_project_forms();
-		if (!isset($forms[$form_name])) {
-			throw new Exception("Form '$form_name' does not exist!");
-		}
-		return array_keys($forms[$form_name]["fields"]);
-	}
-
-	private function get_project_metadata() {
-		$this->require_proj();
-		return $this->is_draft_preview() ? $this->proj->metadata_temp : $this->proj->getMetadata();
-	}
-
-	private function get_field_metadata($field_name) {
-		$this->require_proj();
-		$meta = $this->get_project_metadata();
-		if (!array_key_exists($field_name, $meta)) {
-			throw new Exception("Field '$field_name' does not exist!");
-		}
-		return $meta[$field_name];
-	}
-
-	private function is_draft_preview() {
-		$this->require_proj();
-		return intval($this->proj->project["status"] ?? 0) > 0 && intval($this->proj->project["draft_mode"]) > 0 && $GLOBALS["draft_preview_enabled"] == true;
-	}
 
 	private function init_proj($project_id) {
 		if ($this->proj == null) {
@@ -443,14 +391,8 @@ SQL;
 		}
 	}
 
-	private function require_proj() {
-		if ($this->proj == null) {
-			throw new Exception("Project not initialized");
-		}
-	}
 
 	private function init_config() {
-		$this->require_proj();
 		if (!$this->config_initialized) {
 			$this->js_debug  = $this->getProjectSetting("javascript-debug") == true;
 			$this->config_initialized = true;
