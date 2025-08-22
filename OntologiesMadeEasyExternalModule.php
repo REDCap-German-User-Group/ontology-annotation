@@ -27,22 +27,25 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	// Injection
 	function redcap_every_page_top($project_id) {
-		if ($project_id == null) return; // Only run in project context
-		$this->init_proj($project_id);
-
+		// Only run in project context and on specific pages
+		if ($project_id == null) return; 
 		$page = defined("PAGE") ? PAGE : null;
-		$form = isset($_GET['page']) && array_key_exists($_GET['page'], $this->proj->forms) ? $_GET['page'] : null;
+		if (!in_array($page, ["Design/online_designer.php"])) return;
 
+		$this->init_proj($project_id);
+		$form = isset($_GET['page']) && array_key_exists($_GET['page'], $this->proj->forms) ? $_GET['page'] : null;
 		if ($page == "Design/online_designer.php" && $form != null) {
 			$this->init_online_designer($form);
 		}
 	}
 
 	function redcap_every_page_before_render($project_id) {
-		if ($project_id == null) return; // Only run in project context
-		$this->init_proj($project_id);
-
+		// Only run in project context and on specific pages
+		if ($project_id == null) return;
 		$page = defined("PAGE") ? PAGE : null;
+		if (!in_array($page, ["Design/edit_field.php"])) return;
+
+		$this->init_proj($project_id);
 		if ($page == "Design/edit_field.php") {
 			$field_name = $_POST["field_name"];
 			$exclude = ($_POST["rome-em-fieldedit-exclude"] ?? "0") == "1";

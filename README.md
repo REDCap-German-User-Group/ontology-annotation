@@ -1,5 +1,7 @@
 # Ontology Annotation
 
+Interesting thread on Community: https://redcap.vumc.org/community/post.php?id=261549 
+
 This module provides support to annotate fields in REDCap with references to various ontologies. The aim is to make data *Findable* as described in [FAIR data](https://en.wikipedia.org/wiki/FAIR_data). 
 
 This is different from using ontologies like ICD10 or SNOMED-CT to describe *data*, which is already supported by REDCap. 
