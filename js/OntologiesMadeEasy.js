@@ -121,7 +121,8 @@ function updateEditFieldUI($dlg, isMatrix) {
 		excluded = config.fieldsExcluded.includes(fieldName);
 	}
 	$dlg.find('input.rome-em-fieldedit-exclude').prop('checked', excluded);
-	$dlg.find('input[name="rome-em-fieldedit-search"]').val("");
+        $dlg.find('input[name="rome-em-fieldedit-search"]').val("");
+        updateAnnotationTable();
 }
 
 function addEditFieldUI($dlg, isMatrix) {
@@ -198,8 +199,8 @@ function addEditFieldUI($dlg, isMatrix) {
 	});
 	// Init auto completion
 	const $searchInput = $ui.find('input[name="rome-em-fieldedit-search"]');
-		const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
-		const throttledSearch = throttle(function(request, response) {
+        const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
+    	const throttledSearch = throttle(function(request, response) {
 		const payload = {
 			"term": request.term,
 			"isMatrix": isMatrix,
@@ -216,7 +217,7 @@ function addEditFieldUI($dlg, isMatrix) {
 			.catch(err => error(err))
 			.finally(() => $searchSpinner.removeClass('busy'));
 	}, 500, { leading: false, trailing: true });
-		$searchInput.autocomplete({
+        $searchInput.autocomplete({
 		source: throttledSearch,
 		minLength: 2,
 		delay: 0,
@@ -230,13 +231,13 @@ function addEditFieldUI($dlg, isMatrix) {
 			return false;
 		},
 		select: function(event, ui) {
-				log('Autosuggest selected:', ui);
-				
+		        log('Autosuggest selected:', ui);
+		        
 			if (ui.item.value !== '') {
-				$searchInput.val(ui.item.label);
-				document.getElementById("rome-add-button").onclick=function() {
-					updateOntologyActionTag(ui.item);
-					};
+			    $searchInput.val(ui.item.label);
+			    document.getElementById("rome-add-button").onclick=function() {
+		               updateOntologyActionTag(ui.item);
+		            };
 			}
 			return false;
 		}
@@ -269,9 +270,9 @@ function addEditFieldUI($dlg, isMatrix) {
 		// Add a hidden field to transfer exclusion
 		$dlg.find('#addFieldForm').prepend('<input type="hidden" name="rome-em-fieldedit-exclude" value="0">');
 		// Insert after Action Tags / Field Annotation
-			$ui.insertAfter(actiontagsDIV);
-				// initial sync from the action tag
-			updateAnnotationTable()
+	        $ui.insertAfter(actiontagsDIV);
+                // initial sync from the action tag
+	        updateAnnotationTable()
 	}
 
 }
@@ -324,39 +325,74 @@ function setEnum(val) {
 		data.enum = val;
 		log('Enum updated:', data.enum);
 	}
+    updateFieldChoices()
 }
 
 //#region Update Ontology Action Tags and table
 
 function escapeHTML(str) { // probably exists as a utility function somewhere already?
-	return String(str)
-		.replace(/&/g, '&amp;')
-		.replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-		.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-	
+
+    
 function updateOntologyActionTag(item) {
-	const actionTagsArea = document.getElementById('field_annotation');
-	const actionTags = actionTagsArea.value;
-	if (actionTags.indexOf(config.atName) == -1) {
-		const annotation = {
-			"item": JSON.parse(item.value)
-		};
-		actionTagsArea.value = (actionTags.length > 0 ? actionTags + '\n' : '') + 
-			`${config.atName}=${JSON.stringify(annotation, null, 2)}`;
-	} 
-	else {
-		const annotation = JSON.parse(actionTags.match(/@ONTOLOGY='([^']*)'/)[1] || "{\"item\": []}");
-		if (annotation.item) {
-			annotation.item = [... new Set(annotation.item.concat(JSON.parse(item.value)))]; // append and remove duplicates
-		} else {
-			annotation.item = [JSON.parse(item.value)];
-		}
-		actionTagsArea.value = actionTags
-			.replace(/@ONTOLOGY='([^']*)'/,
-				`@ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`);
+    let actionTagsArea = document.getElementById('field_annotation');
+    let field = $("#rome-field-choice").val();
+    let annotation = getOntologyAnnotation();
+    if (annotation.dataElement) {
+	if (field == "dataElement") {
+	    annotation.dataElement.coding = [... new Set((annotation.dataElement.coding || []).concat(JSON.parse(item.value)))]; // append and remove duplicates
+	} else {
+	    if (!annotation.dataElement.valueCodingMap) {
+		annotation.dataElement.valueCodingMap = {}
+	    }
+	    if (!annotation.dataElement.valueCodingMap[field]) {
+		annotation.dataElement.valueCodingMap[field] = {coding: []}
+	    }
+	    annotation.dataElement.valueCodingMap[field].coding =
+		[... new Set((annotation.dataElement.valueCodingMap[field].coding).concat(JSON.parse(item.value)))]
 	}
-	updateAnnotationTable()
+    } else {
+	if (field == "dataElement") {
+	    annotation.dataElement = {coding: [JSON.parse(item.value)]}
+	} else {
+	    annotation.dataElement = {coding: [], valueCodingMap: {}}
+	    annotation.dataElement.valueCodingMap[field]= {coding: [JSON.parse(item.value)]}
+	}
+    }
+    if (actionTagsArea.value.indexOf("@ONTOLOGY='") == -1) {
+	actionTagsArea.value += ` @ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`
+    } else {
+	actionTagsArea.value = actionTagsArea.value
+	    .replace(/@ONTOLOGY='([^']*)'/,
+		     `@ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`);
+    }
+    updateAnnotationTable()
+    updateFieldChoices()
+}
+    
+function deleteOntologyAnnotation(system, code, field) {
+    let actionTagsArea = document.getElementById('field_annotation');
+    let annotation = getOntologyAnnotation();
+    if (field == "dataElement") {
+	let coding = annotation?.dataElement?.coding
+	if (coding) {
+	    annotation.dataElement.coding = coding.filter(c => !(c.system == system && c.code == code))
+	}
+    } else {
+	let valueCodingMap = annotation.dataElement?.valueCodingMap
+	if (valueCodingMap && valueCodingMap[field] && valueCodingMap[field].coding) {
+	    let coding = valueCodingMap[field].coding
+	    annotation.dataElement.valueCodingMap[field].coding = coding.filter(c => !(c.system == system && c.code == code))
+	}
+    }
+    actionTagsArea.value = actionTagsArea.value
+	.replace(/@ONTOLOGY='([^']*)'/,
+	 `@ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`);
+    updateAnnotationTable();
 }
 
 function extractOntologyJSON(text) {
@@ -419,36 +455,74 @@ function getOntologyAnnotation() {
 	const content = $('#field_annotation').val() ?? '';
 	return extractOntologyJSON(content);
 }
+    
 
+function updateFieldChoices() {
+    let choices = [["dataElement", "Field"]];
+    if (data.enum) {
+	for(line of data.enum?.split("\n")) {
+	    let code, rest;
+	    [code, ...rest] = line.split(",")
+	    if (rest) {
+		rest = rest.join(",")
+	    }
+	    choices.push([code, rest])
+	}
+    }
+    $("#rome-field-choice").html(choices.map(c => `<option value="${c[0]}">${c[1]}</option>`).join(""))
+}
+    
 
 function updateAnnotationTable() {
-	// use the ontology annotation action tag to
-	const annotation = getOntologyAnnotation();
-	if (!annotation) return;
-	let items = annotation.item
-	if (items.length == 0) {
+    // use the ontology annotation action tag to set the annotation table
+    console.log("ENTER UAT")
+    let annotation = getOntologyAnnotation()
+    let items = annotation.dataElement?.coding
+    let valueCodingMap = annotation.dataElement?.valueCodingMap
+    let values = []
+    if (valueCodingMap) {
+	for (const [key, value] of Object.entries(valueCodingMap)) {
+	    console.log("working on value, coding len is ");
+	    console.log(value.coding.length);
+	    (value.coding || []).forEach(c => values = values.concat({field: key, ...c}))
+	}
+    }
+    console.log("HOWDY, vals len is " +  values.length)
+    if (items.length == 0 && values.length == 0) {
 	$(".rome-edit-field-ui-list").hide()
 	$(".rome-edit-field-ui-list-empty").show()
 	return;
-	}
-	$(".rome-edit-field-ui-list-empty").hide()
+    }
+    $(".rome-edit-field-ui-list-empty").hide()
+    console.log("FOUND ITEMS" + items.length)
+    let html = `<table style="margin-top: 12px">
+                  <thead>
+                    <tr><th>Ontology</th><th>Code</th><th>Display</th><th>Element</th><th>Action</th></tr>
+                  </thead>
+                  <tbody>` +
+	items.map((item, i) => `<tr>` +
+		  [item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
+                  `<td><i>Field</i></td><td><span id="rome-delete-${i}"><i class="fa fa-trash"></i></span></td>
+                  </tr>`).join("") +
+	values.map((item, i) => `<tr>` +
+		  [item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
+                   `<td><b>${item.field}</b></td><td><span id="rome-delete-field-${i}"><i class="fa fa-trash"></i></span></td>
+                  </tr>`).join("") +
 	
-	let html = `<table style="margin-top: 12px">
-				<thead>
-					<tr><th>Ontology</th><th>Code</th><th>Display</th><th>Action</th></tr>
-				</thead>
-				<tbody>` +
-	items.map((item) => `<tr>` +
-		[item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
-				`<td><span onclick="alert('about to delete this...')"><i class="fa fa-trash"></i></span></td>
-				</tr>`).join("") +
 	`</tbody>
-	</table>`
-	$(".rome-edit-field-ui-list").html(html).show() 
-}
+       </table>`
+    $(".rome-edit-field-ui-list").html(html).show()
+	items.forEach((item, i) => $(`#rome-delete-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, 'dataElement')))
+	values.forEach((item, i) => $(`#rome-delete-field-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, item.field)))	
 	
+}
+    
 //#endregion    
 
+
+	
+
+    
 /**
  * The throttle implementation from underscore.js
  * See https://stackoverflow.com/a/27078401
@@ -457,6 +531,7 @@ function updateAnnotationTable() {
  * @param {Object} options 
  * @returns 
  */
+
 function throttle(func, wait, options) {
 	let context, args, result;
 	let timeout = null;
@@ -488,9 +563,8 @@ function throttle(func, wait, options) {
 		return result;
 	};
 };
-	
 
-	
+    
 //#region Debug Logging
 
 /**
