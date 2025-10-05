@@ -342,9 +342,10 @@ function updateOntologyActionTag(item) {
     let actionTagsArea = document.getElementById('field_annotation');
     let field = $("#rome-field-choice").val();
     let annotation = getOntologyAnnotation();
+    let itemCode = JSON.parse(item.value).code
     if (annotation.dataElement) {
 	if (field == "dataElement") {
-	    annotation.dataElement.coding = [... new Set((annotation.dataElement.coding || []).concat(JSON.parse(item.value)))]; // append and remove duplicates
+	    annotation.dataElement.coding = [... new Set((annotation.dataElement.coding || []).concat(itemCode))]; // append and remove duplicates
 	} else {
 	    if (!annotation.dataElement.valueCodingMap) {
 		annotation.dataElement.valueCodingMap = {}
@@ -353,7 +354,7 @@ function updateOntologyActionTag(item) {
 		annotation.dataElement.valueCodingMap[field] = {coding: []}
 	    }
 	    annotation.dataElement.valueCodingMap[field].coding =
-		[... new Set((annotation.dataElement.valueCodingMap[field].coding).concat(JSON.parse(item.value)))]
+		[... new Set((annotation.dataElement.valueCodingMap[field].coding).concat(itemCode))]
 	}
     } else {
 	if (field == "dataElement") {
@@ -373,9 +374,15 @@ function updateOntologyActionTag(item) {
     updateAnnotationTable()
     updateFieldChoices()
 }
+
+function updateActionTag(newvalue) {
+    let actionTagsArea = document.getElementById('field_annotation')
+    actionTagsArea.value = actionTagsArea.value
+	.replace(/@ONTOLOGY='([^']*)'/,
+		 `@ONTOLOGY='${JSON.stringify(newvalue, null, 2)}'`)
+}
     
 function deleteOntologyAnnotation(system, code, field) {
-    let actionTagsArea = document.getElementById('field_annotation');
     let annotation = getOntologyAnnotation();
     if (field == "dataElement") {
 	let coding = annotation?.dataElement?.coding
@@ -389,10 +396,8 @@ function deleteOntologyAnnotation(system, code, field) {
 	    annotation.dataElement.valueCodingMap[field].coding = coding.filter(c => !(c.system == system && c.code == code))
 	}
     }
-    actionTagsArea.value = actionTagsArea.value
-	.replace(/@ONTOLOGY='([^']*)'/,
-	 `@ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`);
-    updateAnnotationTable();
+    updateActionTag(annotation)
+    updateAnnotationTable()
 }
 
 function extractOntologyJSON(text) {
@@ -446,7 +451,7 @@ function extractOntologyJSON(text) {
 	try {
 		return JSON.parse(jsonText);
 	} catch (e) {
-		console.error("Failed to parse JSON:", e);
+	    console.error(`Failed to parse JSON (${jsonText}):`, e);
 		return null;
 	}
 }
@@ -470,6 +475,49 @@ function updateFieldChoices() {
 	}
     }
     $("#rome-field-choice").html(choices.map(c => `<option value="${c[0]}">${c[1]}</option>`).join(""))
+    $(".rome-option-field").each(function(i, elem) {
+	let selected = elem.dataset.romeSelected
+	let system = elem.dataset.romeSystem
+	let code = elem.dataset.romeCode
+	elem.innerHTML = `<select class="form-select" id="rome-selectfield-${i}">` +
+		  choices.map(c => `<option value="${c[0]}" ${c[0] == selected ? 'selected' : ''}>${c[1]}</option>`).join("") +
+	    `</select>`
+	$(elem).on('change', function(event) {
+	    event.stopImmediatePropagation()
+	    let annotation = getOntologyAnnotation()
+	    if (!annotation.dataElement) {
+		annotation.dataElement = {"coding": []}
+	    }
+	    if (!annotation.dataElement.valueCodingMap) {
+		annotation.dataElement.valueCodingMap = {}
+	    }
+	    let items = annotation.dataElement.coding
+	    let valueCodingMap = annotation.dataElement.valueCodingMap
+	    let oldValue = selected
+	    let newValue = event.target.value
+	    console.log(`updating ${oldValue} to ${newValue} // ` + JSON.stringify(valueCodingMap, null, 2))
+	    
+	    if (oldValue == "dataElement") {
+		annotation.dataElement.coding = items.filter(value => (!((value.system == system) && (value.code == code))))
+		if (!valueCodingMap[newValue]?.coding) {
+		    valueCodingMap[newValue]={"coding": []}
+		}
+		valueCodingMap[newValue].coding = [... new Set((valueCodingMap[newValue].coding).concat({"code": code, "system": system}))]
+	    } else if (newValue == "dataElement") {
+		valueCodingMap[oldValue].coding = valueCodingMap[oldValue].coding.filter(value => (!((value.system == system) && (value.code == code))))
+		annotation.dataElement.coding = [... new Set((items).concat({"code": code, "system": system}))]
+	    } else {
+		if (!valueCodingMap[newValue]) {
+		    valueCodingMap[newValue] = {"coding": []}
+		}
+		valueCodingMap[newValue].coding = [... new Set((valueCodingMap[newValue].coding).concat({"code": code, "system": system}))]
+		valueCodingMap[oldValue].coding = valueCodingMap[oldValue].coding.filter(value => (!((value.system == system) && (value.code == code))))
+	    }
+	    annotation.dataElement.valueCodingMap = valueCodingMap
+	    updateActionTag(annotation)
+	})
+	    
+    })
 }
     
 
@@ -482,38 +530,37 @@ function updateAnnotationTable() {
     let values = []
     if (valueCodingMap) {
 	for (const [key, value] of Object.entries(valueCodingMap)) {
-	    console.log("working on value, coding len is ");
-	    console.log(value.coding.length);
+	    console.log("xUAT: Coding key " + key);
 	    (value.coding || []).forEach(c => values = values.concat({field: key, ...c}))
 	}
     }
-    console.log("HOWDY, vals len is " +  values.length)
     if (items.length == 0 && values.length == 0) {
 	$(".rome-edit-field-ui-list").hide()
 	$(".rome-edit-field-ui-list-empty").show()
 	return;
     }
     $(".rome-edit-field-ui-list-empty").hide()
-    console.log("FOUND ITEMS" + items.length)
     let html = `<table style="margin-top: 12px">
                   <thead>
                     <tr><th>Ontology</th><th>Code</th><th>Display</th><th>Element</th><th>Action</th></tr>
                   </thead>
                   <tbody>` +
 	items.map((item, i) => `<tr>` +
-		  [item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
-                  `<td><i>Field</i></td><td><span id="rome-delete-${i}"><i class="fa fa-trash"></i></span></td>
+		  [item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s ? s : '<i>?</i>'}</td>`).join("") + 
+                  `<td><span class="rome-option-field" data-rome-selected="dataElement" id="rome-option-field-${i}"><i>Field</i></span></td><td><span id="rome-delete-${i}"><i class="fa fa-trash"></i></span></td>
                   </tr>`).join("") +
 	values.map((item, i) => `<tr>` +
 		  [item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
-                   `<td><b>${item.field}</b></td><td><span id="rome-delete-field-${i}"><i class="fa fa-trash"></i></span></td>
+                   `<td><span class="rome-option-field" id="rome-option-field-${items.length + i}" data-rome-system="${item.system}" data-rome-code="${item.code}" data-rome-selected="${item.field}"></span></b></td><td><span id="rome-delete-field-${i}"><i class="fa fa-trash"></i></span></td>
                   </tr>`).join("") +
 	
 	`</tbody>
        </table>`
     $(".rome-edit-field-ui-list").html(html).show()
 	items.forEach((item, i) => $(`#rome-delete-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, 'dataElement')))
-	values.forEach((item, i) => $(`#rome-delete-field-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, item.field)))	
+    values.forEach((item, i) => $(`#rome-delete-field-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, item.field)))
+
+    updateFieldChoices()
 	
 }
     

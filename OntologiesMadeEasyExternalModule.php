@@ -1,7 +1,7 @@
 <?php
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
-
+ 
 use Exception;
 use Project;
 use RCView;
@@ -129,10 +129,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 								<i class="fa-solid fa-spinner fa-spin-pulse rome-edit-field-ui-spinner-spinning"></i>
 								<i class="fa-solid fa-arrow-right fa-lg rome-edit-field-ui-spinner-not-spinning"></i>
 							</span>
-							<select class="form-select form-select-sm w-auto">
-								<option>Field</option>
-								<option>Choice A</option>
-								<option>Choice B</option>
+							<select id="rome-field-choice" class="form-select form-select-sm w-auto">
+								<option value="dataElement">Field</option>
 							</select>
 							<button id="rome-add-button" type="button" class="btn btn-rcgreen btn-xs"><?=$this->tt("fieldedit_10")?></button>
 						</div>
@@ -236,20 +234,34 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
             }
         }
                 
+ 		foreach ($minimal_datasets as $minimal_dataset_string) {
+             $minimal_dataset = json_decode($minimal_dataset_string, true);
+             $title = $minimal_dataset["title"];
+             $items_stack = $minimal_dataset["item"];
+             while(!empty($items_stack)) {
+                 $current_item = array_shift($items_stack);
+                 if (is_array($current_item['item'])) {
+                     array_push($items_stack, ...$current_item['item']);
+                 }
+                 if ($current_item['text'] && is_array($current_item['code'])) {
+                     error_log("checking " . $current_item['text']);
+                     if (preg_match("/$term/", $current_item['text'])) {
+                         error_log("   FOUND");
+                         $result[] = [
+                             "value" => json_encode($current_item),
+                             "label" => $current_item['text'],
+                             "display" => "<b>$title</b>: " . $current_item['text']
+                         ];
+                     }
+                 }
+             }
+ 		}		
+        
+        if ($this->getProjectSetting("minimal-datasets-only")) {
+            return $result;
+        }
 
-		foreach ($minimal_datasets as $minimal_dataset_string) {
-            $minimal_dataset = json_decode($minimal_dataset_string, true);
-		    foreach (array_filter($minimal_dataset["items"],
-                                  fn($item)  =>  preg_match("/$term/", $item["name"]))
-                     as $found_item) {
-                $result[] = [
-                    "value" => json_encode($found_item["coding"]),
-                    "label" => $found_item["name"],
-                    "display" => "<b>" . $minimal_dataset["name"] . "</b>: " . $found_item["name"]
-                ];
-		    }	
-		}		
-		
+        
 
 		$bioportal_api_token = $GLOBALS["bioportal_api_token"] ?? "";
 		if ($bioportal_api_token == "") return null;
@@ -287,7 +299,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					"<span class=\"rome-edit-field-ui-search-match\">".substr($display_item, $pos, $term_length)."</span>" . 
 					substr($display_item, $pos + $term_length);
 				$result[] = [
-					"value" => json_encode(["system" => $ontology_system, "code" => $val, "display" => $label]),
+					"value" => json_encode(["coding" => ["system" => $ontology_system, "code" => $val, "display" => $label]]),
 					"label" => $label,
 					"display" => "<b>" . $ontology_acronym . "</b>: " . $display_item,
 				];
