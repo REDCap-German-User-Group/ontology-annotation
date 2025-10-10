@@ -341,7 +341,7 @@ function escapeHTML(str) { // probably exists as a utility function somewhere al
 function updateOntologyActionTag(item) {
     let actionTagsArea = document.getElementById('field_annotation');
     let field = $("#rome-field-choice").val();
-    let annotation = getOntologyAnnotation();
+    let annotation = getOntologyAnnotation() || {};
     let itemCode = JSON.parse(item.value).code
     if (annotation.dataElement) {
 	if (field == "dataElement") {
@@ -464,6 +464,7 @@ function getOntologyAnnotation() {
 
 function updateFieldChoices() {
     let choices = [["dataElement", "Field"]];
+    let choicesDict = {}
     if (data.enum) {
 	for(line of data.enum?.split("\n")) {
 	    let code, rest;
@@ -472,14 +473,21 @@ function updateFieldChoices() {
 		rest = rest.join(",")
 	    }
 	    choices.push([code, rest])
+	    choicesDict[code] = true
 	}
     }
     $("#rome-field-choice").html(choices.map(c => `<option value="${c[0]}">${c[1]}</option>`).join(""))
+
     $(".rome-option-field").each(function(i, elem) {
 	let selected = elem.dataset.romeSelected
 	let system = elem.dataset.romeSystem
 	let code = elem.dataset.romeCode
-	elem.innerHTML = `<select class="form-select" id="rome-selectfield-${i}">` +
+	let display = choices.length <= 1 ? 'display:"none"' : ''
+	let choiceError=""
+	if (!choicesDict[selected]) {
+	    choiceError = `<option value="${selected}" style="background-color: red;">❓❓ ${selected} ❓❓</option>`
+	}
+	elem.innerHTML = `<select ${display} class="form-select" id="rome-selectfield-${i}">` + choiceError + 
 		  choices.map(c => `<option value="${c[0]}" ${c[0] == selected ? 'selected' : ''}>${c[1]}</option>`).join("") +
 	    `</select>`
 	$(elem).on('change', function(event) {
@@ -540,17 +548,23 @@ function updateAnnotationTable() {
 	return;
     }
     $(".rome-edit-field-ui-list-empty").hide()
-    let html = `<table style="margin-top: 12px">
+    let knownLinks={"http://snomed.info/sct": "https://bioportal.bioontology.org/ontologies/SNOMEDCT?p=classes&conceptid=",
+		    "http://loinc.org" : "https://loinc.org/"}
+    let html = `<div id="rome-table-options-comment"></div><table style="margin-top: 12px">
                   <thead>
                     <tr><th>Ontology</th><th>Code</th><th>Display</th><th>Element</th><th>Action</th></tr>
                   </thead>
                   <tbody>` +
 	items.map((item, i) => `<tr>` +
-		  [item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s ? s : '<i>?</i>'}</td>`).join("") + 
+		  [item.system,
+		   (knownLinks[item.system] ? `<a target="_blank" href="${knownLinks[item.system]}${item.code}">${item.code}</a>` : item.code),
+		   item.display].map((s) => `<td style="padding-right: 10px">${s ? s : '<i>?</i>'}</td>`).join("") + 
                   `<td><span class="rome-option-field" data-rome-selected="dataElement" id="rome-option-field-${i}"><i>Field</i></span></td><td><span id="rome-delete-${i}"><i class="fa fa-trash"></i></span></td>
                   </tr>`).join("") +
 	values.map((item, i) => `<tr>` +
-		  [item.system, item.code, item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
+		   [item.system,
+		    (knownLinks[item.system] ? `<a target="_blank" href="${knownLinks[item.system]}${item.code}">${item.code}</a>` : item.code),
+		    item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") + 
                    `<td><span class="rome-option-field" id="rome-option-field-${items.length + i}" data-rome-system="${item.system}" data-rome-code="${item.code}" data-rome-selected="${item.field}"></span></b></td><td><span id="rome-delete-field-${i}"><i class="fa fa-trash"></i></span></td>
                   </tr>`).join("") +
 	

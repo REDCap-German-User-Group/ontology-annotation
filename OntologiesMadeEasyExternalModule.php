@@ -244,13 +244,19 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
                      array_push($items_stack, ...$current_item['item']);
                  }
                  if ($current_item['text'] && is_array($current_item['code'])) {
-                     error_log("checking " . $current_item['text']);
-                     if (preg_match("/$term/", $current_item['text'])) {
-                         error_log("   FOUND");
+                     $display_item = $current_item['text'];
+                     if (preg_match("/$term/i", $display_item)) {
+                         $pos = stripos($display_item, $term);
+                         if ($pos !== false) {
+                             $term_length = strlen($term);
+                             $display_item = substr($display_item, 0, $pos) . 
+                                 "<span class=\"rome-edit-field-ui-search-match\">".substr($display_item, $pos, $term_length)."</span>" . 
+                                 substr($display_item, $pos + $term_length);
+                         }
                          $result[] = [
                              "value" => json_encode($current_item),
                              "label" => $current_item['text'],
-                             "display" => "<b>$title</b>: " . $current_item['text']
+                             "display" => "<b>$title</b>: " . $display_item
                          ];
                      }
                  }
