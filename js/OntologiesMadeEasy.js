@@ -358,10 +358,10 @@ function updateOntologyActionTag(item) {
 	}
     } else {
 	if (field == "dataElement") {
-	    annotation.dataElement = {coding: [JSON.parse(item.value)]}
+	    annotation.dataElement = {coding: [JSON.parse(item.value).code]}
 	} else {
 	    annotation.dataElement = {coding: [], valueCodingMap: {}}
-	    annotation.dataElement.valueCodingMap[field]= {coding: [JSON.parse(item.value)]}
+	    annotation.dataElement.valueCodingMap[field]= {coding: [JSON.parse(item.value).code]}
 	}
     }
     if (actionTagsArea.value.indexOf("@ONTOLOGY='") == -1) {
@@ -464,7 +464,7 @@ function getOntologyAnnotation() {
 
 function updateFieldChoices() {
     let choices = [["dataElement", "Field"]];
-    let choicesDict = {}
+    let choicesDict = {"dataElement": true}
     if (data.enum) {
 	for(line of data.enum?.split("\n")) {
 	    let code, rest;

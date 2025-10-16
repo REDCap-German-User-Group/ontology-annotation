@@ -305,7 +305,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					"<span class=\"rome-edit-field-ui-search-match\">".substr($display_item, $pos, $term_length)."</span>" . 
 					substr($display_item, $pos + $term_length);
 				$result[] = [
-					"value" => json_encode(["coding" => ["system" => $ontology_system, "code" => $val, "display" => $label]]),
+					"value" => json_encode(["code" => ["system" => $ontology_system, "code" => $val, "display" => $label]]),
 					"label" => $label,
 					"display" => "<b>" . $ontology_acronym . "</b>: " . $display_item,
 				];
