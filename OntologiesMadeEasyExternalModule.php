@@ -71,6 +71,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return $this->refresh_exclusions($payload);
             case "discover":
                 return $this->discover_ontologies($payload);
+			case "get-hierarchy":
+				return $this->get_concept_hierarchy($payload);
+			case "get-children":
+				return $this->get_concept_children($payload);
+			case "get-parents":
+				return $this->get_concept_parents($payload);
 		}
 	}
 
@@ -199,9 +205,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	private function refresh_exclusions($form) {
-		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->getMetadata();
+		// isDraftMode() hat bei mir nicht funktioniert, vielleicht REDCap Version abhaengig?
+		$metadata = $this->proj->getMetadata();
 		$form_fields = array_filter($metadata, function($field_data) use ($form) { return $field_data["form_name"] === $form; });
-		$excluded = array_intersect($this->get_excluded_fields(), $form_fields);
+		$excluded = array_intersect($this->get_excluded_fields(), array_keys($form_fields));
 		$mg_excluded = [];
 		foreach ($excluded as $field) {
 			if (isset($metadata[$field]) && $metadata[$field]["grid_name"]) {
@@ -216,7 +223,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	private function search_ontologies($payload) {
-
 		$term = trim($payload["term"] ?? "");
 		if ($term == "") return null;
 
@@ -250,17 +256,23 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		    }	
 		}		
 		
+		// Check which API to use (from project settings)
+		$api_provider = $this->getProjectSetting('terminology-api-provider') ?? 'bioportal';
 
+		if ($api_provider === 'snowstorm') {
+			// Use Snowstorm API
+			$api_results = $this->search_snowstorm($term);
+			if ($api_results) {
+				$result = array_merge($result, $api_results);
+			}
+		} else {
+			// Use BioPortal API
 		$bioportal_api_token = $GLOBALS["bioportal_api_token"] ?? "";
-		if ($bioportal_api_token == "") return null;
-
+			if ($bioportal_api_token != "") {
 		$bioportal_api_url = $GLOBALS["bioportal_api_url"] ?? "";
-		if ($bioportal_api_url == '') return null;
-
-		// Fixed
+				if ($bioportal_api_url != '') {
 		$ontology_acronym = "SNOMEDCT";
-        $ontology_system  = "http://snomed.info/sct";
-
+					$ontology_system = "http://snomed.info/sct";
 
 			// Build URL to call
 		$url = $bioportal_api_url . "search?q=".urlencode($term)."&ontologies=".urlencode($ontology_acronym)
@@ -270,8 +282,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		
 		$response = json_decode($json, true);
 
-		if (!$response || !$response["collection"]) return null;
-		
+					if ($response && $response["collection"]) {
 		$dummy_data = [];
 		foreach ($response["collection"] as $item) {
 			$dummy_data[$item["notation"]] = $item["prefLabel"];
@@ -293,6 +304,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				];
 			}
 		}
+					}
+				}
+			}
+		}
+
 		if (count($result) == 0) {
 			$result[] = [
 				"value" => "",
@@ -302,6 +318,191 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Search using Snowstorm API
+	 */
+	private function search_snowstorm($term) {
+		$snowstorm_url = $this->getProjectSetting('snowstorm-api-url');
+		
+		if (empty($snowstorm_url)) {
+			return null;
+		}
+		// MAIN als standard, kann aber Snowstorm abhaengig sein.
+		/**Testen mit Powershell:
+		 * Funktioniert SNowstorm, und wie heisst der Branch? Variiert zwischen Snowstorm Versionen.
+		 * In Powershell:
+		 * curl http://127.0.0.1:8080/branches
+		 * 
+		 * Die SwaggerUI in Snowstorm kann bei den Endpunkten helfen.
+		 * 
+		 * POST Request scheint besser zu funktionieren als GET
+		 * Bei GET wird nicht richtig gefiltert? Extension Konzepte sind z.B. drin
+		 * mit prefix 9999..
+		 * Powershell, funktioniert nicht gut:
+		 * curl "http://127.0.0.1:8080/browser/MAIN/concepts?term=asthma&active=true&limit=10"
+		 * 
+		 * Powershell, funktioniert gut:
+		 * 
+		 * $body = @{
+    termFilter = "asthma"
+    limit = 10
+    activeFilter = $true
+} | ConvertTo-Json
+
+Invoke-WebRequest -Uri "http://127.0.0.1:8080/MAIN/concepts/search" -Method POST -ContentType "application/json" -Body $body | Select-Object -ExpandProperty Content
+		 */
+		$branch = $this->getProjectSetting('snowstorm-branch') ?? 'MAIN';
+		$base_url = rtrim($snowstorm_url, '/');
+		
+		$url = "$base_url/$branch/concepts/search";
+		$post_data = json_encode([
+			'termFilter' => $term,
+			'limit' => 50,
+			'activeFilter' => true
+		]);
+
+		try {
+			if (function_exists('http_post')) {
+				$json = http_post($url, $post_data, 30, 'application/json');
+			} else {
+				$ch = curl_init($url);
+				curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+				curl_setopt($ch, CURLOPT_POST, true);
+				curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
+				curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+				curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+				$json = curl_exec($ch);
+				$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+				curl_close($ch);
+				
+				if ($http_code !== 200) {
+					return null;
+				}
+			}
+			
+			$response = json_decode($json, true);
+
+			if (!$response || !isset($response['items'])) {
+				return null;
+			}
+
+			$result = [];
+			// Wir filtern nach aktiven Konzepten und werfen Extensions raus
+			// Extension Konzepte haben ConceptIDs die mit 999 oder 1xxxxxx anfangen
+			foreach ($response['items'] as $concept) {
+				if (isset($concept['active']) && $concept['active'] === false) {
+					continue;
+				}
+				
+				$concept_id = $concept['conceptId'];
+				if (preg_match('/^(999|1[0-9]{9,})/', $concept_id)) {
+					continue;
+				}
+				
+				$label = $concept['pt']['term'] ?? $concept['fsn']['term'] ?? 'Unknown';
+
+				$display_item = "[$concept_id] $label";
+				$display_item = filter_tags(label_decode($display_item));
+
+				$pos = stripos($display_item, $term);
+				if ($pos !== false) {
+					$term_length = strlen($term);
+					$display_item = substr($display_item, 0, $pos) .
+						"<span class=\"rome-edit-field-ui-search-match\">" .
+						substr($display_item, $pos, $term_length) .
+						"</span>" .
+						substr($display_item, $pos + $term_length);
+				}
+
+				$result[] = [
+					"value" => json_encode(["system" => "http://snomed.info/sct", "code" => $concept_id, "display" => $label]),
+					"label" => $label,
+					"display" => "<b>SNOMED CT</b>: " . $display_item,
+					"conceptId" => $concept_id
+				];
+			}
+
+			return $result;
+		} catch (Exception $e) {
+			return null;
+		}
+	}
+
+	/**
+	 * Get hierarchy information for a concept
+	 */
+	private function get_concept_hierarchy($payload) {
+		$concept_id = $payload['conceptId'] ?? null;
+		if (!$concept_id) return null;
+
+		$api_provider = $this->getProjectSetting('terminology-api-provider') ?? 'bioportal';
+		if ($api_provider !== 'snowstorm') {
+			return ['error' => 'Hierarchy only available with Snowstorm'];
+		}
+
+		$parents = $this->get_snowstorm_parents($concept_id);
+		$children = $this->get_snowstorm_children($concept_id);
+
+		return [
+			'conceptId' => $concept_id,
+			'parents' => $parents,
+			'children' => $children
+		];
+	}
+
+	private function get_concept_children($payload) {
+		$concept_id = $payload['conceptId'] ?? null;
+		if (!$concept_id) return [];
+
+		return $this->get_snowstorm_children($concept_id);
+	}
+
+	private function get_concept_parents($payload) {
+		$concept_id = $payload['conceptId'] ?? null;
+		if (!$concept_id) return [];
+
+		return $this->get_snowstorm_parents($concept_id);
+	}
+
+	private function get_snowstorm_parents($concept_id) {
+		$snowstorm_url = $this->getProjectSetting('snowstorm-api-url');
+		if (empty($snowstorm_url)) return [];
+
+		$branch = $this->getProjectSetting('snowstorm-branch') ?? 'MAIN';
+		$base_url = rtrim($snowstorm_url, '/');
+		$url = "$base_url/browser/$branch/concepts/$concept_id/parents?form=inferred&includeDescendantCount=false";
+
+		try {
+			$json = http_get($url);
+			$response = json_decode($json, true);
+			return $response ?? [];
+		} catch (Exception $e) {
+			error_log("Snowstorm parents error: " . $e->getMessage());
+			return [];
+		}
+	}
+
+	/**
+	 * Internal method to get children from Snowstorm
+	 */
+	private function get_snowstorm_children($concept_id) {
+		$snowstorm_url = $this->getProjectSetting('snowstorm-api-url');
+		if (empty($snowstorm_url)) return [];
+
+		$branch = $this->getProjectSetting('snowstorm-branch') ?? 'MAIN';
+		$base_url = rtrim($snowstorm_url, '/');
+		$url = "$base_url/browser/$branch/concepts/$concept_id/children?form=inferred&includeDescendantCount=false";
+
+		try {
+			$json = http_get($url);
+			$response = json_decode($json, true);
+			return $response ?? [];
+		} catch (Exception $e) {
+			error_log("Snowstorm children error: " . $e->getMessage());
+			return [];
+		}
 	}
 
 

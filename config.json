@@ -28,6 +28,36 @@
 			"type": "checkbox"
 		},
 		{
+			"key": "terminology-api-provider",
+			"name": "<b>Terminology API Provider</b>",
+			"type": "dropdown",
+			"choices": [
+				{"value": "bioportal", "name": "BioPortal (uses REDCap internal BioPortal)"},
+				{"value": "snowstorm", "name": "Snowstorm (SNOMED CT)"}
+			],
+			"default": "bioportal"
+		},
+		{
+			"key": "snowstorm-api-url",
+			"name": "Snowstorm API URL",
+			"type": "text",
+			"placeholder": "http://127.0.0.1:8080",
+			"branchingLogic": {
+				"field": "terminology-api-provider",
+				"value": "snowstorm"
+			}
+		},
+		{
+			"key": "snowstorm-branch",
+			"name": "SNOMED Branch/Edition",
+			"type": "text",
+			"default": "MAIN",
+			"branchingLogic": {
+				"field": "terminology-api-provider",
+				"value": "snowstorm"
+			}
+		},
+		{
 			"key": "minimal-dataset-file-test",
 			"name": "Use the \"Test\" Minimal dataset",
 			"type": "checkbox"
@@ -50,7 +80,10 @@
 		"get-fieldhelp",
 		"set-matrix-exclusion",
 	        "refresh-exclusions",
-	        "discover"
+	        "discover",
+	        "get-hierarchy",
+	        "get-children",
+	        "get-parents"
 	],
 	"links": {
 		"project": [
