@@ -2,7 +2,6 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
  
-use Exception;
 use Project;
 use RCView;
 

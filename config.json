@@ -1,5 +1,5 @@
 {
-	"name": "ROME: REDCap Ontologies Made Easy",
+	"name": "ROME: REDCap Ontology Annotations Made Easy",
 	"tt_name": "module_name",
 	"namespace": "DE\\RUB\\OntologiesMadeEasyExternalModule",
 	"description": "A REDCap external module that facilitates adding and editing ontology annotations.",
@@ -9,6 +9,11 @@
 			"name": "Günther Rezniczek",
 			"email": "guenther.rezniczek@rub.de",
 			"institution": "St. Elisabethgruppe GmbH - Marien Hospital Herne | Klinikum der Ruhr-Universität Bochum"
+		},
+		{
+			"name": "Christof Meigen",
+			"email": "christof.meigen@medizin.uni-leipzig.de",
+			"institution": "Medical Faculty, Leipzig University"
 		}
 	],
 	"framework-version": 16,
@@ -55,7 +60,7 @@
 	"links": {
 		"project": [
 			{
-				"name": "Ontologies Made Easy",
+				"name": "<b>ROME</b>: Ontology Annotations Made Easy",
 				"icon": "fa-solid fa-tree",
 				"url": "plugin/index.php",
 				"show-header-and-footer": true
