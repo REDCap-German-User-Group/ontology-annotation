@@ -31,30 +31,39 @@
 		$(function() {
 			if ($('#sub-nav').length === 0) return;
 			bindTabs();
-			const target = getInitialTarget();
+			const target = getInitialTab();
 			setActiveTab(target);
 		});
 	}
 
+
+	//#region Tab navigation
+
 	function bindTabs() {
 		$('#sub-nav').on('click', 'a[data-rome-action="main-nav"]', function(event) {
 			event.preventDefault();
-			const target = $(this).attr('data-rome-target');
+			const target = normalizeTabName($(this).attr('data-rome-target'));
 			if (!target) return;
 			setActiveTab(target);
 		});
 	}
 
 	/**
+	 * @param {string=} target
+	 * @returns {ROMESection|null}
+	 */
+	function normalizeTabName(target) {
+		return ['about', 'annotate', 'discover', 'utilities'].includes(target ?? '')
+			? /** @type {ROMESection} */ (target)
+			: null;
+	}
+
+	/**
 	 * @returns {ROMESection}
 	 */
-	function getInitialTarget() {
+	function getInitialTab() {
 		const $active = $('#sub-nav li.active a[data-rome-target]').first();
-		const target = $active.attr('data-rome-target');
-		if (target === 'annotate' || target === 'discover' || target === 'utilities') {
-			return target;
-		}
-		return 'about';
+		return normalizeTabName($active.attr('data-rome-target')) || 'about';
 	}
 
 	/**
@@ -67,4 +76,7 @@
 		$('.rome-tab-section').removeClass('active');
 		$('.rome-tab-section[data-rome-section="' + target + '"]').addClass('active');
 	}
+
+	//#endregion
+
 })();
