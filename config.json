@@ -54,24 +54,24 @@
 		"parse",
 		"get-fieldhelp",
 		"set-matrix-exclusion",
-	        "refresh-exclusions",
-	        "discover"
+	    "refresh-exclusions",
+	    "discover"
 	],
 	"links": {
 		"project": [
 			{
 				"name": "<b>ROME</b>: Ontology Annotations Made Easy",
-				"icon": "fa-solid fa-tree",
+				"icon": "fa-solid fa-tags",
 				"url": "plugin/index.php",
 				"show-header-and-footer": true
 			},
-		        { 
+		    { 
 				"name": "ROME - Discover projects",
 				"icon": "fa fa-search",
 				"url": "plugin/discover.php",
 				"show-header-and-footer": true
 			},
-		        { 
+		    { 
 				"name": "ROME - Utility functions",
 				"icon": "fa fa-tools",
 				"url": "plugin/utils.php",

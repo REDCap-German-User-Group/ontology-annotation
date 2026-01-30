@@ -1,0 +1,17 @@
+.rome-tab-section {
+	display: none;
+}
+
+.rome-tab-section.active {
+	display: block;
+}
+
+#sub-nav {
+	margin-bottom: 0.5em !important;
+}
+
+#sub-nav a[data-rome-action="main-nav"] {
+	color: #393733;
+	font-size: 13px;
+	padding: 7px 9px;
+}
