@@ -7,6 +7,7 @@
 ;(function() {
 	const EM_NAME = 'ROME';
 	const NS_PREFIX = 'DE_RUB_';
+	const INITAL_TAB = 'annotate';
 
 	/** @type {ROMEPublic} */
 	// @ts-ignore
@@ -63,7 +64,7 @@
 	 */
 	function getInitialTab() {
 		const $active = $('#sub-nav li.active a[data-rome-target]').first();
-		return normalizeTabName($active.attr('data-rome-target')) || 'about';
+		return normalizeTabName($active.attr('data-rome-target')) || INITAL_TAB;
 	}
 
 	/**

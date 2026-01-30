@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="<?php echo $module->getUrl('css/ROME.css'); ?>">
 <div id="sub-nav" class="d-sm-block">
 	<ul>
-		<li class="active">
+		<li>
 			<a href="javascript:;" data-rome-action="main-nav" data-rome-target="about">
 				<i class="fa-solid fa-info"></i> About
 			</a>
