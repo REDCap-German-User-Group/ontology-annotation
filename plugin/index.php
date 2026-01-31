@@ -1,57 +1,58 @@
 <?php
-use DE\RUB\OntologiesMadeEasyExternalModule\OntologiesMadeEasyExternalModule;
+namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 /** @var OntologiesMadeEasyExternalModule $module */
 
 $config = $module->get_js_base_config(true);
 $js_config = json_encode($config);
 
+$nav_tabs = [
+	"about" => [
+		"label" => "About",
+		"icon" => "fa-solid fa-info",
+	],
+	"annotate" => [
+		"label" => "Annotate",
+		"icon" => "fa-solid fa-diagram-project",
+	],
+	"discover" => [
+		"label" => "Discover",
+		"icon" => "fa-solid fa-search",
+	],
+	"utilities" => [
+		"label" => "Utilities",
+		"icon" => "fa-solid fa-wrench",
+	]
+];
+$default_tab = "annotate";
+$active_tab = array_key_exists($_GET['tab'], $nav_tabs) ? $_GET['tab'] : $default_tab;
+
+require_once __DIR__ . "/../classes/InjectionHelper.php";
+$ih = InjectionHelper::init($module);
+$ih->js("js/ConsoleDebugLogger.js");
+$ih->js("js/ROME.js");
+$ih->css("css/ROME.css");
+
+
 ?>
 <h1 class="projhdr">
 	<i class="fa-solid fa-tags"></i> ROME: REDCap Ontology Annotations Made Easy
 </h1>
 <p>ROME is a REDCap external module that facilitates adding and editing ontology annotations to data elements.</p>
-<link rel="stylesheet" href="<?php echo $module->getUrl('css/ROME.css'); ?>">
-<div id="sub-nav" class="d-sm-block">
+<div id="sub-nav" class="d-sm-block mb-3">
 	<ul>
-		<li>
-			<a href="javascript:;" data-rome-action="main-nav" data-rome-target="about">
-				<i class="fa-solid fa-info"></i> About
+	<?php foreach ($nav_tabs as $tab => $tab_info): ?>
+		<li class="<?= $active_tab == $tab ? 'active' : '' ?>">
+			<a href="<?= $module->getUrl("plugin/index.php?tab={$tab}") ?>" data-nav-link="<?= $tab ?>">
+				<i class="<?= $tab_info['icon']?>"></i> <?= $tab_info['label'] ?>
 			</a>
 		</li>
-		<li>
-			<a href="javascript:;" data-rome-action="main-nav" data-rome-target="annotate">
-				<i class="fa-solid fa-diagram-project"></i> Annotate
-			</a>
-		</li>
-		<li>
-			<a href="javascript:;" data-rome-action="main-nav" data-rome-target="discover">
-				<i class="fa-solid fa-search"></i> Discover
-			</a>
-		</li>
-		<li>
-			<a href="javascript:;" data-rome-action="main-nav" data-rome-target="utilities">
-				<i class="fa-solid fa-wrench"></i> Utilities
-			</a>
-		</li>
+	<?php endforeach; ?>
 	</ul>
 </div>
-<div id="rome-tabs" class="mt-3">
-	<section class="rome-tab-section active" data-rome-section="about">
-		<?php include __DIR__ . '/tabs/about.php'; ?>
-	</section>
-	<section class="rome-tab-section" data-rome-section="annotate">
-		<?php include __DIR__ . '/tabs/annotate.php'; ?>
-	</section>
-	<section class="rome-tab-section" data-rome-section="discover">
-		<?php include __DIR__ . '/tabs/discover.php'; ?>
-	</section>
-	<section class="rome-tab-section" data-rome-section="utilities">
-		<?php include __DIR__ . '/tabs/utilities.php'; ?>
-	</section>
+<div id="rome-tab">
+	<?php include __DIR__ . "/tabs/{$active_tab}.php"; ?>
 </div>
-<script src="<?php echo $module->getUrl('js/ConsoleDebugLogger.js'); ?>"></script>
-<script src="<?php echo $module->getUrl('js/ROME.js'); ?>"></script>
 <script>
 	$(function() {
 		if (window.DE_RUB_ROME && window.DE_RUB_ROME.init) {

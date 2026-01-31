@@ -3,10 +3,6 @@
 // @ts-check
 
 /**
- * @typedef {'about'|'annotate'|'discover'|'utilities'} ROMESection
- */
-
-/**
  * @typedef {Object} ROMEConfig
  * @property {boolean=} debug
  * @property {string=} version

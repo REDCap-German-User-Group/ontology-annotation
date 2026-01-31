@@ -1,17 +1,13 @@
-.rome-tab-section {
-	display: none;
-}
-
-.rome-tab-section.active {
-	display: block;
-}
-
 #sub-nav {
-	margin-bottom: 0.5em !important;
+	margin-bottom: 1em;
+	display: flex;
 }
 
-#sub-nav a[data-rome-action="main-nav"] {
+#sub-nav a[data-nav-link] {
 	color: #393733;
 	font-size: 13px;
 	padding: 7px 9px;
+}
+#sub-nav .active a[data-nav-link] {
+	color: black;
 }

@@ -45,56 +45,8 @@
 		}
 		initialized = true;
 		log(`Initialed ${config.moduleDisplayName} ...`, config);
-		$(function () {
-			if ($('#sub-nav').length === 0) return;
-			bindTabs();
-			const target = getInitialTab();
-			setActiveTab(target);
-		});
 	}
 
-
-	//#region Tab navigation
-
-	function bindTabs() {
-		$('#sub-nav').on('click', 'a[data-rome-action="main-nav"]', function (event) {
-			event.preventDefault();
-			const target = normalizeTabName($(this).attr('data-rome-target'));
-			if (!target) return;
-			setActiveTab(target);
-		});
-	}
-
-	/**
-	 * @param {string=} target
-	 * @returns {ROMESection|null}
-	 */
-	function normalizeTabName(target) {
-		return ['about', 'annotate', 'discover', 'utilities'].includes(target ?? '')
-			? /** @type {ROMESection} */ (target)
-			: null;
-	}
-
-	/**
-	 * @returns {ROMESection}
-	 */
-	function getInitialTab() {
-		const $active = $('#sub-nav li.active a[data-rome-target]').first();
-		return normalizeTabName($active.attr('data-rome-target')) || INITAL_TAB;
-	}
-
-	/**
-	 * @param {ROMESection} target
-	 */
-	function setActiveTab(target) {
-		const $nav = $('#sub-nav');
-		$nav.find('li').removeClass('active');
-		$nav.find('a[data-rome-target="' + target + '"]').closest('li').addClass('active');
-		$('.rome-tab-section').removeClass('active');
-		$('.rome-tab-section[data-rome-section="' + target + '"]').addClass('active');
-	}
-
-	//#endregion
 
 
 	//#region Misc Helpers
