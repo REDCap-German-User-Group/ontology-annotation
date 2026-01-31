@@ -10,10 +10,12 @@
 
 const EM_NAME = 'ROME';
 const NS_PREFIX = 'DE_RUB_';
-const LOGGER = ConsoleDebugLogger.create();
-const log = LOGGER.log;
-const warn = LOGGER.warn;
-const error = LOGGER.error;
+const LOGGER = ConsoleDebugLogger.create().configure({
+	name: EM_NAME,
+	active: true,
+	version: '??'
+});
+const { log, warn, error } = LOGGER;
 
 // @ts-ignore
 const EM = window[NS_PREFIX + EM_NAME] ?? {
@@ -41,7 +43,7 @@ function initialize(config_data, jsmo = null) {
 	LOGGER.configure({ active: config.debug, name: EM_NAME, version: config.version });
 
 	log('Initialzing ...', config);
-	
+
 	//#region Hijack Hooks
 
 	// Adds the edit field UI

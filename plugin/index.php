@@ -1,4 +1,10 @@
 <?php
+use DE\RUB\OntologiesMadeEasyExternalModule\OntologiesMadeEasyExternalModule;
+
+/** @var OntologiesMadeEasyExternalModule $module */
+
+$config = $module->get_js_base_config(true);
+$js_config = json_encode($config);
 
 ?>
 <h1 class="projhdr">
@@ -49,7 +55,7 @@
 <script>
 	$(function() {
 		if (window.DE_RUB_ROME && window.DE_RUB_ROME.init) {
-			window.DE_RUB_ROME.init({});
+			window.DE_RUB_ROME.init(<?= $js_config ?>);
 		}
 	});
 </script>

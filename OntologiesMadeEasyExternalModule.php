@@ -75,6 +75,29 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#endregion
 
+
+	// JS Base config
+	function get_js_base_config($include_jsmo = false) {
+		if ($include_jsmo) {
+			$this->framework->initializeJavascriptModuleObject();
+			$jsmo_name = $this->framework->getJavascriptModuleObjectName();
+		}
+	
+		$js_base_config = [
+			"debug" => $this->getProjectSetting("javascript-debug") == true,
+			"version" => $this->VERSION,
+			"moduleDisplayName" => $this->tt("module_name"),
+			"atName" => self::AT_ONTOLOGY,
+		];
+		if ($include_jsmo) {
+			$js_base_config["jsmoName"] = $jsmo_name;
+		}
+		return $js_base_config;
+	}
+
+
+
+
 	#region Online Designer
 
 	private function init_online_designer($form) {
