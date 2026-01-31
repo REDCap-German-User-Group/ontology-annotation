@@ -93,7 +93,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$config = array_merge($config, $this->refresh_exclusions($form));
 		require_once "classes/InjectionHelper.php";
 		$ih = InjectionHelper::init($this);
-		$ih->js("js/OntologiesMadeEasy.js");
+		$ih->js("js/ConsoleDebugLogger.js");
+        $ih->js("js/OntologiesMadeEasy.js");
 		$ih->css("css/OntologiesMadeEasy.css");
 		print RCView::script(self::NS_PREFIX . self::EM_NAME . ".init(" . json_encode($config) . ", $jsmo_name);");
 	}

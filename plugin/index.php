@@ -44,6 +44,7 @@
 		<?php include __DIR__ . '/tabs/utilities.php'; ?>
 	</section>
 </div>
+<script src="<?php echo $module->getUrl('js/ConsoleDebugLogger.js'); ?>"></script>
 <script src="<?php echo $module->getUrl('js/ROME.js'); ?>"></script>
 <script>
 	$(function() {
