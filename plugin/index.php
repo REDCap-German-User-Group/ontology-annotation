@@ -38,7 +38,11 @@ $ih->css("css/ROME.css");
 <h1 class="projhdr">
 	<i class="fa-solid fa-tags"></i> ROME: REDCap Ontology Annotations Made Easy
 </h1>
-<p>ROME is a REDCap external module that facilitates adding and editing ontology annotations to data elements.</p>
+<p>
+	ROME is a REDCap external module that facilitates adding and editing ontology 
+	annotations to data elements in a project and searching for annotations accross multiple
+	projects on a REDCap instance.
+</p>
 <div id="sub-nav" class="d-sm-block mb-3">
 	<ul>
 	<?php foreach ($nav_tabs as $tab => $tab_info): ?>
