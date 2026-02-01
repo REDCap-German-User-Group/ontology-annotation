@@ -73,6 +73,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
+	function redcap_module_project_enable($version, $project_id) {
+		// Ensure that some project settings have default values
+		$current = $this->getProjectSettings();
+		if (!array_key_exists("code-theme", $current)) {
+			$this->setProjectSetting("code-theme", "dark");
+		}
+	}
+
 	#endregion
 
 
@@ -114,8 +122,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			"form" => $form,
 		];
 		$config = array_merge($config, $this->refresh_exclusions($form));
-		require_once "classes/InjectionHelper.php";
-		$ih = InjectionHelper::init($this);
+		$ih = $this->getInjectionHelper();
 		$ih->js("js/ConsoleDebugLogger.js");
         $ih->js("js/OntologiesMadeEasy.js");
 		$ih->css("css/OntologiesMadeEasy.css");
@@ -460,4 +467,19 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	#endregion
+
+	#region Public Helpers
+
+	function getInjectionHelper() {
+		if ($this->injection_helper === null) {
+			require_once "classes/InjectionHelper.php";
+			$this->injection_helper = InjectionHelper::init($this);
+		}
+		return $this->injection_helper;
+	}
+	/** @var InjectionHelper */
+	private $injection_helper = null;
+
+	#endregion
+
 }

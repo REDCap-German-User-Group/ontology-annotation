@@ -44,7 +44,7 @@
 			JSMO = config.jsmoInstance = getGlobalByName(config.jsmoName);
 		}
 		initialized = true;
-		log(`Initialed ${config.moduleDisplayName} ...`, config);
+		log(`Initialized ${config.moduleDisplayName} ...`, config);
 	}
 
 

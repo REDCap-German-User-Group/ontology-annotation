@@ -11,3 +11,18 @@
 #sub-nav .active a[data-nav-link] {
 	color: black;
 }
+
+.rome-code {
+	padding: 5px;
+	border: 1px solid #e5e5e5;
+	border-radius: 8px;
+	max-width: 900px;
+}
+.rome-code pre {
+	padding: 0;
+	margin: 0;
+	border: none;
+	background-color: transparent;
+	line-height: unset;
+}
+

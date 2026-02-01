@@ -22,7 +22,7 @@ rome_combine <- function(datasets, only_annotated=FALSE, use_names = c()) {
   #'              only_annotated=TRUE, use_names=c("gecco"))
   
   extract_ontologies <- function(metadata) {
-    ## we rely of field_name being either field_name (from the api) or "Variable / Field name" (from the data dictionary CSV)
+    ## We rely on field_name being either field_name (API) or "Variable / Field name" (Data Dictionary CSV)
     ## as well as field_annotation + "Field Annotation"
     fields <- metadata |> clean_names() |> rename(any_of(c("field_name" = "variable_field_name"))) |>
       mutate(ontology_txt = gsub("@ONTOLOGY='([^']+)'", "\\1",  field_annotation)) |>

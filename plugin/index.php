@@ -1,8 +1,12 @@
-<?php
+<?php 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 /** @var OntologiesMadeEasyExternalModule $module */
 
+$ih = $module->getInjectionHelper();
+$ih->js("js/ConsoleDebugLogger.js");
+$ih->js("js/ROME.js");
+$ih->css("css/ROME.css");
 $config = $module->get_js_base_config(true);
 $js_config = json_encode($config);
 
@@ -27,11 +31,6 @@ $nav_tabs = [
 $default_tab = "annotate";
 $active_tab = array_key_exists($_GET['tab'], $nav_tabs) ? $_GET['tab'] : $default_tab;
 
-require_once __DIR__ . "/../classes/InjectionHelper.php";
-$ih = InjectionHelper::init($module);
-$ih->js("js/ConsoleDebugLogger.js");
-$ih->js("js/ROME.js");
-$ih->css("css/ROME.css");
 
 
 ?>

@@ -33,6 +33,21 @@
 			"type": "checkbox"
 		},
 		{
+			"key": "code-theme",
+			"name": "Theme for code displays",
+			"type": "radio",
+			"choices": [
+				{
+					"name": "Light",
+					"value": "light"
+				},
+				{
+					"name": "Dark",
+					"value": "dark"
+				}
+			]
+		},
+		{
 			"key": "minimal-dataset-file-test",
 			"name": "Use the \"Test\" Minimal dataset",
 			"type": "checkbox"

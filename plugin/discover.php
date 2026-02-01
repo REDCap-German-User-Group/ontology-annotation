@@ -1,5 +1,13 @@
-<link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+<?php namespace DE\RUB\OntologiesMadeEasyExternalModule;
+
+/** @var OntologiesMadeEasyExternalModule $module */
+
+$ih = $module->getInjectionHelper();
+$ih->css("libs/tom-select_2.4.3/tom-select.css");    
+$ih->js("libs/tom-select_2.4.3/tom-select.complete.min.js");
+
+
+?>
     
 <h1 class="projhdr">
 	<i class="fa fa-search"></i> ROME: Discover Metadata from other projects
