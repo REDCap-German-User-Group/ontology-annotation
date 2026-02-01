@@ -7,7 +7,9 @@ $ih = $module->getInjectionHelper();
 $ih->js("js/ConsoleDebugLogger.js");
 $ih->js("js/ROME.js");
 $ih->css("css/ROME.css");
-$config = $module->get_js_base_config(true);
+$config = $module->get_js_base_config();
+$module->framework->initializeJavascriptModuleObject();
+$jsmo_name = $module->framework->getJavascriptModuleObjectName();
 
 $nav_tabs = [
 	"about" => [
@@ -61,7 +63,7 @@ $config["plugin"] = $active_tab;
 <script>
 	$(function() {
 		if (window.DE_RUB_ROME && window.DE_RUB_ROME.init) {
-			window.DE_RUB_ROME.init(<?= json_encode($config); ?>);
+			window.DE_RUB_ROME.init(<?= json_encode($config); ?>, <?=  $jsmo_name ?>);
 		}
 	});
 </script>

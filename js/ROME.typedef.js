@@ -7,8 +7,6 @@
  * @property {string=} atName
  * @property {boolean=} debug
  * @property {boolean=} isAdmin
- * @property {string=} jsmoName
- * @property {JavascriptModuleObject|null} [jsmoInstance]
  * @property {string=} moduleDisplayName
  * @property {Number=} pid
  * @property {string=} plugin
@@ -17,7 +15,7 @@
 
 /**
  * @typedef {Object} ROMEPublic
- * @property {(config_data?: ROMEConfig) => void} init
+ * @property {(config_data?: ROMEConfig, jsmo?: JavascriptModuleObject) => void} init
  */
 
 /**

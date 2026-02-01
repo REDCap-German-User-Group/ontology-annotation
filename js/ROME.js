@@ -32,17 +32,18 @@
 	/**
 	 * Implements the public init method.
 	 * @param {ROMEConfig=} config_data
+	 * @param {JavascriptModuleObject=} jsmo
+	 * @returns {void}
 	 */
-	function initialize(config_data) {
+	function initialize(config_data, jsmo) {
 		if (initialized) return;
 		config = config_data || {};
 		LOGGER.configure({
 			active: config.debug,
 			version: config.version
 		});
-		if (typeof config.jsmoName === 'string') {
-			JSMO = config.jsmoInstance = getGlobalByName(config.jsmoName);
-		}
+		JSMO = jsmo ?? null;
+
 		// Initalize based on plugin page
 		switch(config.plugin) {
 			case 'discover':
