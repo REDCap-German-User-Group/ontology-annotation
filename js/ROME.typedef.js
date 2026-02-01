@@ -24,8 +24,21 @@
  */
 
 /**
- * @typedef {Object} ROMEPublic
- * @property {(config_data?: ROMEConfig, jsmo?: JavascriptModuleObject) => void} init
+ * @typedef {Object} ROMEPluginPublic
+ * @property {(config_data?: ROMEPluginConfig, jsmo?: JavascriptModuleObject) => void} init
+ */
+
+/**
+ * @typedef {Object} ROMEOnlineDesignerPublic
+ * @property {(config_data?: ROMEOnlineDesignerConfig, jsmo?: JavascriptModuleObject) => void} init
+ * @property {() => void} showFieldHelp
+*/
+
+/**
+ * @typedef {Object} OnlineDesignerState
+ * @property {string=} fieldHelpContent
+ * @property {string=} fieldType
+ * @property {string=} enum
  */
 
 /**
@@ -52,6 +65,28 @@
 /**
  * @typedef {Object} TomSelect
  * @property {() => Number[]} getValue
+ */
+
+/**
+ * @typedef {Object} OntologyAnnotationJSON
+ * @property {string} resourceType
+ * @property {OntologyAnnotationMeta} meta
+ * @property {OntologyAnnotationDataElement} dataElement
+ */
+
+/**
+ * @typedef {Object} OntologyAnnotationMeta
+ * @property {string=} creator
+ * @property {string=} version
+ * @property {string=} language
+ * @property {string=} created
+ * @property {string=} updated
+ */
+
+/**
+ * @typedef {Object} OntologyAnnotationDataElement
+ * @property {string} resourceType
+ * @property {string} id
  */
 
 

@@ -15,7 +15,7 @@
 	});
 	const { log, warn, error } = LOGGER;
 
-	/** @type {ROMEPublic} */
+	/** @type {ROMEPluginPublic} */
 	// @ts-ignore
 	const EM = window[NS_PREFIX + EM_NAME] ?? {
 		init: initialize

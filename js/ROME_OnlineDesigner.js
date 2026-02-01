@@ -2,6 +2,7 @@
 
 /// <reference types="jquery" />
 /// <reference types="jqueryui" />
+/// <reference path="../../../codebase/Resources/js/base.js" />
 /// <reference path="./ROME.typedef.js" />
 /// <reference path="./ConsoleDebugLogger.js" />
 
@@ -19,6 +20,7 @@ const LOGGER = ConsoleDebugLogger.create().configure({
 });
 const { log, warn, error } = LOGGER;
 
+/** @type {ROMEOnlineDesignerPublic} */
 // @ts-ignore
 const EM = window[NS_PREFIX + EM_NAME] ?? {
 	init: initialize,
@@ -32,6 +34,7 @@ let config = {};
 /** @type {JavascriptModuleObject|null} */
 let JSMO = null;
 
+/** @type {OnlineDesignerState} */
 const data = {};
 
 //#endregion
@@ -98,6 +101,9 @@ function initialize(config_data, jsmo = null) {
 	log('Initialization complete.', config);
 }
 
+/**
+ * Shows a help dialog in response to the "Learn about using Ontology Annotations"
+ */
 function showFieldHelp() {
 	if (!data.fieldHelpContent) {
 		JSMO.ajax('get-fieldhelp').then(response => {
@@ -109,7 +115,6 @@ function showFieldHelp() {
 	}
 	else {
 		log('Showing field help');
-		// @ts-ignore REDCap base.js
 		simpleDialog(data.fieldHelpContent, config.moduleDisplayName);
 	}
 }
@@ -335,9 +340,14 @@ function getFieldType() {
 function setEnum(val) {
 	if (data.enum !== val) {
 		data.enum = val;
-		log('Enum updated:', data.enum);
+		if (data.enum != '') {
+			log('Enum changed:', data.enum);
+		}
+		else {
+			log('Enum cleared.');
+		}
 	}
-    updateFieldChoices()
+    updateFieldChoices();
 }
 
 //#region Update Ontology Action Tags and table
@@ -468,9 +478,22 @@ function extractOntologyJSON(text) {
 	}
 }
 
-function getOntologyAnnotation() {
-	const content = $('#field_annotation').val() ?? '';
-	return extractOntologyJSON(content);
+/**
+ * Gets the contents of an element and extracts the ontology JSON.
+ * @param {string} selector - The selector for the element to get the contents from.
+ * @returns {Object}
+ */
+function getOntologyAnnotation(selector) {
+	const $el = $(selector);
+	let content = '';
+	if ($el.is('input, textarea')) {
+		content = String($el.val() ?? '');
+	} else {
+		content = $el.text();
+	}
+	const json = extractOntologyJSON(content);
+	log(`Extracted JSON from ${selector}:`, json);
+	return json;
 }
     
 
@@ -540,11 +563,12 @@ function updateFieldChoices() {
     })
 }
     
-
+/**
+ * Updates the annotation table using the ONTOLOGY action tag's JSON
+ * @returns 
+ */
 function updateAnnotationTable() {
-    // use the ontology annotation action tag to set the annotation table
-    console.log("ENTER UAT")
-    let annotation = getOntologyAnnotation()
+    const annotation = getOntologyAnnotation('#field_annotation');
     let items = annotation.dataElement?.coding
     let valueCodingMap = annotation.dataElement?.valueCodingMap
     let values = []
