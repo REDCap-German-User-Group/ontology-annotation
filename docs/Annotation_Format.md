@@ -1,11 +1,10 @@
 # Annotation Format
 
-This document describes the format of the `@ONTOLOGY` action tag parameter (a JSON string)
+This document describes the format of the `@ONTOLOGY` action tag parameter (a JSON string).
+
+Example: A radio field, _Education Level_, with three options.
 
 `@ONTOLOGY=`
-
-Example radio field - _Education Level_
-
 ```jsonc
 {
     "resourceType": "OntologyAnnotation",
@@ -20,9 +19,11 @@ Example radio field - _Education Level_
         ]
     },
     "dataElement": {
-        // name and label can/should be omitted - will be generated when exporting ontology annotations for multiple fields
+        // Note: `name` and `label` are not present in the action tag - they are 
+        // generated (from the REDCap field) when the ontology annotations are exported
         "name": "education_level",
         "label": "Höchster Bildungsabschluss",
+        // Note: `type` is present in the action tag - it is generated (from the REDCap field) when the ontology annotations are exported
         "type": "radio",
         "coding": [
             {
@@ -170,31 +171,32 @@ Example of a numerical data type (height) with a unit
 
 ## Types
 
-| `type`       | Description                                   | Selection Style        | Additional Fields/Notes                         |
-| ------------ | --------------------------------------------- | ---------------------- | ----------------------------------------------- |
-| `"radio"`    | Single-choice categorical field (1 of N)      | Single-select          | Use `valueCodingMap`                            |
-| `"checkbox"` | Multi-choice categorical field (0 to N)       | Multi-select           | Use `valueCodingMap`                            |
-| `"dropdown"` | Single-choice via dropdown UI (same as radio) | Single-select          | Semantically same as `"radio"`                  |
-| `"number"`   | Numeric field (integer or decimal)            | Direct input           | Add `numericType`, `precision`, `unit`          |
-| `"text"`     | Free-text entry                               | Direct input           | Use `format` if structured (email, url, etc.)   |
-| `"date"`     | Date field (various formats)                  | Date picker/input      | Use `unit` (with format code or UCUM date unit) |
-| `"datetime"` | Date + time field                             | Timestamp picker/input | Same as `"date"`                                |
-| `"yesno"`    | Boolean-like binary choice                    | Single-select          | Alias of `"radio"` with 2 values (`Yes`, `No`)  |
-| `"truefalse"`    | Boolean-like binary choice                    | Single-select          | Alias of `"radio"` with 2 values (`True`, `False`)  |
+| `type`        | Description                                   | Selection Style        | Additional Fields/Notes                            |
+| ------------- | --------------------------------------------- | ---------------------- | -------------------------------------------------- |
+| `"radio"`     | Single-choice categorical field (1 of N)      | Single-select          | Use `valueCodingMap`                               |
+| `"checkbox"`  | Multi-choice categorical field (0 to N)       | Multi-select           | Use `valueCodingMap`                               |
+| `"dropdown"`  | Single-choice via dropdown UI (same as radio) | Single-select          | Semantically same as `"radio"`                     |
+| `"number"`    | Numeric field (integer or decimal)            | Direct input           | Add `numericType`, `precision`, `unit`             |
+| `"text"`      | Free-text entry                               | Direct input           | Use `format` if structured (email, url, etc.)      |
+| `"date"`      | Date field (various formats)                  | Date picker/input      | Use `unit` (with format code or UCUM date unit)    |
+| `"datetime"`  | Date + time field                             | Timestamp picker/input | Same as `"date"`                                   |
+| `"yesno"`     | Boolean-like binary choice                    | Single-select          | Alias of `"radio"` with 2 values (`Yes`, `No`)     |
+| `"truefalse"` | Boolean-like binary choice                    | Single-select          | Alias of `"radio"` with 2 values (`True`, `False`) |
 
 ## Additional Keys (used conditionally)
 
-| Field            | Used With                          | Purpose                                     |
-| ---------------- | ---------------------------------- | ------------------------------------------- |
-| `numericType`    | `"number"`                         | `"integer"` or `"decimal"`                  |
-| `precision`      | `"number"`                         | Decimal places if `numericType = "decimal"` |
-| `format`         | `"text"`                           | `"email"`, `"url"`, `"phone"`, etc.         |
-| `unit`           | `"number"`, `"date"`, `"datetime"` | As `CodeableConcept`                        |
+| Field            | Used With                             | Purpose                                     |
+| ---------------- | ------------------------------------- | ------------------------------------------- |
+| `numericType`    | `"number"`                            | `"integer"` or `"decimal"`                  |
+| `precision`      | `"number"`                            | Decimal places if `numericType = "decimal"` |
+| `format`         | `"text"`                              | `"email"`, `"url"`, `"phone"`, etc.         |
+| `unit`           | `"number"`, `"date"`, `"datetime"`    | As `CodeableConcept`                        |
 | `valueCodingMap` | `"radio"`, `"checkbox"`, `"dropdown"` | Maps codes to concept labels and codes      |
 
 
-**TODO**: Define/Provide a list of basic data types (e.g., yesno -> Yes) with appropriate annotations. These will be offered by the UI as annotations for the user to assign.
-Similarly for common units.
+**TODO**: 
+- Define/Provide a list of basic data types (e.g., yesno -> Yes) with appropriate annotations. These will be offered by the UI as annotations for the user to assign.
+- Similarly, provide annotations for common units.
 
 ## Missing Data Codes
 
@@ -220,199 +222,13 @@ Provide standard generic annotations for REDCap-built-in Missing Data Codes.
 | Dropdown           | `"dropdown"`                                           | Same as `"radio"` semantically |
 | Checkbox           | `"checkbox"`                                           | Multi-select                   |
 | Yes-No             | `"radio"` or `"yesno"`                                 | Semantically boolean           |
-| True-False             | `"radio"` or `"truefalse"`                                 | Semantically boolean           |
+| True-False         | `"radio"` or `"truefalse"`                             | Semantically boolean           |
 
-
-
-**Notes:** We probably should provide default ontology annotations for `"Yes"`, `"No"`, `"True"`, `"False"`
-
+**Note:** Default ontology annotations for `"Yes"`, `"No"`, `"True"`, `"False"` should probably be provided. However, the 
+actual meaning / appropriate annotation of these may vary based on the field's annotation.
 
 ## JSON Schema
 
-Ontology annotations can be validated, e.g., in the browser with the [Ajv JSON schema validator](https://ajv.js.org/) (MIT), or in PHP, with [Opis JSON Schema](https://github.com/opis/json-schema) (Apache 2.0).
+Ontology annotations can be validated, e.g., in the browser with the [Ajv JSON schema validator](https://ajv.js.org/) (MIT), or in PHP, with [Opis JSON Schema](https://github.com/opis/json-schema) (Apache 2.0), based on the ROME Annotation schema.
 
-
-```json
-{
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://example.org/schemas/ontology-annotation.schema.json",
-    "title": "OntologyAnnotation",
-    "type": "object",
-    "required": [
-        "resourceType",
-        "meta",
-        "dataElement"
-    ],
-    "properties": {
-        "resourceType": {
-            "const": "OntologyAnnotation"
-        },
-        "meta": {
-            "type": "object",
-            "required": [
-                "version",
-                "created",
-                "creator"
-            ],
-            "properties": {
-                "version": {
-                    "type": "string"
-                },
-                "created": {
-                    "type": "string",
-                    "format": "date-time"
-                },
-                "updated": {
-                    "type": "string",
-                    "format": "date-time"
-                },
-                "creator": {
-                    "type": "string"
-                },
-                "language": {
-                    "type": "string"
-                },
-                "profile": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "format": "uri"
-                    }
-                }
-            },
-            "additionalProperties": false
-        },
-        "dataElement": {
-            "type": "object",
-            "required": [
-                "coding",
-                "text"
-            ],
-            "properties": {
-                "name": {
-                    "type": "string"
-                },
-                "label": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "radio",
-                        "checkbox",
-                        "dropdown",
-                        "number",
-                        "text",
-                        "date",
-                        "datetime",
-                        "yesno",
-                        "truefalse"
-                    ]
-                },
-                "coding": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/$defs/Coding"
-                    },
-                    "minItems": 1
-                },
-                "text": {
-                    "type": "string"
-                },
-                "format": {
-                    "type": "string",
-                    "enum": [
-                        "email",
-                        "url",
-                        "phone"
-                    ]
-                },
-                "numericType": {
-                    "type": "string",
-                    "enum": [
-                        "integer",
-                        "decimal"
-                    ]
-                },
-                "precision": {
-                    "type": "integer",
-                    "minimum": 0
-                },
-                "unit": {
-                    "type": "object",
-                    "required": [
-                        "coding",
-                        "text"
-                    ],
-                    "properties": {
-                        "coding": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/$defs/Coding"
-                            },
-                            "minItems": 1
-                        },
-                        "text": {
-                            "type": "string"
-                        }
-                    },
-                    "additionalProperties": false
-                },
-                "valueCodingMap": {
-                "type": "object",
-                "patternProperties": {
-                    "^[^\\s]+$": {
-                    "type": "object",
-                    "required": [
-                        "text",
-                        "coding"
-                    ],
-                    "properties": {
-                        "label": {
-                        "type": "string"
-                        },
-                        "text": {
-                        "type": "string"
-                        },
-                        "coding": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/$defs/Coding"
-                        },
-                        "minItems": 1
-                        }
-                    },
-                    "additionalProperties": false
-                    }
-                },
-                "additionalProperties": false
-                }
-            },
-            "additionalProperties": false
-            }
-        },
-    "additionalProperties": false,
-    "$defs": {
-        "Coding": {
-            "type": "object",
-            "required": [
-                "system",
-                "code"
-            ],
-            "properties": {
-                "system": {
-                    "type": "string",
-                    "format": "uri"
-                },
-                "code": {
-                    "type": "string"
-                },
-                "display": {
-                    "type": "string"
-                }
-            },
-            "additionalProperties": false
-        }
-    }
-}
-```
+The schema is available at [`rome-annotation.schema.json`](../schemas/rome-annotation.schema.json).
