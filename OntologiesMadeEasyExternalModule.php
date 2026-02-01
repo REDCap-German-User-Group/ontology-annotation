@@ -30,28 +30,38 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if ($project_id == null) return; 
 		$page = defined("PAGE") ? PAGE : null;
 		if (!in_array($page, ["Design/online_designer.php"])) return;
-
-		$this->init_proj($project_id);
-		$form = isset($_GET['page']) && array_key_exists($_GET['page'], $this->proj->forms) ? $_GET['page'] : null;
-		if ($page == "Design/online_designer.php" && $form != null) {
-			$this->init_online_designer($form);
+	
+		// Online Designer
+		if ($page == "Design/online_designer.php") {
+			$form = isset($_GET['page']) && array_key_exists($_GET['page'], $this->proj->forms) ? $_GET['page'] : null;
+			if ($form) $this->init_online_designer($project_id, $form);
 		}
 	}
 
+	// Injection
 	function redcap_every_page_before_render($project_id) {
 		// Only run in project context and on specific pages
 		if ($project_id == null) return;
 		$page = defined("PAGE") ? PAGE : null;
 		if (!in_array($page, ["Design/edit_field.php"])) return;
 
-		$this->init_proj($project_id);
+		// Online Designer - Edit Field
 		if ($page == "Design/edit_field.php") {
+			$this->init_proj($project_id);
 			$field_name = $_POST["field_name"];
 			$exclude = ($_POST["rome-em-fieldedit-exclude"] ?? "0") == "1";
 			$this->set_field_exclusion([$field_name], $exclude);
 		}
 	}
 
+	// Config defaults
+	function redcap_module_project_enable($version, $project_id) {
+		// Ensure that some project settings have default values
+		$current = $this->getProjectSettings();
+		if (!array_key_exists("code-theme", $current)) {
+			$this->setProjectSetting("code-theme", "dark");
+		}
+	}
 
 	// AJAX handler
 	function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance, $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id) {
@@ -73,24 +83,16 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
-	function redcap_module_project_enable($version, $project_id) {
-		// Ensure that some project settings have default values
-		$current = $this->getProjectSettings();
-		if (!array_key_exists("code-theme", $current)) {
-			$this->setProjectSetting("code-theme", "dark");
-		}
-	}
-
 	#endregion
 
 
-	// JS Base config
-	function get_js_base_config($include_jsmo = false) {
-		if ($include_jsmo) {
-			$this->framework->initializeJavascriptModuleObject();
-			$jsmo_name = $this->framework->getJavascriptModuleObjectName();
-		}
-	
+	#region Plugin Page Helpers
+
+	/**
+	 * Get the base config for the JS client on plugin pages
+	 * @return array 
+	 */
+	function get_js_base_config() {
 		$js_base_config = [
 			"debug" => $this->getProjectSetting("javascript-debug") == true,
 			"version" => $this->VERSION,
@@ -99,18 +101,16 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			"isAdmin" => $this->framework->isSuperUser(),
 			"pid" => intval($this->framework->getProjectId()),
 		];
-		if ($include_jsmo) {
-			$js_base_config["jsmoName"] = $jsmo_name;
-		}
 		return $js_base_config;
 	}
 
-
+	#endregion
 
 
 	#region Online Designer
 
-	private function init_online_designer($form) {
+	private function init_online_designer($project_id, $form) {
+		$this->init_proj($project_id);
 		$this->init_config();
 		$this->framework->initializeJavascriptModuleObject();
 		$jsmo_name = $this->framework->getJavascriptModuleObjectName();
@@ -119,6 +119,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$config = [
 			"debug" => $this->js_debug,
 			"version" => $this->VERSION,
+			"isAdmin" => $this->framework->isSuperUser(),
 			"moduleDisplayName" => $this->tt("module_name"),
 			"atName" => self::AT_ONTOLOGY,
 			"form" => $form,
@@ -366,18 +367,20 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	#endregion
 
 
+	// Method not currently implemented - used for ??
 	private function parse_ontology($payload) {
 		return [];
 	}
 
+	#region Discover Page
 
+	/**
+	 * Generates a JSON string with all annotated fields from (discoverable) projects
+	 * @param Array $payload - Ajax payload (not currently used; used for future functionality such as
+	 * excluding projects in development, or requiring a minimum number of records)
+	 * @return string
+	 */
     private function discover_ontologies($payload) {
-
-
-        # JSON object containing all the relevant projects and fields
-        # for now, return all the data, in the future $payload might
-        # restrict search for example to projects in production etc.
-
         $sql = <<<SQL
 			WITH
 				-- all projects that have the module installed and metadata marked as 'discoverable'
@@ -441,7 +444,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
         return $result["info"];
     }
 
-	#region Private Helpers
+	#endregion
+
+	#region Misc Private Helpers
 
 	/**
 	 * Gets the JS module name
@@ -451,8 +456,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return self::NS_PREFIX . self::EM_NAME;
 	}
 
-
-
+	/**
+	 * Makes the internal project structure accessible to the module
+	 * @param string|int $project_id 
+	 * @return void 
+	 */
 	private function init_proj($project_id) {
 		if ($this->proj == null) {
 			$this->proj = new \Project($project_id);
@@ -460,7 +468,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
-
+	/**
+	 * Reads and sets commonly used module settings as fields of the class, for convenience
+	 * @return void 
+	 */
 	private function init_config() {
 		if (!$this->config_initialized) {
 			$this->js_debug  = $this->getProjectSetting("javascript-debug") == true;
