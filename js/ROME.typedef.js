@@ -21,6 +21,7 @@
  * @property {Number=} pid
  * @property {string=} version
  * @property {string=} form
+ * @property {string=} minimalAnnotation
  */
 
 /**
@@ -70,7 +71,7 @@
 /**
  * @typedef {Object} OntologyAnnotationJSON
  * @property {string} resourceType
- * @property {OntologyAnnotationMeta} meta
+ * @property {OntologyAnnotationMeta=} meta
  * @property {OntologyAnnotationDataElement} dataElement
  */
 
@@ -85,9 +86,86 @@
 
 /**
  * @typedef {Object} OntologyAnnotationDataElement
- * @property {string} resourceType
- * @property {string} id
+ * @property {string} type
  */
+
+
+/**
+ * @typedef {Object} OntologyAnnotationWarning
+ * @property {number} line  1-based line number where the tag starts
+ * @property {string} message
+ */
+
+/**
+ * Optional ontology annotation validator (e.g. Ajv-compiled).
+ * Callable like a function and may carry Ajv-style `.errors`.
+ *
+ * @typedef {(
+ *   ((data: any) => boolean)
+ *   & { errors?: any[] | null | undefined }
+ * )} OntologyAnnotationValidator
+ */
+
+/**
+ * @typedef {Object} OntologyAnnotationParserOptions
+ * @property {() => OntologyAnnotationJSON} getMinAnnotation
+ *   Factory for a minimal/fallback annotation JSON object.
+ *   NOTE: This minimal object is NOT schema-validated (even if validate is provided).
+ * @property {string} tag
+ *   Marker to search for (no quotes), e.g. "@ONTOLOGY".
+ * @property {OntologyAnnotationValidator|null} [validate=null]
+ *   Optional validator for parsed JSON objects (NOT applied to the minimal fallback).
+ */
+
+/**
+ * @typedef {{ ok: true, value: { json:any, start:number, end:number, text:string } }} ParseOk
+ * @typedef {{ ok: false, reason: string }} ParseErr
+ * @typedef {ParseOk | ParseErr} ParseAttempt
+*/
+
+/**
+ * @typedef {Object} OntologyAnnotationParser
+ * @property {(text: string) => OntologyAnnotationParseResult} parse
+ *   Parse the LAST valid tag JSON object from the given text.
+ */
+
+
+
+/**
+ * @typedef {Object} OntologyAnnotationParseResult
+ * @property {OntologyAnnotationJSON} json
+ * @property {number} numTags
+ * @property {boolean} usedFallback
+ * @property {boolean} error
+ * @property {string} errorMessage
+ * @property {OntologyAnnotationWarning[]} warnings
+ * @property {string} text
+ *   Exact substring of the LAST valid tag occurrence: from tag start to end of JSON object.
+ *   Empty string if no valid tag was found.
+ * @property {number} start
+ *   0-based start index of `text` within the input string, or -1 if none.
+ * @property {number} end
+ *   0-based end index (exclusive) of `text` within the input string, or -1 if none.
+ */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

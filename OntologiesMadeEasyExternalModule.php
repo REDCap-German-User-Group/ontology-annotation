@@ -128,6 +128,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			"moduleDisplayName" => $this->tt("module_name"),
 			"atName" => self::AT_ONTOLOGY,
 			"form" => $form,
+			"minimalAnnotation" => $this->getMinimalAnnotationJSON(),
 		];
 		$config = array_merge($config, $this->refresh_exclusions($form));
 		$ih = $this->getInjectionHelper();
@@ -497,6 +498,22 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 	/** @var InjectionHelper */
 	private $injection_helper = null;
+
+
+	/**
+	 * Return a minimal annotation
+	 * @return string 
+	 */
+	function getMinimalAnnotationJSON() {
+		$minimal = [
+			"resourceType" => "ROME_Ontology_Annotation",
+			"meta" => null,
+			"dataElement" => [
+				"type" => ''
+			],
+		];
+		return json_encode($minimal, JSON_UNESCAPED_UNICODE|JSON_FORCE_OBJECT);
+	}
 
 	#endregion
 

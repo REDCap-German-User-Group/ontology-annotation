@@ -10,7 +10,7 @@
     ],
     "properties": {
         "resourceType": {
-            "const": "OntologyAnnotation"
+            "const": "ROME_Ontology_Annotation"
         },
         "meta": {
             "type": "object",

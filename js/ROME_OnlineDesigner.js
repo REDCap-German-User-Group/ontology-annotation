@@ -29,13 +29,19 @@ const EM = window[NS_PREFIX + EM_NAME] ?? {
 // @ts-ignore
 window[NS_PREFIX + EM_NAME] = EM;
 
-/** Configuration data supplied from the server */
+/** 
+ * Configuration data supplied from the server 
+ * @type {ROMEOnlineDesignerConfig}
+*/
 let config = {};
 /** @type {JavascriptModuleObject|null} */
 let JSMO = null;
 
 /** @type {OnlineDesignerState} */
 const data = {};
+
+/** @type {OntologyAnnotationParser} */
+let ontologyParser;
 
 //#endregion
 
@@ -45,9 +51,16 @@ const data = {};
  * @param {JavascriptModuleObject=} jsmo
  */
 function initialize(config_data, jsmo = null) {
+
 	config = config_data;
 	JSMO = jsmo;
+	// Configure the logger
 	LOGGER.configure({ active: config.debug, name: 'ROME Online Designer', version: config.version });
+	// Configure the ontology parser
+	ontologyParser = createOntologyAnnotationParser({
+		tag: config.atName,
+		getMinAnnotation: getMinimalOntologyAnnotation
+	});
 
 	//#region Hijack Hooks
 
@@ -422,61 +435,314 @@ function deleteOntologyAnnotation(system, code, field) {
     updateAnnotationTable()
 }
 
-function extractOntologyJSON(text) {
-	const name = config.atName;
-	const startIdx = text.indexOf(name);
-	if (startIdx === -1) return null;
 
-	const afterEquals = text.slice(startIdx + name.length);
-	const eqMatch = afterEquals.match(/^\s*=\s*/);
-	if (!eqMatch) return null;
 
-	let jsonStart = startIdx + name.length + eqMatch[0].length;
-	let braceCount = 0;
+
+/**
+ * Extracts the JSON value after "@ONTOLOGY\s*=\s*" from a larger string.
+ * Supports JSON objects `{...}` and arrays `[...]`.
+ *
+ * @param {string} text
+ * @param {string} tag 
+ * @returns {OntologyAnnotationJSON}
+ */
+function extractOntologyJson(text, tag = "@ONTOLOGY") {
+	if (typeof text !== "string") return null;
+
+	const tagIdx = text.indexOf(tag);
+	if (tagIdx === -1) return null;
+
+	let i = tagIdx + tag.length;
+	while (i < text.length && /\s/.test(text[i])) i++;
+	if (text[i] !== "=") return null;
+	i++;
+	while (i < text.length && /\s/.test(text[i])) i++;
+
+	const start = i;
+	const first = text[i];
+	if (first !== "{" && first !== "[") return null;
+
+	const stack = [];
 	let inString = false;
-	let escapeNext = false;
-	let endIdx = -1;
+	let escape = false;
 
-	for (let i = jsonStart; i < text.length; i++) {
-		const char = text[i];
+	const isOpen = (c) => c === "{" || c === "[";
+	const isClose = (c) => c === "}" || c === "]";
+	const matches = (open, close) =>
+		(open === "{" && close === "}") || (open === "[" && close === "]");
+
+	for (; i < text.length; i++) {
+		const ch = text[i];
 
 		if (inString) {
-			if (escapeNext) {
-				escapeNext = false;
-			} else if (char === '\\') {
-				escapeNext = true;
-			} else if (char === '"') {
-				inString = false;
-			}
-		} else {
-			if (char === '"') {
-				inString = true;
-			} else if (char === '{') {
-				if (braceCount === 0) jsonStart = i;
-				braceCount++;
-			} else if (char === '}') {
-				braceCount--;
-				if (braceCount === 0) {
-					endIdx = i + 1;
-					break;
+			if (escape) escape = false;
+			else if (ch === "\\") escape = true;
+			else if (ch === '"') inString = false;
+			continue;
+		}
+
+		if (ch === '"') { inString = true; continue; }
+
+		if (isOpen(ch)) {
+			stack.push(ch);
+			continue;
+		}
+		if (isClose(ch)) {
+			const open = stack.pop();
+			if (!open || !matches(open, ch)) return null; // mismatched
+			if (stack.length === 0) {
+				const end = i + 1;
+				const jsonText = text.slice(start, end);
+				try {
+					return { jsonText, value: JSON.parse(jsonText), start, end };
+				} catch {
+					return null;
 				}
 			}
 		}
 	}
 
-	if (braceCount !== 0 || endIdx === -1) {
-		console.error("Unbalanced braces in JSON");
-		return null;
+	return null;
+}
+
+
+
+
+
+
+
+/**
+ * Create an ontology annotation parser with fixed options.
+ *
+ * @param {OntologyAnnotationParserOptions} options
+ * @returns {OntologyAnnotationParser}
+ */
+function createOntologyAnnotationParser(options) {
+	if (!options || typeof options !== 'object') {
+		throw new Error('createOntologyAnnotationParser: options object is required');
+	}
+	if (typeof options.tag !== 'string' || options.tag.length === 0) {
+		throw new Error('createOntologyAnnotationParser: tag must be a non-empty string');
+	}
+	const tag = options.tag;
+	const validate = (typeof options.validate === 'function') ? options.validate : null;
+
+	if (typeof options.getMinAnnotation !== 'function') {
+		throw new Error('createOntologyAnnotationParser: getMinimalOntologyAnnotation must be a function');
+	}
+	const getMinAnnotation = options.getMinAnnotation;
+
+	return {
+		/**
+		 * Parse the LAST valid tag JSON object from the given text.
+		 * @param {string} text
+		 * @returns {OntologyAnnotationParseResult}
+		 */
+		parse(text) {
+			/** @type {OntologyAnnotationParseResult} */
+			const result = {
+				// IMPORTANT: Do NOT run schema validation on the minimal annotation
+				json: getMinAnnotation(),
+				usedFallback: true,
+				numTags: 0,
+				error: false,
+				errorMessage: '',
+				warnings: [],
+				text: '',
+				start: -1,
+				end: -1
+			};
+
+			if (typeof text !== 'string' || text.length === 0) return result;
+
+			const lineStarts = computeLineStarts(text);
+
+			let idx = 0;
+			let lastValid = null; // { json, start, end, text }
+			let lastFailure = null; // { line, message }
+
+			while (true) {
+				const tagIdx = text.indexOf(tag, idx);
+				if (tagIdx === -1) break;
+
+				result.numTags++;
+				idx = tagIdx + tag.length;
+
+				const attempt = parseOneTag(text, tagIdx, tag.length);
+				if (attempt.ok) {
+					lastValid = attempt.value;
+				} else {
+					const line = indexToLine(lineStarts, tagIdx);
+					const message = ('reason' in attempt) ? attempt.reason : 'Unknown parse error';
+					const warning = { line, message };
+					result.warnings.push(warning);
+					lastFailure = warning;
+				}
+			}
+
+			if (result.numTags === 0) {
+				// No tag => no annotation present
+				return result;
+			}
+
+			if (lastValid != null) {
+				result.json = lastValid.json;
+				result.usedFallback = false;
+				result.text = lastValid.text;
+				result.start = lastValid.start;
+				result.end = lastValid.end;
+				return result;
+			}
+
+			// Tag(s) exist but none valid => hard error per spec
+			result.error = true;
+			result.errorMessage = lastFailure
+				? `${tag} present but no valid JSON found. Last issue at line ${lastFailure.line}: ${lastFailure.message}`
+				: `${tag} present but no valid JSON found.`;
+			// text/start/end remain empty/-1
+			return result;
+
+			// ---------------- per-tag parse ----------------
+
+			/**
+			 * Attempt to parse one tag occurrence at tagIdx.
+			 *
+			 * Grammar:
+			 *   TAG [ws] = [ws] { ...JSON object... }
+			 *   TAG [ws] = [ws] '{ ...JSON object... }'
+			 *   TAG [ws] = [ws] "{ ...JSON object... }"
+			 *
+			 * @param {string} s
+			 * @param {number} tagIdx
+			 * @param {number} tagLen
+			 * @returns {ParseAttempt}
+			 */
+			function parseOneTag(s, tagIdx, tagLen) {
+				let i = tagIdx + tagLen;
+
+				while (i < s.length && isWS(s[i])) i++;
+
+				if (i >= s.length || s[i] !== '=') {
+					return { ok: false, reason: 'Missing "=" after tag' };
+				}
+				i++;
+				
+				while (i < s.length && isWS(s[i])) i++;
+
+				if (i >= s.length) {
+					return { ok: false, reason: 'JSON object missing after "=" (end of text)' };
+				}
+				if (s[i] !== '{') {
+					return { ok: false, reason: 'JSON object missing after "=" (expected "{")' };
+				}
+
+				const scan = scanJsonObject(s, i);
+				if (!scan.ok) return { ok: false, reason: scan.reason };
+
+				const jsonText = s.slice(scan.start, scan.end);
+
+				let parsed;
+				try {
+					parsed = JSON.parse(jsonText);
+				} catch (e) {
+					return { ok: false, reason: `JSON.parse failed: ${e && e.message ? e.message : String(e)}` };
+				}
+
+				if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+					return { ok: false, reason: 'Parsed JSON is not an object' };
+				}
+
+				// IMPORTANT: Validator runs ONLY on parsed tag JSON, never on the minimal fallback
+				if (validate) {
+					const ok = validate(parsed);
+					if (!ok) {
+						const msg = formatValidatorErrors(validate.errors);
+						return { ok: false, reason: `Schema validation failed: ${msg}` };
+					}
+				}
+
+				const start = tagIdx;
+				const end = scan.end; // end of JSON object
+				return {
+					ok: true,
+					value: {
+						json: parsed,
+						start,
+						end,
+						text: s.slice(start, end)
+					}
+				};
+			}
+		}
+	};
+
+	// ===================== helpers =====================
+
+	function scanJsonObject(s, start) {
+		let depth = 0;
+		let inString = false;
+		let escape = false;
+
+		for (let i = start; i < s.length; i++) {
+			const ch = s[i];
+
+			if (inString) {
+				if (escape) escape = false;
+				else if (ch === '\\') escape = true;
+				else if (ch === '"') inString = false;
+				continue;
+			}
+
+			if (ch === '"') {
+				inString = true;
+				continue;
+			}
+
+			if (ch === '{') depth++;
+			else if (ch === '}') {
+				depth--;
+				if (depth < 0) return { ok: false, reason: 'Bracket mismatch: unexpected "}"' };
+				if (depth === 0) return { ok: true, start, end: i + 1 };
+			}
+		}
+
+		return { ok: false, reason: 'Bracket mismatch: unterminated JSON object (reached end of text)' };
 	}
 
-	const jsonText = text.slice(jsonStart, endIdx);
-	try {
-		return JSON.parse(jsonText);
-	} catch (e) {
-	    console.error(`Failed to parse JSON (${jsonText}):`, e);
-		return null;
+	function computeLineStarts(s) {
+		const starts = [0];
+		for (let i = 0; i < s.length; i++) {
+			if (s[i] === '\n') starts.push(i + 1);
+		}
+		return starts;
+	}
+
+	function indexToLine(starts, pos) {
+		let lo = 0, hi = starts.length - 1;
+		while (lo <= hi) {
+			const mid = (lo + hi) >> 1;
+			if (starts[mid] <= pos) lo = mid + 1;
+			else hi = mid - 1;
+		}
+		return Math.max(1, hi + 1);
+	}
+
+	function isWS(ch) {
+		return ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\f' || ch === '\v';
+	}
+
+	function formatValidatorErrors(errors) {
+		if (!Array.isArray(errors) || errors.length === 0) return 'Unknown validation error';
+		return errors
+			.slice(0, 3)
+			.map(e => `${e.instancePath || '(root)'}: ${e.message || 'invalid'}`)
+			.join('; ') + (errors.length > 3 ? ` (+${errors.length - 3} more)` : '');
 	}
 }
+
+
+
+
 
 /**
  * Gets the contents of an element and extracts the ontology JSON.
@@ -491,9 +757,16 @@ function getOntologyAnnotation(selector) {
 	} else {
 		content = $el.text();
 	}
-	const json = extractOntologyJSON(content);
-	log(`Extracted JSON from ${selector}:`, json);
-	return json;
+	const result = ontologyParser.parse(content);
+	log(`Parsed content of ${selector}:`, result);
+	return result.json;
+}
+
+function getMinimalOntologyAnnotation() {
+	/** @type {OntologyAnnotationJSON} */
+	const obj = JSON.parse(config.minimalAnnotation);
+	obj.dataElement.type = getFieldType();
+	return obj;
 }
     
 

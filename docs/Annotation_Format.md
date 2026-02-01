@@ -7,7 +7,7 @@ Example: A radio field, _Education Level_, with three options.
 `@ONTOLOGY=`
 ```jsonc
 {
-    "resourceType": "OntologyAnnotation",
+    "resourceType": "ROME_Ontology_Annotation",
     "meta": {
         "version": "1.0.0",
         "created": "2025-07-25T12:45:00+02:00",
