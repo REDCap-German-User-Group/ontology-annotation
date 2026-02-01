@@ -96,6 +96,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			"version" => $this->VERSION,
 			"moduleDisplayName" => $this->tt("module_name"),
 			"atName" => self::AT_ONTOLOGY,
+			"isAdmin" => $this->framework->isSuperUser(),
+			"pid" => intval($this->framework->getProjectId()),
 		];
 		if ($include_jsmo) {
 			$js_base_config["jsmoName"] = $jsmo_name;

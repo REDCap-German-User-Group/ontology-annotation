@@ -14,7 +14,6 @@
 		version: '??'
 	});
 	const { log, warn, error } = LOGGER;
-	const INITAL_TAB = 'annotate';
 
 	/** @type {ROMEPublic} */
 	// @ts-ignore
@@ -27,6 +26,7 @@
 	/** @type {ROMEConfig} Configuration data supplied from the server */
 	let config = {};
 	let initialized = false;
+	/** @type {JavascriptModuleObject|null} */
 	let JSMO = null;
 
 	/**
@@ -45,8 +45,89 @@
 		}
 		initialized = true;
 		log(`Initialized ${config.moduleDisplayName} ...`, config);
+
+		$(function() {
+			initDiscoverSelect();
+		});
 	}
 
+
+
+	//#region Discover
+
+	/** @type {DiscoveryState} */
+	const ds = {};
+
+	function initDiscoverSelect() {
+		JSMO?.ajax('discover', {})
+		.then(function(response) {
+			ds.data = JSON.parse(response);
+			log('Received discover info: ', ds.data);
+			const options = ds.data.fields.map((field, idx) => ({
+				'id': idx,
+				'title': `${field.display} [${field.system}: ${field.code}], n=${field.projects.length}`
+			}));
+			const settings = {
+				'options': options,
+				'valueField': 'id',
+				'onChange': updateDiscoveredProjectsTable,
+				'labelField': 'title',
+				'searchField': 'title'
+			};
+			// @ts-ignore
+			ds.TS = new window.TomSelect('#rome-discover-select', settings);
+			if (ds.data) {
+				$('.rome-discover-project-count').text(Object.keys(ds.data.projects).length);
+			}
+		})
+		.catch(function(err) {
+			console.error('Error requesting ROME info', err);
+		});
+	}
+	
+	function updateDiscoveredProjectsTable() {
+		if (!ds.data) return;
+		if (!ds.TS || ds.TS.getValue().length == 0) {
+			$("#resulttable").html("<i>Nothing to show.</i>");
+			return;
+		}
+		const values = ds.TS.getValue();
+
+		const fieldnamesForProject = (/** @type Number */ pid) => values
+			.filter(i => ds.data.fields[i].field_names[pid])
+			.map(i => `${ds.data.fields[i].display}: ${ds.data.fields[i].field_names[pid]}`)
+			.join('<br>');
+		const formatProjectId = (/** @type Number */ pid) => config.isAdmin && pid != config.pid 
+			? `<a href="${window['app_path_webroot']}index.php?pid=${pid}" target="_blank">${pid}</a>`
+			: `${pid}`;
+
+		const sets = values.map(field_index => (new Set(ds.data.fields[field_index].projects)));
+		let project_ids = sets.pop() || new Set();
+		while (project_ids.size > 0 && sets.length > 0) {
+			project_ids = project_ids.intersection(sets.pop());
+		}
+		// Build table
+		const html = 
+			`<table class="table">
+				<thead>
+					<tr>
+						<th>PID</th><th>Project Name</th><th>Contact</th><th>Email</th><th>Fields</th>
+					</tr>
+				</thead>
+				<tbody>` + [...project_ids].map(project_id => 
+					`<tr>
+						<td>${formatProjectId(project_id)}</td>
+						<td>${ds.data.projects[project_id].app_title}</td>
+						<td>${ds.data.projects[project_id].contact}</td>
+						<td>${ds.data.projects[project_id].email}</td>
+						<td>${fieldnamesForProject(project_id)}</td>
+					</tr>`).join('') +
+				`</tbody>
+			</table>`;
+		$("#resulttable").html(html);
+	}
+
+	//#endregion
 
 
 	//#region Misc Helpers
@@ -56,7 +137,7 @@
 	 * "ExternalModules.DE.RUB.OntologiesMadeEasyExternalModule"
 	 *
 	 * @param {string} path
-	 * @returns {object|null} The resolved object or null if not reachable
+	 * @returns {JavascriptModuleObject|null} The resolved object or null if not reachable
 	 */
 	function getGlobalByName(path) {
 		let obj = window || {};
@@ -65,10 +146,11 @@
 				// @ts-ignore
 				obj = obj[key];
 			} else {
-				console.warn(`Missing "${key}" on`, obj);
+				console.warn(`Cannot resolve path "${path}". Missing "${key}" on`, obj);
 				return null;
 			}
 		}
+		// @ts-ignore
 		return obj;
 	}
 

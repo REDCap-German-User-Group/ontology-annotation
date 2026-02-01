@@ -8,7 +8,6 @@ $ih->js("js/ConsoleDebugLogger.js");
 $ih->js("js/ROME.js");
 $ih->css("css/ROME.css");
 $config = $module->get_js_base_config(true);
-$js_config = json_encode($config);
 
 $nav_tabs = [
 	"about" => [
@@ -26,6 +25,10 @@ $nav_tabs = [
 	"utilities" => [
 		"label" => "Utilities",
 		"icon" => "fa-solid fa-wrench",
+	],
+	"export" => [
+		"label" => "Export",
+		"icon" => "fa-solid fa-arrow-up-right-from-square",
 	]
 ];
 $default_tab = "annotate";
@@ -59,7 +62,7 @@ $active_tab = array_key_exists($_GET['tab'], $nav_tabs) ? $_GET['tab'] : $defaul
 <script>
 	$(function() {
 		if (window.DE_RUB_ROME && window.DE_RUB_ROME.init) {
-			window.DE_RUB_ROME.init(<?= $js_config ?>);
+			window.DE_RUB_ROME.init(<?= json_encode($config); ?>);
 		}
 	});
 </script>

@@ -12,11 +12,14 @@
 	color: black;
 }
 
+.rome-plugin-page {
+	max-width: 900px;
+}
+
 .rome-code {
 	padding: 5px;
 	border: 1px solid #e5e5e5;
 	border-radius: 8px;
-	max-width: 900px;
 }
 .rome-code pre {
 	padding: 0;
@@ -26,3 +29,24 @@
 	line-height: unset;
 }
 
+h2 {
+	font-size: 15px;
+	font-weight: 700;
+}
+
+
+.rome-discover-select-container {
+	display: flex;
+	align-items: center;
+	justify-content: stretch;
+}
+.rome-discover-select-waiter {
+	display: flex;
+	align-items: center;
+}
+.rome-discover-select-container:has(.ts-wrapper) .rome-discover-select-waiter {
+	display: none;
+}
+.rome-discover-select-container .ts-wrapper {
+	width: 100%;
+}

@@ -24,8 +24,7 @@
 			"tt_description": "conf_at_ontology"
 		}
 	],
-	"system-settings": [
-	],
+	"system-settings": [],
 	"project-settings": [
 		{
 			"key": "javascript-debug",
@@ -52,13 +51,13 @@
 			"name": "Use the \"Test\" Minimal dataset",
 			"type": "checkbox"
 		},
-	    	{
+		{
 			"key": "discoverable",
-		    "name": "Make the metadata (annotated fields + contact data) from this project discoverable to other users",
+			"name": "Make the metadata (annotated fields + contact data) from this project discoverable to other users",
 			"type": "checkbox"
 		},
-	    
-		{	"key": "minimal-dataset",
+		{
+			"key": "minimal-dataset",
 			"name": "Additional Minimal Dataset (a json with keys 'name', and 'items')",
 			"type": "json",
 			"repeatable": "true"
@@ -69,8 +68,8 @@
 		"parse",
 		"get-fieldhelp",
 		"set-matrix-exclusion",
-	    "refresh-exclusions",
-	    "discover"
+		"refresh-exclusions",
+		"discover"
 	],
 	"links": {
 		"project": [
@@ -79,20 +78,7 @@
 				"icon": "fa-solid fa-tags",
 				"url": "plugin/index.php",
 				"show-header-and-footer": true
-			},
-		    { 
-				"name": "ROME - Discover projects",
-				"icon": "fa fa-search",
-				"url": "plugin/discover.php",
-				"show-header-and-footer": true
-			},
-		    { 
-				"name": "ROME - Utility functions",
-				"icon": "fa fa-tools",
-				"url": "plugin/utils.php",
-				"show-header-and-footer": true
 			}
-		    
 		]
 	}
 }
