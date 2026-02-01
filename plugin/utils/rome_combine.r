@@ -22,7 +22,7 @@ rome_combine <- function(datasets, only_annotated=FALSE, use_names = c()) {
   #'              only_annotated=TRUE, use_names=c("gecco"))
   
   extract_ontologies <- function(metadata) {
-    ## We rely on field_name being either field_name (API) or "Variable / Field name" (Data Dictionary CSV)
+    ## We rely on field_name being either field_name (API) or "Variable / Field name" (Data Dictionary CSV),
     ## as well as field_annotation + "Field Annotation"
     fields <- metadata |> clean_names() |> rename(any_of(c("field_name" = "variable_field_name"))) |>
       mutate(ontology_txt = gsub("@ONTOLOGY='([^']+)'", "\\1",  field_annotation)) |>
@@ -44,7 +44,7 @@ rome_combine <- function(datasets, only_annotated=FALSE, use_names = c()) {
   
   ## all_ontologies is now a data frame with columns 
   ## dataset field_name system code display new_name
-  ## of course, there can be multipe rows for the same field, it it's annotated using different systems
+  ## Of course, there can be multipe rows for the same field, if it is annotated using different systems
   
   lapply(seq_along(datasets), function(i) {
     df <- datasets[[i]]$data
