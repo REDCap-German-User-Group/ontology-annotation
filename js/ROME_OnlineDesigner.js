@@ -602,7 +602,7 @@ function createOntologyAnnotationParser(options) {
 			// text/start/end remain empty/-1
 			return result;
 
-			// ---------------- per-tag parse ----------------
+			//#region Per-tag parse
 
 			/**
 			 * Attempt to parse one tag occurrence at tagIdx.
@@ -699,10 +699,12 @@ function createOntologyAnnotationParser(options) {
 					}
 				};
 			}
+
+			//#endregion
 		}
 	};
 
-	// ===================== helpers =====================
+	//#region Helpers
 
 	function scanJsonObject(s, start) {
 		let depth = 0;
@@ -764,6 +766,8 @@ function createOntologyAnnotationParser(options) {
 			.map(e => `${e.instancePath || '(root)'}: ${e.message || 'invalid'}`)
 			.join('; ') + (errors.length > 3 ? ` (+${errors.length - 3} more)` : '');
 	}
+
+	//#endregion
 }
 
 
