@@ -446,7 +446,7 @@ function deleteOntologyAnnotation(system, code, field) {
  * @param {string} tag 
  * @returns {OntologyAnnotationJSON}
  */
-function extractOntologyJson(text, tag = "@ONTOLOGY") {
+function extractOntologyJson_DEPRECATED(text, tag = "@ONTOLOGY") {
 	if (typeof text !== "string") return null;
 
 	const tagIdx = text.indexOf(tag);
