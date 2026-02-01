@@ -2,6 +2,9 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+// TODOs
+// - [ ] Allow export of results table as CSV
+
 /** @var OntologiesMadeEasyExternalModule $module */
 
 $ih = $module->getInjectionHelper();
@@ -26,7 +29,7 @@ $ih->js("libs/tom-select_2.4.3/tom-select.complete.min.js");
 		<div class="rome-discover-select-waiter">
 			<i class="fa-solid fa-spinner fa-spin-pulse fa-2x"></i> Loading ...
 		</div>
-		<select id="rome-discover-select" autofocus="autofocus" multiple style="display: none;"></select>
+		<select id="rome-discover-select" autofocus="autofocus" multiple placeholder="&hellip;" style="display: none;"></select>
 	</div>
 	<p>
 		Matching projects will be displayed below.

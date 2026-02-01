@@ -11,6 +11,7 @@
  * @property {JavascriptModuleObject|null} [jsmoInstance]
  * @property {string=} moduleDisplayName
  * @property {Number=} pid
+ * @property {string=} plugin
  * @property {string=} version
  */
 

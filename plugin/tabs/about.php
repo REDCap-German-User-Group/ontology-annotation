@@ -2,6 +2,11 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+// TODOs
+// - [ ] Add a description of the module
+// - [ ] Add a link to the GitHub repository / Zenodo
+// - [ ] Add a link to the MIE publication
+
 /** @var OntologiesMadeEasyExternalModule $module */
 
 

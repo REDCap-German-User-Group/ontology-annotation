@@ -33,8 +33,7 @@ $nav_tabs = [
 ];
 $default_tab = "annotate";
 $active_tab = array_key_exists($_GET['tab'], $nav_tabs) ? $_GET['tab'] : $default_tab;
-
-
+$config["plugin"] = $active_tab;
 
 ?>
 <h1 class="projhdr">

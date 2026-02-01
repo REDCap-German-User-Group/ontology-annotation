@@ -2,6 +2,9 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+// TODOs
+// - [ ] Implement the feature
+
 /** @var OntologiesMadeEasyExternalModule $module */
 
 $ih = $module->getInjectionHelper();

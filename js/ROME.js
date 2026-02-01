@@ -43,12 +43,16 @@
 		if (typeof config.jsmoName === 'string') {
 			JSMO = config.jsmoInstance = getGlobalByName(config.jsmoName);
 		}
+		// Initalize based on plugin page
+		switch(config.plugin) {
+			case 'discover':
+				$(function() {
+					initDiscovery();
+				});
+				break;
+		}
 		initialized = true;
 		log(`Initialized ${config.moduleDisplayName} ...`, config);
-
-		$(function() {
-			initDiscoverSelect();
-		});
 	}
 
 
@@ -58,7 +62,7 @@
 	/** @type {DiscoveryState} */
 	const ds = {};
 
-	function initDiscoverSelect() {
+	function initDiscovery() {
 		JSMO?.ajax('discover', {})
 		.then(function(response) {
 			ds.data = JSON.parse(response);

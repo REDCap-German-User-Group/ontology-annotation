@@ -2,6 +2,16 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+// TODOs
+// - [ ] Allow export of annotations of 
+//       - [ ] all forms
+//       - [ ] selected forms
+//       - [ ] fields used on a report
+// - [ ] Support different file formats
+//       - [ ] Internal format
+//       - [ ] FHIR Questionnaire
+
+
 /** @var OntologiesMadeEasyExternalModule $module */
 
 ?>
