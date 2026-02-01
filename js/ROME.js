@@ -53,7 +53,7 @@
 				break;
 		}
 		initialized = true;
-		log(`Initialized ${config.moduleDisplayName}`, config);
+		log(`Initialized plugin page (${config.plugin})`, config);
 	}
 
 

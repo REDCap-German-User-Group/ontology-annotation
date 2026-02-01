@@ -29,6 +29,8 @@ window[NS_PREFIX + EM_NAME] = EM;
 
 /** Configuration data supplied from the server */
 let config = {};
+/** @type {JavascriptModuleObject|null} */
+let JSMO = null;
 
 const data = {};
 
@@ -41,10 +43,8 @@ const data = {};
  */
 function initialize(config_data, jsmo = null) {
 	config = config_data;
-	config.JSMO = jsmo;
+	JSMO = jsmo;
 	LOGGER.configure({ active: config.debug, name: 'ROME Online Designer', version: config.version });
-
-	log('Initialzing ...', config);
 
 	//#region Hijack Hooks
 
@@ -80,7 +80,7 @@ function initialize(config_data, jsmo = null) {
 			// Design table reloading - get updated exclusion
 			const originalSuccess = options.success 
 			options.success = function(data, textStatus, jqXHR) {
-				config.JSMO.ajax('refresh-exclusions', config.form).then(function(response) {
+				JSMO.ajax('refresh-exclusions', config.form).then(function(response) {
 					log('Updated config data:', response);
 					config.fieldsExcluded = response.fieldsExcluded;
 					config.matrixGroupsExcluded = response.matrixGroupsExcluded;
@@ -94,11 +94,13 @@ function initialize(config_data, jsmo = null) {
 		}
 	});
 	//#endregion
+
+	log('Initialization complete.', config);
 }
 
 function showFieldHelp() {
 	if (!data.fieldHelpContent) {
-		config.JSMO.ajax('get-fieldhelp').then(response => {
+		JSMO.ajax('get-fieldhelp').then(response => {
 			data.fieldHelpContent = response;
 			showFieldHelp();
 		}).catch(err => {
@@ -219,7 +221,7 @@ function addEditFieldUI($dlg, isMatrix) {
 		};
 		$searchSpinner.addClass('busy');
 		log('Search request:', payload);
-		config.JSMO.ajax('search', payload)
+		JSMO.ajax('search', payload)
 			.then(searchResult => {
 				log('Search result:', searchResult);
 				response(searchResult);
@@ -297,13 +299,13 @@ function performExclusionCheck($dlg, isMatrix) {
 	});
 	if (misc.join(' ').includes(config.atName)) {
 		// @ts-ignore REDCap base.js
-		simpleDialog(config.JSMO.tt(isMatrix ? 'fieldedit_15' : 'fieldedit_14', config.atName), config.JSMO.tt('fieldedit_13'));
+		simpleDialog(JSMO.tt(isMatrix ? 'fieldedit_15' : 'fieldedit_14', config.atName), JSMO.tt('fieldedit_13'));
 	}
 }
 
 function saveMatrixFormExclusion(matrixGroupName, exclude) {
 	log('Saving exclusion for matrix group "' + matrixGroupName + '": ', exclude);
-	config.JSMO.ajax('set-matrix-exclusion', {
+	JSMO.ajax('set-matrix-exclusion', {
 		grid_name: matrixGroupName,
 		exclude: exclude ? '1' : '0'
 	});
