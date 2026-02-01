@@ -632,7 +632,16 @@ function createOntologyAnnotationParser(options) {
 				if (i >= s.length) {
 					return { ok: false, reason: 'JSON object missing after "=" (end of text)' };
 				}
-				if (s[i] !== '{') {
+
+				// Optional quote wrapper around the JSON object
+				let quote = null;
+				if (s[i] === "'" || s[i] === '"') {
+					quote = s[i];
+					i++;
+					while (i < s.length && isWS(s[i])) i++; // WS after quote is tolerated
+				}
+
+				if (i >= s.length || s[i] !== '{') {
 					return { ok: false, reason: 'JSON object missing after "=" (expected "{")' };
 				}
 
@@ -640,6 +649,17 @@ function createOntologyAnnotationParser(options) {
 				if (!scan.ok) return { ok: false, reason: scan.reason };
 
 				const jsonText = s.slice(scan.start, scan.end);
+
+				// If it was quoted, require closing quote after the JSON
+				if (quote) {
+					let j = scan.end;
+					while (j < s.length && isWS(s[j])) j++; // Allow whitespace between } and quote
+					if (j >= s.length || s[j] !== quote) {
+						return { ok: false, reason: `Missing closing ${quote} after JSON object` };
+					}
+					// IMPORTANT: end of “tag+json” should include the closing quote for replacement
+					// We'll set end accordingly in step (2) below.
+				}
 
 				let parsed;
 				try {
@@ -662,7 +682,13 @@ function createOntologyAnnotationParser(options) {
 				}
 
 				const start = tagIdx;
-				const end = scan.end; // end of JSON object
+				let end = scan.end; // end of JSON object
+				if (quote) {
+					let j = scan.end;
+					while (j < s.length && isWS(s[j])) j++;
+					// we already checked s[j] === quote above
+					end = j + 1; // include closing quote
+				}
 				return {
 					ok: true,
 					value: {
