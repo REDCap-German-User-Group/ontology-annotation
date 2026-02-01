@@ -1,5 +1,10 @@
 // Ontology Made Easy EM - Online Designer Integration
 
+
+// TODOs
+// - [ ] Add a schema validator (such as https://github.com/ajv-validator/ajv) to the module
+
+
 /// <reference types="jquery" />
 /// <reference types="jqueryui" />
 /// <reference path="../../../codebase/Resources/js/base.js" />
