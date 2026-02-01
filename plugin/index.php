@@ -7,7 +7,7 @@ $ih = $module->getInjectionHelper();
 $ih->js("js/ConsoleDebugLogger.js");
 $ih->js("js/ROME.js");
 $ih->css("css/ROME.css");
-$config = $module->get_js_base_config();
+$config = $module->get_plugin_base_config();
 $module->framework->initializeJavascriptModuleObject();
 $jsmo_name = $module->framework->getJavascriptModuleObjectName();
 

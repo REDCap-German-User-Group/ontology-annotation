@@ -29,12 +29,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Only run in project context and on specific pages
 		if ($project_id == null) return; 
 		$page = defined("PAGE") ? PAGE : null;
-		if (!in_array($page, ["Design/online_designer.php"])) return;
+		if (!in_array($page, ["Design/online_designer.php"], true)) return;
 	
 		// Online Designer
-		if ($page == "Design/online_designer.php") {
+		if ($page === "Design/online_designer.php") {
+			$this->init_proj($project_id);
 			$form = isset($_GET['page']) && array_key_exists($_GET['page'], $this->proj->forms) ? $_GET['page'] : null;
-			if ($form) $this->init_online_designer($project_id, $form);
+			if ($form) $this->init_online_designer($form);
+			else return;
 		}
 	}
 
@@ -86,18 +88,17 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	#endregion
 
 
-	#region Plugin Page Helpers
+	#region Plugin Page Configuration
 
 	/**
 	 * Get the base config for the JS client on plugin pages
 	 * @return array 
 	 */
-	function get_js_base_config() {
+	function get_plugin_base_config() {
 		$js_base_config = [
 			"debug" => $this->getProjectSetting("javascript-debug") == true,
 			"version" => $this->VERSION,
 			"moduleDisplayName" => $this->tt("module_name"),
-			"atName" => self::AT_ONTOLOGY,
 			"isAdmin" => $this->framework->isSuperUser(),
 			"pid" => intval($this->framework->getProjectId()),
 		];
@@ -109,8 +110,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Online Designer
 
-	private function init_online_designer($project_id, $form) {
-		$this->init_proj($project_id);
+	/**
+	 * Sets up Online Designer integration on a 
+	 * @param string $form 
+	 * @return void 
+	 */
+	private function init_online_designer($form) {
 		$this->init_config();
 		$this->framework->initializeJavascriptModuleObject();
 		$jsmo_name = $this->framework->getJavascriptModuleObjectName();
@@ -127,8 +132,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$config = array_merge($config, $this->refresh_exclusions($form));
 		$ih = $this->getInjectionHelper();
 		$ih->js("js/ConsoleDebugLogger.js");
-        $ih->js("js/OntologiesMadeEasy.js");
-		$ih->css("css/OntologiesMadeEasy.css");
+        $ih->js("js/ROME_OnlineDesigner.js");
+		$ih->css("css/ROME_OnlineDesigner.css");
 		print RCView::script(self::NS_PREFIX . self::EM_NAME . ".init(" . json_encode($config) . ", $jsmo_name);");
 	}
 

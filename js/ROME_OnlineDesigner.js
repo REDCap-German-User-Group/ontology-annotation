@@ -1,7 +1,9 @@
-// Ontology Made Easy EM
+// Ontology Made Easy EM - Online Designer Integration
 
 /// <reference types="jquery" />
 /// <reference types="jqueryui" />
+/// <reference path="./ROME.typedef.js" />
+/// <reference path="./ConsoleDebugLogger.js" />
 
 // @ts-check
 ;(function() {
@@ -34,13 +36,13 @@ const data = {};
 
 /**
  * Implements the public init method.
- * @param {object} config_data 
- * @param {object} jsmo
+ * @param {ROMEOnlineDesignerConfig=} config_data
+ * @param {JavascriptModuleObject=} jsmo
  */
 function initialize(config_data, jsmo = null) {
 	config = config_data;
 	config.JSMO = jsmo;
-	LOGGER.configure({ active: config.debug, name: EM_NAME, version: config.version });
+	LOGGER.configure({ active: config.debug, name: 'ROME Online Designer', version: config.version });
 
 	log('Initialzing ...', config);
 

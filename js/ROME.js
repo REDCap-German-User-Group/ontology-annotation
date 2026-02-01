@@ -9,7 +9,7 @@
 	const EM_NAME = 'ROME';
 	const NS_PREFIX = 'DE_RUB_';
 	const LOGGER = ConsoleDebugLogger.create().configure({
-		name: EM_NAME,
+		name: 'ROME Plugin',
 		active: true,
 		version: '??'
 	});
@@ -23,7 +23,7 @@
 	// @ts-ignore
 	window[NS_PREFIX + EM_NAME] = EM;
 
-	/** @type {ROMEConfig} Configuration data supplied from the server */
+	/** @type {ROMEPluginConfig} Configuration data supplied from the server */
 	let config = {};
 	let initialized = false;
 	/** @type {JavascriptModuleObject|null} */
@@ -31,7 +31,7 @@
 
 	/**
 	 * Implements the public init method.
-	 * @param {ROMEConfig=} config_data
+	 * @param {ROMEPluginConfig=} config_data
 	 * @param {JavascriptModuleObject=} jsmo
 	 * @returns {void}
 	 */
@@ -53,7 +53,7 @@
 				break;
 		}
 		initialized = true;
-		log(`Initialized ${config.moduleDisplayName} ...`, config);
+		log(`Initialized ${config.moduleDisplayName}`, config);
 	}
 
 
