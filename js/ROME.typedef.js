@@ -22,7 +22,7 @@
 /**
  * @typedef {Object} DiscoveryState
  * @property {TomSelect=} TS
- * @property {DiscoveryData} data
+ * @property {DiscoveryData=} data
  */
 
 /**
