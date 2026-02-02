@@ -2,8 +2,18 @@
 
 
 // TODOs
+// - [ ] Scrap the whole Ontology table as is and replace with a DataTable and a backend structure*
+// - [ ] Instead of the search field, require manual search trigger and display results in a popover,
+//       which displays searches in internal and any external ontologies as they come in. Use a 
+//       DataTable for this, that can be searched and filtered further.
+// - [ ] Add a config option/filter to limit searching to selected ontologies (from those configured in
+//       the module settings).
 // - [ ] Add a schema validator (such as https://github.com/ajv-validator/ajv) to the module
 
+// * Backend structure:
+//   Array, each row represents one annotation. Store coordinates (i.e., field, choice, unit).
+//   This will allow for easy manipulation; JSON can be generated from the array easily for both,
+//   regular fields and matrix fields.
 
 /// <reference types="jquery" />
 /// <reference types="jqueryui" />
@@ -158,7 +168,6 @@
 		}
 		setExcludedCheckboxState(excluded);
 		data.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
-		updateAnnotationTargetsDropdown();
 		updateAnnotationTable();
 	}
 
@@ -392,7 +401,7 @@
 	function updateOntologyActionTag(item) {
 		let actionTagsArea = document.getElementById('field_annotation');
 		let field = $("#rome-field-choice").val();
-		let annotation = getOntologyAnnotation() || {};
+		let annotation = getOntologyAnnotationJsonObject() || {};
 		let itemCode = JSON.parse(item.value).code
 		if (annotation.dataElement) {
 			if (field == "dataElement") {
@@ -423,18 +432,48 @@
 					`@ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`);
 		}
 		updateAnnotationTable()
-		updateAnnotationTargetsDropdown()
 	}
 
+	function isAnnotationEmpty(annotation) {
+		if (typeof annotation.dataElement !== 'object') return false;
+		const hasCoding = annotation.dataElement.coding
+			&& Array.isArray(annotation.dataElement.coding) 
+			&& annotation.dataElement.coding.length > 0;
+		const hasUnit = annotation.dataElement.unit
+			&& annotation.dataElement.unit.coding
+			&& Array.isArray(annotation.dataElement.unit.coding)
+			&& annotation.dataElement.unit.coding.length > 0;
+		const hasValueCodingMap = annotation.dataElement.valueCodingMap
+			&& Object.keys(annotation.dataElement.valueCodingMap).length > 0;
+
+		return !(hasCoding || hasUnit || hasValueCodingMap);
+	}
+
+
 	function updateActionTag(newvalue) {
-		let actionTagsArea = document.getElementById('field_annotation')
-		actionTagsArea.value = actionTagsArea.value
-			.replace(/@ONTOLOGY='([^']*)'/,
-				`@ONTOLOGY='${JSON.stringify(newvalue, null, 2)}'`)
+
+		const $actionTagsArea = $('#field_annotation');
+		const annotation = getOntologyAnnotation();
+		const current = `${$actionTagsArea.val() ?? ''}`;
+
+		const replacement = isAnnotationEmpty(newvalue) ? '' : `${config.atName}=${JSON.stringify(newvalue, null, 2)}`;
+
+		if (annotation.usedFallback) {
+			// Add new
+			$actionTagsArea.val(
+				`${current}\n${replacement}`
+			);
+		}
+		else {
+			// Replace by adding from 0 to annotation.start, new action tag, then rest from current after annotation.end
+			$actionTagsArea.val(
+				`${current.slice(0, annotation.start)}${replacement}${current.slice(annotation.end)}`
+			)
+		}
 	}
 
 	function deleteOntologyAnnotation(system, code, field) {
-		let annotation = getOntologyAnnotation();
+		let annotation = getOntologyAnnotationJsonObject();
 		if (field == "dataElement") {
 			let coding = annotation?.dataElement?.coding
 			if (coding) {
@@ -790,6 +829,18 @@
 
 
 
+
+
+	/**
+	 * Gets the contents of an element and extracts the ontology JSON.
+	 * @param {string} [field] - When editing matrix groups, the field name to get the annotations from.
+	 * @returns {Object}
+	 */
+	function getOntologyAnnotationJsonObject(field = '') {
+		const result = getOntologyAnnotation(field);
+		return result.json;
+	}
+
 	/**
 	 * Gets the contents of an element and extracts the ontology JSON.
 	 * @param {string} [field] - When editing matrix groups, the field name to get the annotations from.
@@ -806,7 +857,7 @@
 		}
 		const result = ontologyParser.parse(content);
 		log(`Parsed content of ${selector}:`, result);
-		return result.json;
+		return result;
 	}
 
 	function getMinimalOntologyAnnotation() {
@@ -874,12 +925,12 @@
 			if (!choicesDict[selected]) {
 				choiceError = `<option value="${selected}" style="background-color: red;">❓❓ ${selected} ❓❓</option>`
 			}
-			elem.innerHTML = `<select ${display} class="form-select" id="rome-selectfield-${i}">` + choiceError +
+			elem.innerHTML = `<select ${display} class="form-select form-select-xs" id="rome-selectfield-${i}">` + choiceError +
 				choices.map(c => `<option value="${c[0]}" ${c[0] == selected ? 'selected' : ''}>${c[1]}</option>`).join("") +
 				`</select>`
 			$(elem).on('change', function (event) {
 				event.stopImmediatePropagation()
-				let annotation = getOntologyAnnotation()
+				let annotation = getOntologyAnnotationJsonObject()
 				if (!annotation.dataElement) {
 					annotation.dataElement = { "coding": [] }
 				}
@@ -921,7 +972,7 @@
 	 */
 	function updateAnnotationTable() {
 		if (isExcludedCheckboxChecked()) return; 
-		const annotation = getOntologyAnnotation();
+		const annotation = getOntologyAnnotationJsonObject();
 		let items = annotation.dataElement?.coding
 		let valueCodingMap = annotation.dataElement?.valueCodingMap
 		let values = []
@@ -964,9 +1015,8 @@
 		$(".rome-edit-field-ui-list").html(html).show()
 		items.forEach((item, i) => $(`#rome-delete-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, 'dataElement')))
 		values.forEach((item, i) => $(`#rome-delete-field-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, item.field)))
-
-		// updateAnnotationTargetsDropdown() -- Is this neeeded?
-
+	
+		updateAnnotationTargetsDropdown();
 	}
 
 	//#endregion    

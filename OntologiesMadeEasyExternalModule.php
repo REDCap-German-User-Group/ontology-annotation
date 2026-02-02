@@ -509,7 +509,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 */
 	function getMinimalAnnotationJSON() {
 		$minimal = [
-			"resourceType" => "ROME_Ontology_Annotation",
+			"resourceType" => "ROME_Annotation",
 			"meta" => null,
 			"dataElement" => [
 				"type" => '',

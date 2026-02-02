@@ -71,3 +71,11 @@
 	color: #319aff;
 	font-weight: bold;
 }
+
+.form-select-xs {
+    padding-top: .15rem;
+    padding-bottom: .15rem;
+    padding-left: .5rem;
+    font-size: 0.7rem !important;
+    border-radius: var(--bs-border-radius-sm);
+}
