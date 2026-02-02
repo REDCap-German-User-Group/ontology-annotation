@@ -22,6 +22,9 @@
  * @property {string=} version
  * @property {string=} form
  * @property {string=} minimalAnnotation
+ * @property {Object<string, string>=} knownLinks
+ * @property {string[]=} fieldsExcluded
+ * @property {string[]=} matrixGroupsExcluded
  */
 
 /**
@@ -40,6 +43,8 @@
  * @property {string=} fieldHelpContent
  * @property {string=} fieldType
  * @property {string=} enum
+ * @property {boolean=} isMatrix
+ * @property {JQuery<HTMLElement>=} $dlg
  */
 
 /**

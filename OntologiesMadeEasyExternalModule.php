@@ -130,6 +130,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			"atName" => self::AT_ONTOLOGY,
 			"form" => $form,
 			"minimalAnnotation" => $this->getMinimalAnnotationJSON(),
+			"knownLinks" => $this->getKnownLinks(),
 		];
 		$config = array_merge($config, $this->refresh_exclusions($form));
 		$ih = $this->getInjectionHelper();
@@ -195,7 +196,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	private function set_field_exclusion($field_names, $exclude) {
-		$excluded = $this->get_excluded_fields();
+		$excluded = $this->load_excluded_fields();
 		if ($exclude) {
 			// TODO: Delete action tag from fields
 
@@ -206,19 +207,20 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return !in_array($val, $field_names);
 			});
 		}
-		$valid_field_names = array_keys($this->proj->getMetadata());
+		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->metadata;
+		$valid_field_names = array_keys($metadata);
 		$excluded = array_intersect($excluded, $valid_field_names);
 		sort($excluded);
-		$this->set_excluded_fields($excluded);
+		$this->store_excluded_fields($excluded);
 	}
 
-	private function get_excluded_fields() {
+	private function load_excluded_fields() {
 		$excluded = json_decode($this->framework->getProjectSetting(self::STORE_EXCLUSIONS) ?? "[]");
 		if (!is_array($excluded)) $excluded = [];
 		return $excluded;
 	}
 
-	private function set_excluded_fields($excluded) {
+	private function store_excluded_fields($excluded) {
 		if (!is_array($excluded)) $excluded = [];
 		$this->framework->setProjectSetting(self::STORE_EXCLUSIONS, json_encode($excluded));
 	}
@@ -227,7 +229,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$grid_name = $args["grid_name"] ?? "";
 		$exclude = $args["exclude"] == "1";
 		$fields = [];
-		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->getMetadata();
+		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->metadata;
 		foreach ($metadata as $field_name => $field_data) {
 			if ($field_data["grid_name"] === $grid_name) {
 				$fields[] = $field_name;
@@ -237,9 +239,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	private function refresh_exclusions($form) {
-		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->getMetadata();
-		$form_fields = array_filter($metadata, function($field_data) use ($form) { return $field_data["form_name"] === $form; });
-		$excluded = array_intersect($this->get_excluded_fields(), $form_fields);
+		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->metadata;
+		$form_fields = array_keys(array_filter($metadata, function($field_data) use ($form) { return $field_data["form_name"] === $form; }));
+		$excluded = array_intersect($this->load_excluded_fields(), $form_fields);
 		$mg_excluded = [];
 		foreach ($excluded as $field) {
 			if (isset($metadata[$field]) && $metadata[$field]["grid_name"]) {
@@ -510,12 +512,21 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			"resourceType" => "ROME_Ontology_Annotation",
 			"meta" => null,
 			"dataElement" => [
-				"type" => ''
+				"type" => '',
+				'coding' => [],
+				'text' => '',
+				'valueCodingMap' => null,
 			],
 		];
-		return json_encode($minimal, JSON_UNESCAPED_UNICODE|JSON_FORCE_OBJECT);
+		return json_encode($minimal, JSON_UNESCAPED_UNICODE);
 	}
 
+	function getKnownLinks() {
+		return [
+			"http://snomed.info/sct" => "https://bioportal.bioontology.org/ontologies/SNOMEDCT?p=classes&conceptid=",
+			"http://loinc.org" => "https://loinc.org/",
+		];
+	}
 
 	/**
 	 * Create an ontology annotation parser with fixed options.

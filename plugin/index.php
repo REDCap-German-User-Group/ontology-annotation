@@ -5,7 +5,7 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 $ih = $module->getInjectionHelper();
 $ih->js("js/ConsoleDebugLogger.js");
-$ih->js("js/ROME.js");
+$ih->js("js/ROME_Plugins.js");
 $ih->css("css/ROME.css");
 $config = $module->get_plugin_base_config();
 $module->framework->initializeJavascriptModuleObject();
