@@ -1,66 +1,66 @@
 {
-    "recourceType": "AnnotatedDataset",
-    "meta" : {
-	"name" : "Test example",
-	"version": "1.0.0",
-	"created": "2025-09-08T12:00:00+02:00",
-        "updated": "2025-07-25T13:00:00+02:00",
-        "creator": "christof.meigen@medizin.uni-leipzig.de"
-    },
-    "dataElements": [
-	{
-	    "name": "Diabetes mellitus",
-	    "coding": [
-		{
-		    "system": "urn:oid:1.2.276.0.76.5.409",
-		    "code": "E14",
-		    "display": "Nicht näher bezeichneter Diabetes mellitus"
-		},
-		{
-		    "system": "http://snomed.info/sct",
-		    "code": "73211009",
-		    "display": "Diabetes mellitus (disorder)"
-		}
-	    ]
+	"recourceType": "AnnotatedDataset",
+	"title": "Test example",
+	"meta": {
+		"version": "1.0.0",
+		"created": "2025-09-08T12:00:00+02:00",
+		"updated": "2025-07-25T13:00:00+02:00",
+		"creator": "christof.meigen@medizin.uni-leipzig.de"
 	},
-	{
-	    "name": "Biological sex",
-	    "coding": [
+	"item": [
 		{
-		    "system": "http://snomed.info/sct",
-		    "code": "734000001",
-		    "display": "Biological sex (property)"
-		}
-	    ],
-	    "valueCodingMap": {
-		"1": {
-		    "coding": [
-			{
-			    "system": "http://snomed.info/sct",
-			    "code": "248153007",
-			    "display": "Male"
-			}
-		    ]
+			"text": "Diabetes mellitus",
+			"code": [
+				{
+					"system": "urn:oid:1.2.276.0.76.5.409",
+					"code": "E14",
+					"display": "Nicht näher bezeichneter Diabetes mellitus"
+				},
+				{
+					"system": "http://snomed.info/sct",
+					"code": "73211009",
+					"display": "Diabetes mellitus (disorder)"
+				}
+			]
 		},
-		"2": {
-		    "coding": [
-			{
-			    "system": "http://snomed.info/sct",
-			    "code": "246309004",
-			    "display": "Female"
+		{
+			"text": "Biological sex",
+			"code": [
+				{
+					"system": "http://snomed.info/sct",
+					"code": "734000001",
+					"display": "Biological sex (property)"
+				}
+			],
+			"valueCodingMap": {
+				"1": {
+					"code": [
+						{
+							"system": "http://snomed.info/sct",
+							"code": "248153007",
+							"display": "Male"
+						}
+					]
+				},
+				"2": {
+					"code": [
+						{
+							"system": "http://snomed.info/sct",
+							"code": "246309004",
+							"display": "Female"
+						}
+					]
+				},
+				"3": {
+					"code": [
+						{
+							"system": "http://snomed.info/sct",
+							"code": "32570691000036108",
+							"display": "Intersex"
+						}
+					]
+				}
 			}
-		    ]
-		},
-		"3": {
-		    "coding": [
-			{
-			    "system": "http://snomed.info/sct",
-			    "code": "32570691000036108",
-			    "display": "Intersex"
-			}
-		    ]
 		}
-	    }
-	}
-    ]
+	]
 }

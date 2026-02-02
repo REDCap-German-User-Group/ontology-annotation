@@ -157,7 +157,8 @@
 			excluded = config.fieldsExcluded.includes(fieldName);
 		}
 		setExcludedCheckboxState(excluded);
-		data.$dlg.find('input[name="rome-em-fieldedit-search"]').val("");
+		data.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
+		updateAnnotationTargetsDropdown();
 		updateAnnotationTable();
 	}
 
@@ -375,7 +376,7 @@
 				log('Enum cleared.');
 			}
 		}
-		updateFieldChoices();
+		updateAnnotationTargetsDropdown();
 	}
 
 	//#region Update Ontology Action Tags and table
@@ -422,7 +423,7 @@
 					`@ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`);
 		}
 		updateAnnotationTable()
-		updateFieldChoices()
+		updateAnnotationTargetsDropdown()
 	}
 
 	function updateActionTag(newvalue) {
@@ -791,10 +792,11 @@
 
 	/**
 	 * Gets the contents of an element and extracts the ontology JSON.
-	 * @param {string} selector - The selector for the element to get the contents from.
+	 * @param {string} [field] - When editing matrix groups, the field name to get the annotations from.
 	 * @returns {Object}
 	 */
-	function getOntologyAnnotation(selector) {
+	function getOntologyAnnotation(field = '') {
+		const selector = data.isMatrix ? "TODO" : '#field_annotation';
 		const $el = $(selector);
 		let content = '';
 		if ($el.is('input, textarea')) {
@@ -814,21 +816,53 @@
 		return obj;
 	}
 
-
-	function updateFieldChoices() {
-		let choices = [["dataElement", "Field"]];
-		let choicesDict = { "dataElement": true }
-		if (data.enum) {
-			for (line of data.enum?.split("\n")) {
-				let code, rest;
-				[code, ...rest] = line.split(",")
-				if (rest) {
-					rest = rest.join(",")
+	function getFieldNames() {
+		const fieldNames = [];
+		if (data.isMatrix) {
+			$('td.addFieldMatrixRowVar input').each(function () {
+				const fieldName = `${$(this).val()}`.trim();
+				if (fieldName !== '') {
+					fieldNames.push(fieldName);
 				}
-				choices.push([code, rest])
-				choicesDict[code] = true
+			});
+
+		}
+		else {
+			fieldNames.push(data.$dlg.find('input#field_name').val() ?? '??');
+		}
+		return fieldNames;
+	}
+
+	function updateAnnotationTargetsDropdown() {
+		// The target dropdown includes the field (or multiple fields in case of matrix groups)
+		// as well as choices in case of radio/dropdown/checkbox fields
+		// For any non-validated textbox field, a unit will be added
+		const options = [];
+		// Field(s)
+		for (const fieldName of getFieldNames()) {
+			options.push({
+				type: 'dataElement',
+				id: fieldName,
+				label: fieldName
+			});
+		}
+		// Choices
+		
+		let choices = [["dataElement", "Field"]];
+		let choicesDict = { "dataElement": true };
+		if (data.enum) {
+			for (const line of data.enum?.split("\n")) {
+				const [code, rest] = line.split(',', 2);
+				choices.push([code, rest]);
+				choicesDict[code] = true;
+				options.push({
+					type: 'choice',
+					id: code,
+					label: rest || '??'
+				});
 			}
 		}
+
 		$("#rome-field-choice").html(choices.map(c => `<option value="${c[0]}">${c[1]}</option>`).join(""))
 
 		$(".rome-option-field").each(function (i, elem) {
@@ -887,7 +921,7 @@
 	 */
 	function updateAnnotationTable() {
 		if (isExcludedCheckboxChecked()) return; 
-		const annotation = getOntologyAnnotation('#field_annotation');
+		const annotation = getOntologyAnnotation();
 		let items = annotation.dataElement?.coding
 		let valueCodingMap = annotation.dataElement?.valueCodingMap
 		let values = []
@@ -931,7 +965,7 @@
 		items.forEach((item, i) => $(`#rome-delete-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, 'dataElement')))
 		values.forEach((item, i) => $(`#rome-delete-field-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, item.field)))
 
-		updateFieldChoices()
+		// updateAnnotationTargetsDropdown() -- Is this neeeded?
 
 	}
 

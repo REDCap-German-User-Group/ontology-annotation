@@ -263,7 +263,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$result = [];
 
         // search configured minimal datasets first
-        $minmal_datasets  = [];
+        $minimal_datasets  = [];
         // project specific jsons
         foreach ($this->getProjectSetting("minimal-dataset") as $minimal_dataset_string) {
 			if ($minimal_dataset_string == null) continue;
