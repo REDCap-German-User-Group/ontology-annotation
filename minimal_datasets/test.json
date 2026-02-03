@@ -1,15 +1,26 @@
 {
-	"recourceType": "AnnotatedDataset",
-	"title": "Test example",
-	"meta": {
-		"version": "1.0.0",
-		"created": "2025-09-08T12:00:00+02:00",
-		"updated": "2025-07-25T13:00:00+02:00",
-		"creator": "christof.meigen@medizin.uni-leipzig.de"
-	},
+	"resourceType": "Questionnaire",
+	"title": "Minimal Annotation Test",
+	"status": "active",
+	"experimental": true,
+	"date": "2026-02-03T11:10:00+02:00",
+	"publisher": "Chrisof Meigen",
+	"contact": [
+		{
+			"name": "Christof Meigen",
+			"telecom": [
+				{
+					"system": "email",
+					"value": "christof.meigen@medizin.uni-leipzig.de"
+				}
+			]
+		}
+	],
 	"item": [
 		{
+			"linkId": "diabetes",
 			"text": "Diabetes mellitus",
+			"type": "boolean",
 			"code": [
 				{
 					"system": "urn:oid:1.2.276.0.76.5.409",
@@ -24,7 +35,9 @@
 			]
 		},
 		{
+			"linkId": "sex",
 			"text": "Biological sex",
+			"type": "choice",
 			"code": [
 				{
 					"system": "http://snomed.info/sct",
@@ -32,35 +45,29 @@
 					"display": "Biological sex (property)"
 				}
 			],
-			"valueCodingMap": {
-				"1": {
-					"code": [
-						{
-							"system": "http://snomed.info/sct",
-							"code": "248153007",
-							"display": "Male"
-						}
-					]
+			"answerOption": [
+				{
+					"valueCoding": {
+						"system": "http://snomed.info/sct",
+						"code": "248153007",
+						"display": "Male"
+					}
 				},
-				"2": {
-					"code": [
-						{
-							"system": "http://snomed.info/sct",
-							"code": "246309004",
-							"display": "Female"
-						}
-					]
+				{
+					"valueCoding": {
+						"system": "http://snomed.info/sct",
+						"code": "246309004",
+						"display": "Female"
+					}
 				},
-				"3": {
-					"code": [
-						{
-							"system": "http://snomed.info/sct",
-							"code": "32570691000036108",
-							"display": "Intersex"
-						}
-					]
+				{
+					"valueCoding": {
+						"system": "http://snomed.info/sct",
+						"code": "32570691000036108",
+						"display": "Intersex"
+					}
 				}
-			}
+			]
 		}
 	]
 }
