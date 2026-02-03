@@ -715,15 +715,15 @@ final class CacheFactory
 	 *
 	 * @param string $backend "module_log" or "file".
 	 * @param int    $emId External module id (required for module_log backend).
-	 * @param string $fileDir Cache directory if backend="file".
+	 * @param string|null $fileDir Cache directory if backend="file".
 	 * @return Cache Cache instance.
 	 */
-	public static function create(string $backend, int $emId, string $fileDir = ''): Cache
+	public static function create(string $backend, int $emId, string|null $fileDir = null): Cache
 	{
 		$backend = $backend ?: 'module_log';
 
 		if ($backend === 'file') {
-			$fileDir = trim($fileDir);
+			$fileDir = trim($fileDir ?? '');
 			if ($fileDir !== '') {
 				return new Cache(new FileCacheBackend($fileDir));
 			}

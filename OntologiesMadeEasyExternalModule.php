@@ -2,39 +2,45 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+use Exception;
 use InvalidArgumentException;
 use Project;
 use RCView;
+use Throwable;
 
 class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternalModule
 {
 	private $config_initialized = false;
 	private $js_debug = false;
+	private $cache_backend = null;
+	private $cache_dir = null;
+	private $external_module_id = 0;
 
 	const EM_NAME = 'ROME';
 	const NS_PREFIX = 'DE_RUB_';
 
-	const STORE_EXCLUSIONS = "ROME_EM::EXCLUDED-FIELDS";
+	const STORE_EXCLUSIONS = 'ROME_EM::EXCLUDED-FIELDS';
 
 	/** @var Project The current project */
 	private $proj = null;
 	/** @var int|null Project ID */
 	private $project_id = null;
 
-	const AT_ONTOLOGY = "@ONTOLOGY";
+	const AT_ONTOLOGY = '@ONTOLOGY';
 
 	#region Hooks
 
 	// Injection
-	function redcap_every_page_top($project_id) {
+	function redcap_every_page_top($project_id)
+	{
 		// Only run in project context and on specific pages
-		if ($project_id == null) return; 
-		$page = defined("PAGE") ? PAGE : null;
-		if (!in_array($page, ["Design/online_designer.php"], true)) return;
-	
+		if ($project_id == null) return;
+		$page = defined('PAGE') ? PAGE : null;
+		if (!in_array($page, ['Design/online_designer.php'], true)) return;
+
 		// Online Designer
-		if ($page === "Design/online_designer.php") {
-			$this->init_proj($project_id);
+		if ($page === 'Design/online_designer.php') {
+			$this->initProject($project_id);
 			$form = isset($_GET['page']) && array_key_exists($_GET['page'], $this->proj->forms) ? $_GET['page'] : null;
 			if ($form) $this->init_online_designer($form);
 			else return;
@@ -42,47 +48,144 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	// Injection
-	function redcap_every_page_before_render($project_id) {
+	function redcap_every_page_before_render($project_id)
+	{
 		// Only run in project context and on specific pages
 		if ($project_id == null) return;
-		$page = defined("PAGE") ? PAGE : null;
-		if (!in_array($page, ["Design/edit_field.php"])) return;
+		$page = defined('PAGE') ? PAGE : null;
+		if (!in_array($page, ['Design/edit_field.php'])) return;
 
 		// Online Designer - Edit Field
-		if ($page == "Design/edit_field.php") {
-			$this->init_proj($project_id);
-			$field_name = $_POST["field_name"];
-			$exclude = ($_POST["rome-em-fieldedit-exclude"] ?? "0") == "1";
+		if ($page == 'Design/edit_field.php') {
+			$this->initProject($project_id);
+			$field_name = $_POST['field_name'];
+			$exclude = ($_POST['rome-em-fieldedit-exclude'] ?? '0') == '1';
 			$this->set_field_exclusion([$field_name], $exclude);
 		}
 	}
 
 	// Config defaults
-	function redcap_module_project_enable($version, $project_id) {
+	function redcap_module_project_enable($version, $project_id)
+	{
 		// Ensure that some project settings have default values
 		$current = $this->getProjectSettings();
-		if (!array_key_exists("code-theme", $current)) {
-			$this->setProjectSetting("code-theme", "dark");
+		if (!array_key_exists('code-theme', $current)) {
+			$this->setProjectSetting('code-theme', 'dark');
+		}
+	}
+
+
+
+	// After a module config has been saved
+	function redcap_module_save_configuration($project_id)
+	{
+		// Only run in system context for now
+		if ($project_id !== null || $project_id === "") return;
+
+		$this->initConfig();
+
+		// Check that cache backend config is available
+		if (!$this->checkCacheConfigured()) {
+			// We cannot continue without a valid cache backend configuration
+			// TODO: Alert the admin about this
+			return;
+		}
+
+		require_once __DIR__ . '/classes/Cache.php';
+		require_once __DIR__ . '/classes/CacheBuilder.php';
+
+		// Instantiate cache backend
+		$cacheBackend = ($this->cache_backend === 'disk') ? 'file' : 'module_log';
+		$cache = CacheFactory::create($cacheBackend, $this->external_module_id, $this->cache_dir);
+
+		// Builders (dummy for now).
+		$builders = [
+			new DummyIndexBuilder(),
+		];
+
+		// Load repeatable sources.
+		$settingKey = 'fhir-source';
+		$entries = $this->getSubSettings($settingKey, null);
+		if (!is_array($entries)) $entries = [];
+
+		$changed_entries = [];
+		$warnings = [];
+		$errors = [];
+
+		foreach ($entries as $i => $entry) {
+			if (!is_array($entry)) continue;
+
+			$isActive = $entry['fhir-active'] === true;
+
+			if (!$isActive) {
+				// Inactive sources should vanish; we do nothing here.
+				continue;
+			}
+
+			// Ensure build + metadata sync.
+			$res = $this->ensureBuiltAndMetadata(
+				$cache,
+				$builders,
+				$entry,
+				[
+					'kind' => 'fhir_questionnaire',
+					'doc_id_key' => 'fhir-file',
+					'meta_key' => 'fhir-metadata',
+					'fallback_title' => 'Untitled',
+					'fallback_description' => '',
+					'cache_ttl' => 0, // safe due to doc_id versioning
+				]
+			);
+
+			foreach ($res['warnings'] as $w) $warnings[] = $w;
+			foreach ($res['errors'] as $e) $errors[] = $e;
+
+			$newEntry = $res['updated_entry'];
+
+			// Persist only if metadata changed (we only mutate fhir-metadata).
+			if (($newEntry['fhir-metadata'] ?? null) !== ($entry['fhir-metadata'] ?? null)) {
+				$changed_entries[$i] = $newEntry;
+			}
+		}
+
+		// Write back updated repeatable system setting if needed.
+		if (count($changed_entries)) {
+			foreach ($changed_entries as $idx => $entry) {
+				foreach ($entry as $key => $value) {
+					$this->framework->setSystemSetting($key, [ $idx => $value]);
+				}
+			}
+		}
+
+		// Log warnings / errors
+		if (!empty($errors) || !empty($warnings)) {
+			$log_msg = 'FHIR source build issues:' . count($errors) . ' errors, ' . count($warnings) . ' warnings';
+
+			$this->log($log_msg, [
+				'errors' => json_encode($errors, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+				'warnings' => json_encode($warnings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+			]);
 		}
 	}
 
 	// AJAX handler
-	function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance, $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id) {
-		$this->init_proj($project_id);
-		switch($action) {
-			case "search":
+	function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance, $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id)
+	{
+		$this->initProject($project_id);
+		switch ($action) {
+			case 'search':
 				return $this->search_ontologies($payload);
-			case "parse":
-				$ontology = $this->parse_ontology($payload);
+			case 'parse':
+				$ontology = $this->parseOntology($payload);
 				return $ontology;
-			case "get-fieldhelp":
-				return $this->get_fieldhelp();
-			case "set-matrix-exclusion":
+			case 'get-fieldhelp':
+				return $this->getFieldHelp();
+			case 'set-matrix-exclusion':
 				return $this->set_matrix_exclusion($payload);
-			case "refresh-exclusions":
+			case 'refresh-exclusions':
 				return $this->refresh_exclusions($payload);
-            case "discover":
-                return $this->discover_ontologies($payload);
+			case 'discover':
+				return $this->discoverOntologies($payload);
 		}
 	}
 
@@ -95,13 +198,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * Get the base config for the JS client on plugin pages
 	 * @return array 
 	 */
-	function get_plugin_base_config() {
+	function get_plugin_base_config()
+	{
 		$js_base_config = [
-			"debug" => $this->getProjectSetting("javascript-debug") == true,
-			"version" => $this->VERSION,
-			"moduleDisplayName" => $this->tt("module_name"),
-			"isAdmin" => $this->framework->isSuperUser(),
-			"pid" => intval($this->framework->getProjectId()),
+			'debug' => $this->getProjectSetting('javascript-debug') == true,
+			'version' => $this->VERSION,
+			'moduleDisplayName' => $this->tt('module_name'),
+			'isAdmin' => $this->framework->isSuperUser(),
+			'pid' => intval($this->framework->getProjectId()),
 		];
 		return $js_base_config;
 	}
@@ -116,56 +220,58 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * @param string $form 
 	 * @return void 
 	 */
-	private function init_online_designer($form) {
-		$this->init_config();
+	private function init_online_designer($form)
+	{
+		$this->initConfig();
 		$this->framework->initializeJavascriptModuleObject();
 		$jsmo_name = $this->framework->getJavascriptModuleObjectName();
-		$this->add_templates("online_designer");
+		$this->add_templates('online_designer');
 
 		$config = [
-			"debug" => $this->js_debug,
-			"version" => $this->VERSION,
-			"isAdmin" => $this->framework->isSuperUser(),
-			"moduleDisplayName" => $this->tt("module_name"),
-			"atName" => self::AT_ONTOLOGY,
-			"form" => $form,
-			"minimalAnnotation" => $this->getMinimalAnnotationJSON(),
-			"knownLinks" => $this->getKnownLinks(),
+			'debug' => $this->js_debug,
+			'version' => $this->VERSION,
+			'isAdmin' => $this->framework->isSuperUser(),
+			'moduleDisplayName' => $this->tt('module_name'),
+			'atName' => self::AT_ONTOLOGY,
+			'form' => $form,
+			'minimalAnnotation' => $this->getMinimalAnnotationJSON(),
+			'knownLinks' => $this->getKnownLinks(),
 		];
 		$config = array_merge($config, $this->refresh_exclusions($form));
 		$ih = $this->getInjectionHelper();
-		$ih->js("js/ConsoleDebugLogger.js");
-        $ih->js("js/ROME_OnlineDesigner.js");
-		$ih->css("css/ROME_OnlineDesigner.css");
-		print RCView::script(self::NS_PREFIX . self::EM_NAME . ".init(" . json_encode($config) . ", $jsmo_name);");
+		$ih->js('js/ConsoleDebugLogger.js');
+		$ih->js('js/ROME_OnlineDesigner.js');
+		$ih->css('css/ROME_OnlineDesigner.css');
+		print RCView::script(self::NS_PREFIX . self::EM_NAME . '.init(' . json_encode($config) . ", $jsmo_name);");
 	}
 
-	private function add_templates($view) {
-		if ($view == "online_designer") {
+	private function add_templates($view)
+	{
+		if ($view == 'online_designer') {
 			$this->framework->tt_transferToJavascriptModuleObject([
-				"fieldedit_13",
-				"fieldedit_14",
-				"fieldedit_15",
+				'fieldedit_13',
+				'fieldedit_14',
+				'fieldedit_15',
 			]);
-			?>
+?>
 			<template id="rome-em-fieldedit-ui-template">
 				<div class="rome-edit-field-ui-container">
 					<div class="rome-edit-field-ui-header">
-						<h1><?=$this->tt("fieldedit_01")?></h1>
+						<h1><?= $this->tt('fieldedit_01') ?></h1>
 						<input type="checkbox" class="form-check-input ms-3 rome-em-fieldedit-exclude">
 						<label class="form-check-label ms-1 rome-em-fieldedit-exclude">
 							<span class="rome-em-fieldedit-exclude-field">
-								<?=$this->tt("fieldedit_11")?>
+								<?= $this->tt('fieldedit_11') ?>
 							</span>
 							<span class="rome-em-fieldedit-exclude-matrix">
-								<?=$this->tt("fieldedit_12")?>
+								<?= $this->tt('fieldedit_12') ?>
 							</span>
 						</label>
 					</div>
 					<div class="rome-edit-field-ui-body">
 						<div class="d-flex align-items-baseline gap-2">
-							<span><?=$this->tt("fieldedit_08")?></span>
-							<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm " placeholder="<?= $this->tt("fieldedit_02") ?>">
+							<span><?= $this->tt('fieldedit_08') ?></span>
+							<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm " placeholder="<?= $this->tt('fieldedit_02') ?>">
 							<span class="rome-edit-field-ui-spinner">
 								<i class="fa-solid fa-spinner fa-spin-pulse rome-edit-field-ui-spinner-spinning"></i>
 								<i class="fa-solid fa-arrow-right fa-lg rome-edit-field-ui-spinner-not-spinning"></i>
@@ -173,37 +279,37 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 							<select id="rome-field-choice" class="form-select form-select-sm w-auto">
 								<option value="dataElement">Field</option>
 							</select>
-							<button id="rome-add-button" type="button" class="btn btn-rcgreen btn-xs"><?=$this->tt("fieldedit_10")?></button>
+							<button id="rome-add-button" type="button" class="btn btn-rcgreen btn-xs"><?= $this->tt('fieldedit_10') ?></button>
 						</div>
 						<div class="rome-edit-field-ui-list">
-							<h2><?= $this->tt("fieldedit_03") ?></h2>
+							<h2><?= $this->tt('fieldedit_03') ?></h2>
 						</div>
 						<div class="rome-edit-field-ui-list-empty">
-							<?= $this->tt("fieldedit_07") ?>
+							<?= $this->tt('fieldedit_07') ?>
 						</div>
 					</div>
 					<div class="rome-edit-field-ui-footer">
-						<?=RCView::interpolateLanguageString($this->tt("fieldedit_04"), [
-								"<a href='javascript:;' onclick='".$this->get_js_module_name().".showFieldHelp();'>",
-								"</a>"
-							], false)
+						<?= RCView::interpolateLanguageString($this->tt('fieldedit_04'), [
+							'<a href="javascript:;" onclick="' . $this->getModuleClientName() . '.showFieldHelp();">',
+							'</a>'
+						], false)
 						?>
 					</div>
 				</div>
 			</template>
-			<?php
+<?php
 		}
 	}
 
-	private function set_field_exclusion($field_names, $exclude) {
+	private function set_field_exclusion($field_names, $exclude)
+	{
 		$excluded = $this->load_excluded_fields();
 		if ($exclude) {
 			// TODO: Delete action tag from fields
 
 			$excluded = array_unique(array_merge($excluded, $field_names));
-		}
-		else {
-			$excluded = array_filter($excluded, function($val) use ($field_names) {
+		} else {
+			$excluded = array_filter($excluded, function ($val) use ($field_names) {
 				return !in_array($val, $field_names);
 			});
 		}
@@ -214,150 +320,157 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$this->store_excluded_fields($excluded);
 	}
 
-	private function load_excluded_fields() {
+	private function load_excluded_fields()
+	{
 		$excluded = json_decode($this->framework->getProjectSetting(self::STORE_EXCLUSIONS) ?? "[]");
 		if (!is_array($excluded)) $excluded = [];
 		return $excluded;
 	}
 
-	private function store_excluded_fields($excluded) {
+	private function store_excluded_fields($excluded)
+	{
 		if (!is_array($excluded)) $excluded = [];
 		$this->framework->setProjectSetting(self::STORE_EXCLUSIONS, json_encode($excluded));
 	}
 
-	private function set_matrix_exclusion($args) {
-		$grid_name = $args["grid_name"] ?? "";
-		$exclude = $args["exclude"] == "1";
+	private function set_matrix_exclusion($args)
+	{
+		$grid_name = $args['grid_name'] ?? '';
+		$exclude = $args['exclude'] == '1';
 		$fields = [];
 		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->metadata;
 		foreach ($metadata as $field_name => $field_data) {
-			if ($field_data["grid_name"] === $grid_name) {
+			if ($field_data['grid_name'] === $grid_name) {
 				$fields[] = $field_name;
 			}
 		}
 		$this->set_field_exclusion($fields, $exclude);
 	}
 
-	private function refresh_exclusions($form) {
+	private function refresh_exclusions($form)
+	{
 		$metadata = $this->proj->isDraftMode() ? $this->proj->metadata_temp : $this->proj->metadata;
-		$form_fields = array_keys(array_filter($metadata, function($field_data) use ($form) { return $field_data["form_name"] === $form; }));
+		$form_fields = array_keys(array_filter($metadata, function ($field_data) use ($form) {
+			return $field_data['form_name'] === $form;
+		}));
 		$excluded = array_intersect($this->load_excluded_fields(), $form_fields);
 		$mg_excluded = [];
 		foreach ($excluded as $field) {
-			if (isset($metadata[$field]) && $metadata[$field]["grid_name"]) {
-				$mg_excluded[$metadata[$field]["grid_name"]] = true;
+			if (isset($metadata[$field]) && $metadata[$field]['grid_name']) {
+				$mg_excluded[$metadata[$field]['grid_name']] = true;
 			}
 		}
 		$mg_excluded = array_keys($mg_excluded);
 		return [
-			"fieldsExcluded" => $excluded,
-			"matrixGroupsExcluded" => $mg_excluded,
+			'fieldsExcluded' => $excluded,
+			'matrixGroupsExcluded' => $mg_excluded,
 		];
 	}
 
-	private function search_ontologies($payload) {
+	private function search_ontologies($payload)
+	{
 
-		$term = trim($payload["term"] ?? "");
-		if ($term == "") return null;
+		$term = trim($payload['term'] ?? '');
+		if ($term == '') return null;
 
 		$result = [];
 
-        // search configured minimal datasets first
-        $minimal_datasets  = [];
-        // project specific jsons
-        foreach ($this->getProjectSetting("minimal-dataset") as $minimal_dataset_string) {
+		// search configured minimal datasets first
+		$minimal_datasets  = [];
+		// project specific jsons
+		foreach ($this->getProjectSetting('minimal-dataset') as $minimal_dataset_string) {
 			if ($minimal_dataset_string == null) continue;
-            $minimal_datasets[] = $minimal_dataset_string;
-        }
-        // enabled standard minimal datasets
-        foreach (glob(__DIR__ . "/minimal_datasets/*.json") as $filename) {
-            if ($this->getProjectSetting("minimal-dataset-file-" . basename($filename, ".json"))) {
-                $minimal_datasets[] = file_get_contents($filename);
-            }
-        }
-                
- 		foreach ($minimal_datasets as $minimal_dataset_string) {
-             $minimal_dataset = json_decode($minimal_dataset_string, true);
-             $title = $minimal_dataset["title"];
-             $items_stack = $minimal_dataset["item"];
-             while(!empty($items_stack)) {
-                 $current_item = array_shift($items_stack);
-                 if (is_array($current_item['item'])) {
-                     array_push($items_stack, ...$current_item['item']);
-                 }
-                 if ($current_item['text'] && is_array($current_item['code'])) {
-                     $display_item = $current_item['text'];
-                     if (preg_match("/$term/i", $display_item)) {
-                         $pos = stripos($display_item, $term);
-                         if ($pos !== false) {
-                             $term_length = strlen($term);
-                             $display_item = substr($display_item, 0, $pos) . 
-                                 "<span class=\"rome-edit-field-ui-search-match\">".substr($display_item, $pos, $term_length)."</span>" . 
-                                 substr($display_item, $pos + $term_length);
-                         }
-                         $result[] = [
-                             "value" => json_encode($current_item),
-                             "label" => $current_item['text'],
-                             "display" => "<b>$title</b>: " . $display_item
-                         ];
-                     }
-                 }
-             }
- 		}		
-        
-        if ($this->getProjectSetting("minimal-datasets-only")) {
-            return $result;
-        }
+			$minimal_datasets[] = $minimal_dataset_string;
+		}
+		// enabled standard minimal datasets
+		foreach (glob(__DIR__ . '/minimal_datasets/*.json') as $filename) {
+			if ($this->getProjectSetting('minimal-dataset-file-' . basename($filename, '.json'))) {
+				$minimal_datasets[] = file_get_contents($filename);
+			}
+		}
 
-        
+		foreach ($minimal_datasets as $minimal_dataset_string) {
+			$minimal_dataset = json_decode($minimal_dataset_string, true);
+			$title = $minimal_dataset['title'];
+			$items_stack = $minimal_dataset['item'];
+			while (!empty($items_stack)) {
+				$current_item = array_shift($items_stack);
+				if (is_array($current_item['item'])) {
+					array_push($items_stack, ...$current_item['item']);
+				}
+				if ($current_item['text'] && is_array($current_item['code'])) {
+					$display_item = $current_item['text'];
+					if (preg_match("/$term/i", $display_item)) {
+						$pos = stripos($display_item, $term);
+						if ($pos !== false) {
+							$term_length = strlen($term);
+							$display_item = substr($display_item, 0, $pos) .
+								'<span class="rome-edit-field-ui-search-match">' . substr($display_item, $pos, $term_length) . '</span>' .
+								substr($display_item, $pos + $term_length);
+						}
+						$result[] = [
+							'value' => json_encode($current_item),
+							'label' => $current_item['text'],
+							'display' => "<b>$title</b>: " . $display_item
+						];
+					}
+				}
+			}
+		}
 
-		$bioportal_api_token = $GLOBALS["bioportal_api_token"] ?? "";
-		if ($bioportal_api_token == "") return null;
+		if ($this->getProjectSetting('minimal-datasets-only')) {
+			return $result;
+		}
 
-		$bioportal_api_url = $GLOBALS["bioportal_api_url"] ?? "";
+
+
+		$bioportal_api_token = $GLOBALS['bioportal_api_token'] ?? '';
+		if ($bioportal_api_token == '') return null;
+
+		$bioportal_api_url = $GLOBALS['bioportal_api_url'] ?? '';
 		if ($bioportal_api_url == '') return null;
 
 		// Fixed
-		$ontology_acronym = "SNOMEDCT";
-        $ontology_system  = "http://snomed.info/sct";
+		$ontology_acronym = 'SNOMEDCT';
+		$ontology_system  = 'http://snomed.info/sct';
 
 
-			// Build URL to call
-		$url = $bioportal_api_url . "search?q=".urlencode($term)."&ontologies=".urlencode($ontology_acronym)
-			 . "&suggest=true&include=prefLabel,notation,cui&display_links=false&display_context=false&format=json&apikey=" . $bioportal_api_token;
+		// Build URL to call
+		$url = $bioportal_api_url . 'search?q=' . urlencode($term) . '&ontologies=' . urlencode($ontology_acronym)
+			. '&suggest=true&include=prefLabel,notation,cui&display_links=false&display_context=false&format=json&apikey=' . $bioportal_api_token;
 		// Call the URL
 		$json = http_get($url);
-		
+
 		$response = json_decode($json, true);
 
-		if (!$response || !$response["collection"]) return null;
-		
+		if (!$response || !$response['collection']) return null;
+
 		$dummy_data = [];
-		foreach ($response["collection"] as $item) {
-			$dummy_data[$item["notation"]] = $item["prefLabel"];
+		foreach ($response['collection'] as $item) {
+			$dummy_data[$item['notation']] = $item['prefLabel'];
 		}
-	
+
 		foreach ($dummy_data as $val => $label) {
 			$display_item = "[$val] $label";
 			$display_item = filter_tags(label_decode($display_item));
 			$pos = stripos($display_item, $term);
 			if ($pos !== false) {
 				$term_length = strlen($term);
-				$display_item = substr($display_item, 0, $pos) . 
-					"<span class=\"rome-edit-field-ui-search-match\">".substr($display_item, $pos, $term_length)."</span>" . 
+				$display_item = substr($display_item, 0, $pos) .
+					'<span class="rome-edit-field-ui-search-match">' . substr($display_item, $pos, $term_length) . '</span>' .
 					substr($display_item, $pos + $term_length);
 				$result[] = [
-					"value" => json_encode(["code" => ["system" => $ontology_system, "code" => $val, "display" => $label]]),
-					"label" => $label,
-					"display" => "<b>" . $ontology_acronym . "</b>: " . $display_item,
+					'value' => json_encode(['code' => ['system' => $ontology_system, 'code' => $val, 'display' => $label]]),
+					'label' => $label,
+					'display' => '<b>' . $ontology_acronym . '</b>: ' . $display_item,
 				];
 			}
 		}
 		if (count($result) == 0) {
 			$result[] = [
-				"value" => "",
-				"label" => "",
-				"display" => $this->tt("fieldedit_16"),
+				'value' => '',
+				'label' => '',
+				'display' => $this->tt('fieldedit_16'),
 			];
 		}
 
@@ -369,7 +482,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * Gets the "Learn about using Ontology Annotations" content 
 	 * @return string 
 	 */
-	private function get_fieldhelp() {
+	private function getFieldHelp()
+	{
 		return $this->tt("fieldedit_06");
 	}
 
@@ -377,7 +491,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 
 	// Method not currently implemented - used for ??
-	private function parse_ontology($payload) {
+	private function parseOntology($payload)
+	{
 		return [];
 	}
 
@@ -389,8 +504,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * excluding projects in development, or requiring a minimum number of records)
 	 * @return string
 	 */
-    private function discover_ontologies($payload) {
-        $sql = <<<SQL
+	private function discoverOntologies($payload)
+	{
+		$sql = <<<SQL
 			WITH
 				-- all projects that have the module installed and metadata marked as 'discoverable'
 				project_ids AS
@@ -450,27 +566,48 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		SQL;
 		$q = $this->query($sql, [$this->PREFIX]);
 		$result = $q->fetch_assoc();
-        return $result["info"];
-    }
+		return $result["info"];
+	}
 
 	#endregion
 
 	#region Misc Private Helpers
 
 	/**
-	 * Gets the JS module name
+	 * Gets the module name for client side internal use
 	 * @return string 
 	 */
-	private function get_js_module_name() {
+	private function getModuleClientName()
+	{
 		return self::NS_PREFIX . self::EM_NAME;
 	}
+
+	/**
+	 * Gets the module's internal id
+	 * 0 signals an error
+	 * @return int 
+	 */
+	private function getExternalModuleId()
+	{
+		$sql = <<<SQL
+			SELECT external_module_id
+			FROM redcap_external_modules
+			WHERE directory_prefix = ?
+		SQL;
+		$q = $this->query($sql, [$this->PREFIX]);
+		$result = $q->fetch_assoc();
+		// Return 0 if not found
+		return $result["external_module_id"] ?? 0;
+	}
+
 
 	/**
 	 * Makes the internal project structure accessible to the module
 	 * @param string|int $project_id 
 	 * @return void 
 	 */
-	private function init_proj($project_id) {
+	private function initProject($project_id)
+	{
 		if ($this->proj == null) {
 			$this->proj = new \Project($project_id);
 			$this->project_id = $project_id;
@@ -481,18 +618,46 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * Reads and sets commonly used module settings as fields of the class, for convenience
 	 * @return void 
 	 */
-	private function init_config() {
-		if (!$this->config_initialized) {
-			$this->js_debug  = $this->getProjectSetting("javascript-debug") == true;
-			$this->config_initialized = true;
+	private function initConfig()
+	{
+		if ($this->config_initialized) return;
+
+		// System-only settings
+		if ($this->project_id === null) {
 		}
+		// Project-only settings
+		else {
+			$this->js_debug  = $this->framework->getProjectSetting("javascript-debug") == true;
+		}
+		// Common settings
+		$cache_backend = $this->framework->getSystemSetting("cache-backend") ?? "";
+		$this->cache_backend = in_array($cache_backend, ["db", "disk"], true) ? $cache_backend : "";
+		$this->cache_dir = $cache_backend === "disk" ? (string)$this->framework->getSystemSetting("file-cache-dir") : null;
+		$this->external_module_id = $this->getExternalModuleId();
+		$this->config_initialized = true;
 	}
+
+
+	private function checkCacheConfigured()
+	{
+		if (empty($this->cache_backend)) return false;
+		if ($this->cache_backend === "db") {
+			// Module ID must be known
+			return $this->external_module_id > 0;
+		}
+		// Check disk cache directory
+		if (empty($this->cache_dir)) return false;
+		// Verify that the directory exists AND is writable
+		return is_dir($this->cache_dir) && is_writable($this->cache_dir);
+	}
+
 
 	#endregion
 
 	#region Public Helpers
 
-	function getInjectionHelper() {
+	function getInjectionHelper()
+	{
 		if ($this->injection_helper === null) {
 			require_once "classes/InjectionHelper.php";
 			$this->injection_helper = InjectionHelper::init($this);
@@ -507,7 +672,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * Return a minimal annotation
 	 * @return string 
 	 */
-	function getMinimalAnnotationJSON() {
+	function getMinimalAnnotationJSON()
+	{
 		$minimal = [
 			"resourceType" => "ROME_Annotation",
 			"meta" => null,
@@ -521,7 +687,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return json_encode($minimal, JSON_UNESCAPED_UNICODE);
 	}
 
-	function getKnownLinks() {
+	function getKnownLinks()
+	{
 		return [
 			"http://snomed.info/sct" => "https://bioportal.bioontology.org/ontologies/SNOMEDCT?p=classes&conceptid=",
 			"http://loinc.org" => "https://loinc.org/",
@@ -837,6 +1004,273 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			}
 		};
 	}
+
+	#endregion
+
+	#region Cache Building
+
+	/**
+	 * Generate a stable module source id and its canonical UUID.
+	 *
+	 * Returns:
+	 *  - id:   "src_<uuidhex>"  (uuid without hyphens)
+	 *  - uuid: canonical UUID v4 with hyphens
+	 *
+	 * @return array{id:string, uuid:string}
+	 * @throws Exception
+	 */
+	private function generateSourceId(): array
+	{
+		// UUID v4: 16 random bytes with version/variant bits set.
+		$b = random_bytes(16);
+		$b[6] = chr((ord($b[6]) & 0x0f) | 0x40); // version 4
+		$b[8] = chr((ord($b[8]) & 0x3f) | 0x80); // variant RFC 4122
+
+		$hex = bin2hex($b); // 32 hex chars
+
+		$uuid = substr($hex, 0, 8) . '-' .
+			substr($hex, 8, 4) . '-' .
+			substr($hex, 12, 4) . '-' .
+			substr($hex, 16, 4) . '-' .
+			substr($hex, 20, 12);
+
+		return [
+			'id' => 'src_' . $hex,
+			'uuid' => $uuid,
+		];
+	}
+
+	/**
+	 * Ensure a local source is built and its internal metadata is in sync.
+	 *
+	 * Invariants:
+	 *  - internal metadata is only written/updated after successful build OR for pure label updates
+	 *  - cache entry is written before metadata is written when a build is required
+	 *
+	 * Metadata update rules:
+	 *  - If metadata missing OR doc_id changed: build + write cache + write metadata
+	 *  - Else if resolved title/description changed: update metadata only
+	 *
+	 * @param Cache $cache Cache instance (DB/file backend).
+	 * @param LocalSourceIndexBuilder[] $builders List of builders; first matching supports($kind) is used.
+	 * @param array $entry A single repeatable entry, containing at least:
+	 *   - 'doc_id' (int|string) or 'file' (int|string) depending on your config field key
+	 *   - 'active' (bool-ish) optional (caller can skip inactive)
+	 *   - 'title_override' (string|null) optional
+	 *   - 'description_override' (string|null) optional
+	 *   - 'fhir-metadata' (string|null) JSON string (hidden field)
+	 * @param array $opts Options:
+	 *   - 'kind' => string (default 'fhir_questionnaire')
+	 *   - 'doc_id_key' => string (default 'file') which key holds doc_id in $entry
+	 *   - 'meta_key' => string (default 'fhir-metadata')
+	 *   - 'resolved_title' => string|null (if null, computed from overrides + fallback)
+	 *   - 'resolved_description' => string|null
+	 *   - 'fallback_title' => string (default 'Untitled')
+	 *   - 'fallback_description' => string (default '')
+	 *   - 'cache_ttl' => int (default 0 = no expiry)
+	 * @return array{
+	 *   updated_entry: array,
+	 *   meta: array|null,
+	 *   built: bool,
+	 *   warnings: string[],
+	 *   errors: string[]
+	 * }
+	 */
+	private function ensureBuiltAndMetadata(
+		Cache $cache,
+		array $builders,
+		array $entry,
+		array $opts = []
+	): array {
+		$warnings = [];
+		$errors = [];
+		$built = false;
+
+		$kind = (string)($opts['kind'] ?? 'fhir_questionnaire');
+		$docIdKey = (string)($opts['doc_id_key'] ?? 'fhir-file');
+		$metaKey = (string)($opts['meta_key'] ?? 'fhir-metadata');
+		$titleKey = (string)($opts['title_key'] ?? 'fhir-title');
+		$descKey = (string)($opts['description_key'] ?? 'fhir-description');
+		$activeKey = (string)($opts['active_key'] ?? 'fhir-active');
+
+		$fallbackTitle = (string)($opts['fallback_title'] ?? 'Untitled');
+		$fallbackDesc = (string)($opts['fallback_description'] ?? '');
+		$ttl = (int)($opts['cache_ttl'] ?? 0);
+
+		$docIdRaw = $entry[$docIdKey] ?? null;
+		$docId = is_numeric($docIdRaw) ? (int)$docIdRaw : 0;
+		if ($docId <= 0) {
+			$errors[] = "Missing or invalid doc_id in entry key '{$docIdKey}'.";
+			// When a file is gone, set the entry to inactive and the metadata to null
+			$entry[$activeKey] = false;
+			$entry[$metaKey] = null;
+			return [
+				'updated_entry' => $entry,
+				'meta' => null,
+				'built' => false,
+				'warnings' => $warnings,
+				'errors' => $errors,
+			];
+		}
+
+		$resolvedTitle = $opts['resolved_title'] ?? null;
+		$resolvedDesc  = $opts['resolved_description'] ?? null;
+
+		if (!is_string($resolvedTitle) || trim($resolvedTitle) === '') {
+			$t = $entry[$titleKey] ?? '';
+			$t = is_string($t) ? trim($t) : '';
+			$resolvedTitle = ($t !== '') ? $t : $fallbackTitle;
+		}
+		if (!is_string($resolvedDesc)) {
+			$d = $entry[$descKey] ?? '';
+			$d = is_string($d) ? trim($d) : '';
+			$resolvedDesc = ($d !== '') ? $d : $fallbackDesc;
+		}
+
+		$metaJson = $entry[$metaKey] ?? '';
+		$meta = null;
+		if (is_string($metaJson) && trim($metaJson) !== '') {
+			$tmp = json_decode($metaJson, true);
+			if (is_array($tmp)) $meta = $tmp;
+		}
+
+		$metaId = is_array($meta) ? (string)($meta['id'] ?? '') : '';
+		$metaUuid = is_array($meta) ? (string)($meta['uuid'] ?? '') : '';
+		$metaDocId = is_array($meta) ? (int)($meta['doc_id'] ?? 0) : 0;
+
+		// Determine if we need to build.
+		$needsBuild = ($meta === null) || ($metaId === '') || ($metaDocId !== $docId);
+
+		// Select builder.
+		$builder = null;
+		foreach ($builders as $b) {
+			if ($b instanceof LocalSourceIndexBuilder && $b->supports($kind)) {
+				$builder = $b;
+				break;
+			}
+		}
+		if ($builder === null) {
+			$errors[] = "No builder available for kind '{$kind}'.";
+			return [
+				'updated_entry' => $entry,
+				'meta' => $meta,
+				'built' => false,
+				'warnings' => $warnings,
+				'errors' => $errors,
+			];
+		}
+
+		// If build is required and no stable id exists yet, generate one at build start.
+		if ($needsBuild && ($metaId === '' || $metaUuid === '')) {
+			try {
+				$ids = $this->generateSourceId();
+				$metaId = $ids['id'];
+				$metaUuid = $ids['uuid'];
+			} catch (Exception $e) {
+				$errors[] = "Failed to generate source id: " . $e->getMessage();
+				return [
+					'updated_entry' => $entry,
+					'meta' => $meta,
+					'built' => false,
+					'warnings' => $warnings,
+					'errors' => $errors,
+				];
+			}
+		}
+
+		// If metadata exists and doc_id unchanged, but labels changed -> metadata-only update.
+		$labelsChanged = false;
+		if (!$needsBuild && is_array($meta)) {
+			$oldTitle = (string)($meta['title'] ?? '');
+			$oldDesc  = (string)($meta['description'] ?? '');
+			if ($oldTitle !== $resolvedTitle || $oldDesc !== $resolvedDesc) {
+				$labelsChanged = true;
+			}
+		}
+
+		// Build if required.
+		if ($needsBuild) {
+			try {
+				$result = $builder->buildFromDocId($docId, [
+					// reserved for future use
+				]);
+
+				// Cache key: versioned by doc_id.
+				// Format: idx:<src_id>:<doc_id>
+				$cacheKey = "idx:" . $metaId . ":" . $docId;
+
+				// Store payload. TTL=0 means "never expires" (safe due to doc_id versioning).
+				$cache->setPayload($cacheKey, $result->payload, $ttl, [
+					'kind' => $result->kind,
+					'id' => $metaId,
+					'uuid' => $metaUuid,
+					'doc_id' => $docId,
+				]);
+
+				$built = true;
+
+				$meta = [
+					'v' => 1,
+					'id' => $metaId,
+					'uuid' => $metaUuid,
+					'doc_id' => $docId,
+					'kind' => $result->kind,
+					'title' => $resolvedTitle,
+					'description' => $resolvedDesc,
+					'item_count' => (int)$result->itemCount,
+					'built_at' => date('c'),
+				];
+
+				if ((int)$result->itemCount === 0) {
+					$warnings[] = "Source '{$resolvedTitle}' produced 0 searchable items. Check the source file or remove/replace it.";
+				}
+			} catch (Throwable $e) {
+				$errors[] = "Build failed for '{$resolvedTitle}': " . $e->getMessage();
+				return [
+					'updated_entry' => $entry,
+					'meta' => $meta,
+					'built' => false,
+					'warnings' => $warnings,
+					'errors' => $errors,
+				];
+			}
+		} elseif ($labelsChanged) {
+			// Metadata-only update.
+			$meta['title'] = $resolvedTitle;
+			$meta['description'] = $resolvedDesc;
+			$meta['v'] = (int)($meta['v'] ?? 1);
+
+			// Preserve item_count/built_at as-is (they describe the built artifact).
+			if (isset($meta['item_count']) && (int)$meta['item_count'] === 0) {
+				$warnings[] = "Source '{$resolvedTitle}' has 0 searchable items. Check the source file or remove/replace it.";
+			}
+		} else {
+			// No build, no label changes; still add warning if item_count==0.
+			if (is_array($meta) && (int)($meta['item_count'] ?? 0) === 0) {
+				$warnings[] = "Source '{$resolvedTitle}' has 0 searchable items. Check the source file or remove/replace it.";
+			}
+		}
+
+		// Write back metadata JSON into entry (caller persists settings).
+		if (is_array($meta)) {
+			$entry[$metaKey] = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+			if ($entry[$metaKey] === false) {
+				// Should be rare; keep old metaJson if encoding fails.
+				$entry[$metaKey] = $metaJson;
+				$errors[] = "Failed to encode internal metadata JSON for '{$resolvedTitle}'.";
+			}
+		}
+
+		return [
+			'updated_entry' => $entry,
+			'meta' => $meta,
+			'built' => $built,
+			'warnings' => $warnings,
+			'errors' => $errors,
+		];
+	}
+
+
 
 	#endregion
 

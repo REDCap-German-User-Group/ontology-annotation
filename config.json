@@ -108,7 +108,7 @@
 					]
 				},
 				{
-					"key": "internal_metadata",
+					"key": "fhir-metadata",
 					"name": "Internal metadata (auto-generated)",
 					"type": "text",
 					"hidden": true
