@@ -1,66 +1,67 @@
 {
-    "recourceType": "AnnotatedDataset",
-    "meta" : {
-	"name" : "Test example",
-	"version": "1.0.0",
-	"created": "2025-09-08T12:00:00+02:00",
-        "updated": "2025-07-25T13:00:00+02:00",
-        "creator": "christof.meigen@medizin.uni-leipzig.de",
+  "recourceType": "Questionnaire",
+  "title": "Minimal Annotation Test",
+  "meta": {
+    "name": "Test example",
+    "version": "1.0.0",
+    "created": "2025-09-08T12:00:00+02:00",
+    "updated": "2025-07-25T13:00:00+02:00",
+    "creator": "christof.meigen@medizin.uni-leipzig.de"
+  },
+  "item": [
+    {
+      "text": "Diabetes mellitus",
+      "code": [
+        {
+          "system": "urn:oid:1.2.276.0.76.5.409",
+          "code": "E14",
+          "display": "Nicht näher bezeichneter Diabetes mellitus"
+        },
+        {
+          "system": "http://snomed.info/sct",
+          "code": "73211009",
+          "display": "Diabetes mellitus (disorder)"
+        }
+      ]
+    },
+    {
+      "text": "Biological sex",
+      "code": [
+        {
+          "system": "http://snomed.info/sct",
+          "code": "734000001",
+          "display": "Biological sex (property)"
+        }
+      ],
+      "valueCodingMap": {
+        "1": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "248153007",
+              "display": "Male"
+            }
+          ]
+        },
+        "2": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "246309004",
+              "display": "Female"
+            }
+          ]
+        },
+        "3": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "32570691000036108",
+              "display": "Intersex"
+            }
+          ]
+        }
+      }
     }
-    "dataElements": [
-	{
-	    "name": "Diabetes mellitus",
-	    "coding": [
-		{
-		    "system": "urn:oid:1.2.276.0.76.5.409",
-		    "code": "E14",
-		    "display": "Nicht näher bezeichneter Diabetes mellitus"
-		},
-		{
-		    "system": "http://snomed.info/sct",
-		    "code": "73211009",
-		    "display": "Diabetes mellitus (disorder)"
-		}
-	    ]
-	},
-	{
-	    "name": "Biological sex",
-	    "coding": [
-		{
-		    "system": "http://snomed.info/sct",
-		    "code": "734000001",
-		    "display": "Biological sex (property)"
-		}
-	    ],
-	    "valueCodingMap": {
-		"1": {
-		    "coding": [
-			{
-			    "system": "http://snomed.info/sct",
-			    "code": "248153007",
-			    "display": "Male"
-			}
-		    ]
-		},
-		"2": {
-		    "coding": [
-			{
-			    "system": "http://snomed.info/sct",
-			    "code": "246309004",
-			    "display": "Female"
-			}
-		    ]
-		},
-		"3": {
-		    "coding": [
-			{
-			    "system": "http://snomed.info/sct",
-			    "code": "32570691000036108",
-			    "display": "Intersex"
-			}
-		    ]
-		}
-	    }
-	}
-    ]
+  ]
 }
