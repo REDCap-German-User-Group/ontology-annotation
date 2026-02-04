@@ -62,53 +62,45 @@
 			}
 		},
 		{
-			"key": "fhir-sources-note",
+			"key": "sys-fhir-sources-note",
 			"name": "Local FHIR Questionnaire sources - see English.ini",
 			"tt_name": "conf_fhir_sources_note",
 			"type": "descriptive"
 		},
 		{
-			"key": "fhir-source",
+			"key": "sys-fhir-source",
 			"name": "FHIR Questionnaire source",
 			"tt_name": "conf_fhir_source",
 			"type": "sub_settings",
-			"repeatable" : true,
+			"repeatable": true,
 			"required": false,
 			"sub_settings": [
 				{
-					"key": "fhir-file",
+					"key": "sys-fhir-file",
 					"name": "FHIR Questionnaire JSON file",
 					"tt_name": "conf_fhir_file",
-					"type": "file",
-					"required": true
+					"type": "file"
 				},
 				{
-					"key": "fhir-title",
+					"key": "sys-fhir-title",
 					"name": "Title override",
 					"tt_name": "conf_fhir_title",
 					"type": "text"
 				},
 				{
-					"key": "fhir-description",
+					"key": "sys-fhir-desc",
 					"name": "Description override",
-					"tt_name": "conf_fhir_description",
+					"tt_name": "conf_fhir_desc",
 					"type": "textarea"
 				},
 				{
-					"key": "fhir-active",
+					"key": "sys-fhir-active",
 					"name": "Source active",
 					"tt_name": "conf_fhir_active",
-					"type": "checkbox",
-					"choices": [
-						{
-							"value": "1",
-							"name": "Enable this source",
-							"tt_name": "conf_fhir_active_1"
-						}
-					]
+					"type": "checkbox"
 				},
 				{
-					"key": "fhir-metadata",
+					"key": "sys-fhir-metadata",
 					"name": "Internal metadata (auto-generated)",
 					"type": "text",
 					"hidden": true
@@ -138,20 +130,54 @@
 			]
 		},
 		{
-			"key": "minimal-dataset-file-test",
-			"name": "Use the \"Test\" Minimal dataset",
-			"type": "checkbox"
-		},
-		{
 			"key": "discoverable",
 			"name": "Make the metadata (annotated fields + contact data) from this project discoverable to other users",
 			"type": "checkbox"
 		},
 		{
-			"key": "minimal-dataset",
-			"name": "Additional Minimal Dataset (a json with keys 'name', and 'items')",
-			"type": "json",
-			"repeatable": "true"
+			"key": "proj-fhir-sources-note",
+			"name": "Project-private FHIR Questionnaire sources - see English.ini",
+			"tt_name": "conf_fhir_sources_note",
+			"type": "descriptive"
+		},
+		{
+			"key": "proj-fhir-source",
+			"name": "Project FHIR Questionnaire source",
+			"tt_name": "conf_proj_fhir_source",
+			"type": "sub_settings",
+			"repeatable": true,
+			"sub_settings": [
+				{
+					"key": "proj-fhir-file",
+					"name": "FHIR Questionnaire JSON file",
+					"tt_name": "conf_fhir_file",
+					"type": "file"
+				},
+				{
+					"key": "proj-fhir-title",
+					"name": "Title override",
+					"tt_name": "conf_fhir_title",
+					"type": "text"
+				},
+				{
+					"key": "proj-fhir-desc",
+					"name": "Description override",
+					"tt_name": "conf_fhir_desc",
+					"type": "textarea"
+				},
+				{
+					"key": "proj-fhir-active",
+					"name": "Source active",
+					"tt_name": "conf_proj_fhir_active",
+					"type": "checkbox"
+				},
+				{
+					"key": "proj-fhir-metadata",
+					"name": "Internal metadata (auto-generated)",
+					"type": "text",
+					"hidden": true
+				}
+			]
 		}
 	],
 	"auth-ajax-actions": [

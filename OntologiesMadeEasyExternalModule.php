@@ -74,13 +74,89 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
+	// Inject system sources into project config
+	public function redcap_module_configuration_settings($project_id, $settings)
+	{
+		// Only inject per-project system source selectors when viewing a PROJECT config dialog.
+		if ($project_id === null) {
+			return $settings;
+		}
+
+		// Read system sources (repeatable system setting).
+		$settingKey = 'sys-fhir-source';
+		$sysSources = $this->framework->getSubSettings($settingKey, null);
+		if (!is_array($sysSources)) $sysSources = [];
+
+		// Build a list of eligible system sources: active + metadata present
+		$injected = [];
+
+		foreach ($sysSources as $row) {
+			if (!is_array($row)) continue;
+
+			// Checkbox "active" can come in as string/array/bool depending on framework/version/UI.
+			$isActive = $row['sys-fhir-active'] == true;
+			if (!$isActive) continue;
+
+			$meta = $this->decodeMetadata($row['sys-fhir-metadata'] ?? null);
+			if ($meta === null) continue;
+
+			$id = isset($meta['id']) ? (string)$meta['id'] : '';
+			if ($id === '') continue;
+
+			$title = isset($meta['title']) ? trim((string)$meta['title']) : '';
+			if ($title === '') $title = 'Untitled';
+
+			$count = (int)$meta['item_count'];
+			$count = 0;
+			$badge_class = ($count === 0) ? 'badge-danger' : 'badge-info fw-normal';
+			$suffix = '<span style="vertical-align:top;margin-top: 2px;" class="me-1 badge badge-pill '.$badge_class.'">&nbsp;'.$count.'&nbsp;</span>'.$this->framework->tt("conf_proj_fhir_active");
+			$desc = trim((string) $meta['description'] ?? '');
+			$desc = "Das ist eine Beschreibung";
+			if ($desc !== '') $desc = '<br><i class="text-muted">'.$desc.'</i>';
+
+			$injected[] = [
+				'key' => $id, // e.g. src_<uuidhex>
+				'name' =>  '<div><b>' . $title . '</b>' . $desc . '</div>' . $suffix,
+				'type' => 'checkbox',
+			];
+		}
+
+		// Inject into settings
+		if (!empty($injected)) {
+			$settings[] = [
+				'key' => 'sys-source-select-note',
+				'name' => $this->framework->tt('conf_sys_source_select_note'),
+				'type' => 'descriptive',
+			];
+			foreach ($injected as $s) {
+				$settings[] = $s;
+			}
+		}
+
+		return $settings;
+	}
+
+
+	/**
+	 * Decode metadata JSON stored in fhir-metadata.
+	 * Returns null if empty/invalid.
+	 */
+	private function decodeMetadata($json): ?array
+	{
+		if (!is_string($json)) return null;
+		$json = trim($json);
+		if ($json === '') return null;
+
+		$meta = json_decode($json, true);
+		return is_array($meta) ? $meta : null;
+	}
 
 
 	// After a module config has been saved
 	function redcap_module_save_configuration($project_id)
 	{
 		// Only run in system context for now
-		if ($project_id !== null || $project_id === "") return;
+		if ($project_id !== null && $project_id !== "") return;
 
 		$this->initConfig();
 
@@ -104,8 +180,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 
 		// Load repeatable sources.
-		$settingKey = 'fhir-source';
-		$entries = $this->getSubSettings($settingKey, null);
+		$settingKey = 'sys-fhir-source';
+		$entries = $this->framework->getSubSettings($settingKey, null);
 		if (!is_array($entries)) $entries = [];
 
 		$changed_entries = [];
@@ -115,12 +191,17 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		foreach ($entries as $i => $entry) {
 			if (!is_array($entry)) continue;
 
-			$isActive = $entry['fhir-active'] === true;
+			$isActive = $entry['sys-fhir-active'] === true;
 
 			if (!$isActive) {
 				// Inactive sources should vanish; we do nothing here.
 				continue;
 			}
+
+			$titleOverride = $entry['sys-fhir-title'] ?? '';
+			$descOverride = $entry['sys-fhir-desc'] ?? '';
+			$titleOverride = is_string($titleOverride) ? trim($titleOverride) : '';
+			$descOverride  = is_string($descOverride) ? trim($descOverride) : '';
 
 			// Ensure build + metadata sync.
 			$res = $this->ensureBuiltAndMetadata(
@@ -129,10 +210,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$entry,
 				[
 					'kind' => 'fhir_questionnaire',
-					'doc_id_key' => 'fhir-file',
-					'meta_key' => 'fhir-metadata',
+					'doc_id_key' => 'sys-fhir-file',
+					'meta_key' => 'sys-fhir-metadata',
+					'title_key' => 'sys-fhir-title',
+					'desc_key' => 'sys-fhir-desc',
+					'active_key' => 'sys-fhir-active',
+					'resolved_title' => $titleOverride,
+					'resolved_desc' => $descOverride,
 					'fallback_title' => 'Untitled',
-					'fallback_description' => '',
+					'fallback_desc' => '',
 					'cache_ttl' => 0, // safe due to doc_id versioning
 				]
 			);
@@ -143,7 +229,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$newEntry = $res['updated_entry'];
 
 			// Persist only if metadata changed (we only mutate fhir-metadata).
-			if (($newEntry['fhir-metadata'] ?? null) !== ($entry['fhir-metadata'] ?? null)) {
+			if (($newEntry['sys-fhir-metadata'] ?? null) !== ($entry['sys-fhir-metadata'] ?? null)) {
 				$changed_entries[$i] = $newEntry;
 			}
 		}
@@ -1061,12 +1147,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 *   - 'fhir-metadata' (string|null) JSON string (hidden field)
 	 * @param array $opts Options:
 	 *   - 'kind' => string (default 'fhir_questionnaire')
-	 *   - 'doc_id_key' => string (default 'file') which key holds doc_id in $entry
-	 *   - 'meta_key' => string (default 'fhir-metadata')
-	 *   - 'resolved_title' => string|null (if null, computed from overrides + fallback)
-	 *   - 'resolved_description' => string|null
+	 *   - 'doc_id_key' => string (required) Key in $entry that contains doc_id
+	 *   - 'meta_key' => string (required) Key in $entry that contains metadata
+	 *   - 'title_key' => string (required) Key in $entry that contains title
+	 *   - 'desc_key' => string (required) Key in $entry that contains description
+	 *   - 'active_key' => string (required) Key in $entry that contains active flag
+	 *   - 'resolved_title' => string|null (if null, computed or fallback)
+	 *   - 'resolved_desc' => string|null (if null, computed or fallback)
 	 *   - 'fallback_title' => string (default 'Untitled')
-	 *   - 'fallback_description' => string (default '')
+	 *   - 'fallback_desc' => string (default '')
 	 *   - 'cache_ttl' => int (default 0 = no expiry)
 	 * @return array{
 	 *   updated_entry: array,
@@ -1087,14 +1176,28 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$built = false;
 
 		$kind = (string)($opts['kind'] ?? 'fhir_questionnaire');
-		$docIdKey = (string)($opts['doc_id_key'] ?? 'fhir-file');
-		$metaKey = (string)($opts['meta_key'] ?? 'fhir-metadata');
-		$titleKey = (string)($opts['title_key'] ?? 'fhir-title');
-		$descKey = (string)($opts['description_key'] ?? 'fhir-description');
-		$activeKey = (string)($opts['active_key'] ?? 'fhir-active');
-
+		// Metadata Keys (all required)
+		$docIdKey = (string)($opts['doc_id_key'] ?? '');
+		$metaKey = (string)($opts['meta_key'] ?? '');
+		$titleKey = (string)($opts['title_key'] ?? '');
+		$descKey = (string)($opts['desc_key'] ?? '');
+		$activeKey = (string)($opts['active_key'] ?? '');
+		if (empty($docIdKey) || empty($metaKey) || empty($titleKey) || empty($descKey) || empty($activeKey)) {
+			$errors[] = 'Missing required entry keys: doc_id_key, meta_key, title_key, desc_key, active_key';
+			return [
+				'updated_entry' => $entry,
+				'meta' => null,
+				'built' => false,
+				'warnings' => $warnings,
+				'errors' => $errors
+			];
+		}
+		// Title and Description overrides/fallbacks
 		$fallbackTitle = (string)($opts['fallback_title'] ?? 'Untitled');
-		$fallbackDesc = (string)($opts['fallback_description'] ?? '');
+		$fallbackDesc = (string)($opts['fallback_desc'] ?? '');
+		$resolvedTitle = (string)($opts['resolved_title'] ?? '');
+		$resolvedDesc = (string)($opts['resolved_desc'] ?? '');
+
 		$ttl = (int)($opts['cache_ttl'] ?? 0);
 
 		$docIdRaw = $entry[$docIdKey] ?? null;
@@ -1112,9 +1215,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'errors' => $errors,
 			];
 		}
-
-		$resolvedTitle = $opts['resolved_title'] ?? null;
-		$resolvedDesc  = $opts['resolved_description'] ?? null;
 
 		if (!is_string($resolvedTitle) || trim($resolvedTitle) === '') {
 			$t = $entry[$titleKey] ?? '';
@@ -1269,8 +1369,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'errors' => $errors,
 		];
 	}
-
-
 
 	#endregion
 
