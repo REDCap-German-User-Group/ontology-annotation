@@ -107,7 +107,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			if ($title === '') $title = 'Untitled';
 
 			$count = (int)$meta['item_count'];
-			$count = 0;
 			$badge_class = ($count === 0) ? 'badge-danger' : 'badge-info fw-normal';
 			$suffix = '<span style="vertical-align:top;margin-top: 2px;" class="me-1 badge badge-pill '.$badge_class.'">&nbsp;'.$count.'&nbsp;</span>'.$this->framework->tt("conf_proj_fhir_active");
 			$desc = trim((string) $meta['description'] ?? '');
@@ -190,13 +189,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		foreach ($entries as $i => $entry) {
 			if (!is_array($entry)) continue;
-
-			$isActive = $entry['sys-fhir-active'] === true;
-
-			if (!$isActive) {
-				// Inactive sources should vanish; we do nothing here.
-				continue;
-			}
 
 			$titleOverride = $entry['sys-fhir-title'] ?? '';
 			$descOverride = $entry['sys-fhir-desc'] ?? '';
@@ -313,6 +305,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$jsmo_name = $this->framework->getJavascriptModuleObjectName();
 		$this->add_templates('online_designer');
 
+		// Check for conditions that prevent search from working
+		$errors = [];
+		if ($this->checkCacheConfigured() == false) {
+			$errors[] = $this->tt('error_cache_not_configured');
+		}
+		$warnings = [];
+
 		$config = [
 			'debug' => $this->js_debug,
 			'version' => $this->VERSION,
@@ -322,7 +321,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'form' => $form,
 			'minimalAnnotation' => $this->getMinimalAnnotationJSON(),
 			'knownLinks' => $this->getKnownLinks(),
+			'errors' => $errors,
+			'warnings' => $warnings,
 		];
+		// Add some language strings
+		$this->framework->tt_transferToJavascriptModuleObject([
+			'fieldedit_17',
+			'fieldedit_18',
+			'fieldedit_19',
+		]);
 		$config = array_merge($config, $this->refresh_exclusions($form));
 		$ih = $this->getInjectionHelper();
 		$ih->js('js/ConsoleDebugLogger.js');
@@ -355,7 +362,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 						</label>
 					</div>
 					<div class="rome-edit-field-ui-body">
-						<div class="d-flex align-items-baseline gap-2">
+						<div id="rome-search-bar" class="d-flex align-items-baseline gap-2">
 							<span><?= $this->tt('fieldedit_08') ?></span>
 							<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm " placeholder="<?= $this->tt('fieldedit_02') ?>">
 							<span class="rome-edit-field-ui-spinner">
@@ -363,14 +370,17 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 								<i class="fa-solid fa-arrow-right fa-lg rome-edit-field-ui-spinner-not-spinning"></i>
 							</span>
 							<select id="rome-field-choice" class="form-select form-select-sm w-auto">
-								<option value="dataElement">Field</option>
+								<option value="dataElement"><?= $this->tt('fieldedit_18') ?></option>
 							</select>
-							<button id="rome-add-button" type="button" class="btn btn-rcgreen btn-xs"><?= $this->tt('fieldedit_10') ?></button>
+							<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs"><?= $this->tt('fieldedit_10') ?></button>
+							<div id="rome-edit-field-error">
+								<i class="fa-solid fa-circle-exclamation fa-lg fa-fade"></i>
+							</div>
 						</div>
 						<div class="rome-edit-field-ui-list">
 							<h2><?= $this->tt('fieldedit_03') ?></h2>
 						</div>
-						<div class="rome-edit-field-ui-list-empty">
+						<div class="rome-edit-field-ui-list-empty mt-2">
 							<?= $this->tt('fieldedit_07') ?>
 						</div>
 					</div>

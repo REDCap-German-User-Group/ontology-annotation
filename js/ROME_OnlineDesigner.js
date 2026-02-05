@@ -169,6 +169,15 @@
 		setExcludedCheckboxState(excluded);
 		data.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
 		updateAnnotationTable();
+		// Disable search when there are errors and add error indicator
+		if (config.errors?.length ?? 0 > 0) {
+			data.$dlg.find('#rome-search-bar :input').prop('disabled', true);
+			data.$dlg.find('#rome-edit-field-error')
+				.css('display', 'block')
+				.attr('data-bs-tooltip', 'hover')
+				.attr('title', config.errors.join('\n'))
+				.tooltip('enable');
+		}
 	}
 
 	function isExcludedCheckboxChecked() {
@@ -183,8 +192,16 @@
 
 	function addEditFieldUI() {
 		if (data.$dlg.find('.rome-edit-field-ui-container').length > 0) return;
-		log('Adding Edit Field UI' + (data.isMatrix ? ' (matrix)' : ''));
-		const $ui = $($('#rome-em-fieldedit-ui-template').html());
+		let $ui;
+		if (data.isMatrix) {
+			log('Adding Edit Matrix UI');
+			$ui = $($('#rome-em-fieldedit-ui-template').html());
+		}
+		else {
+			log('Adding Edit Field UI');
+			$ui = $('<tr><td colspan="2"></td></tr>');
+			$ui.find('td').append($($('#rome-em-fieldedit-ui-template').html()));
+		}
 
 		//#region Setup event handlers
 
@@ -308,27 +325,29 @@
 		//#endregion
 
 		if (data.isMatrix) {
+			// Matrix-specific adjustments
 			// Insert at end of the dialog
 			data.$dlg.append($ui);
 		}
 		else {
+			// Single-field-specific adjustments
 			// Mirror visibility of the Action Tags / Field Annotation DIV
 			const actiontagsDIV = document.getElementById('div_field_annotation')
 				?? document.createElement('div');
 			const observer = new MutationObserver(() => {
 				const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-				$ui.css('display', actiontagsVisible ? 'block' : 'none');
+				$ui.css('display', actiontagsVisible ? 'table-row' : 'none');
 			});
 			observer.observe(actiontagsDIV, { attributes: true, attributeFilter: ['style'] });
 			// Initial sync
 			const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-			$ui.css('display', actiontagsVisible ? 'block' : 'none');
+			$ui.css('display', actiontagsVisible ? 'table-row' : 'none');
 			// Add a hidden field to transfer exclusion
 			data.$dlg.find('#addFieldForm').prepend('<input type="hidden" name="rome-em-fieldedit-exclude" value="0">');
-			// Insert after Action Tags / Field Annotation
-			$ui.insertAfter(actiontagsDIV);
-			// initial sync from the action tag
+			// Initial sync from the action tag
 			updateAnnotationTable()
+			// Insert the UI as a new table row
+			data.$dlg.find('#quesTextDiv > table > tbody').append($ui);
 		}
 
 	}

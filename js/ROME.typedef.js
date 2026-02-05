@@ -17,6 +17,8 @@
  * @property {string=} atName
  * @property {boolean=} debug
  * @property {boolean=} isAdmin
+ * @property {string[]=} errors
+ * @property {string[]=} warnings
  * @property {string=} moduleDisplayName
  * @property {Number=} pid
  * @property {string=} version
