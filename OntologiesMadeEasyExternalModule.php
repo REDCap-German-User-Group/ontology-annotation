@@ -21,6 +21,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	const STORE_EXCLUSIONS = 'ROME_EM::EXCLUDED-FIELDS';
 
+	const MIN_SEARCH_LENGTH = 2;
+
 	/** @var Project The current project */
 	private $proj = null;
 	/** @var int|null Project ID */
@@ -108,10 +110,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 			$count = (int)$meta['item_count'];
 			$badge_class = ($count === 0) ? 'badge-danger' : 'badge-info fw-normal';
-			$suffix = '<span style="vertical-align:top;margin-top: 2px;" class="me-1 badge badge-pill '.$badge_class.'">&nbsp;'.$count.'&nbsp;</span>'.$this->framework->tt("conf_proj_fhir_active");
+			$suffix = '<span style="vertical-align:top;margin-top: 2px;" class="me-1 badge badge-pill ' . $badge_class . '">&nbsp;' . $count . '&nbsp;</span>' . $this->framework->tt("conf_proj_fhir_active");
 			$desc = trim((string) $meta['description'] ?? '');
 			$desc = "Das ist eine Beschreibung";
-			if ($desc !== '') $desc = '<br><i class="text-muted">'.$desc.'</i>';
+			if ($desc !== '') $desc = '<br><i class="text-muted">' . $desc . '</i>';
 
 			$injected[] = [
 				'key' => $id, // e.g. src_<uuidhex>
@@ -139,26 +141,23 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	// After a module config has been saved
 	function redcap_module_save_configuration($project_id)
 	{
+		if (empty($project_id)) $project_id = null;
 		$this->initProject($project_id);
 		$this->initConfig();
 
-		// Check that cache backend config is available
-		if (!$this->checkCacheConfigured()) {
+		$cache = $this->getCache();
+
+		if ($cache === null) {
 			// We cannot continue without a valid cache backend configuration
 			// TODO: Alert the admin about this
 			return;
 		}
 
-		require_once __DIR__ . '/classes/Cache.php';
-		require_once __DIR__ . '/classes/CacheBuilder.php';
-
-		// Instantiate cache backend
-		$cacheBackend = ($this->cache_backend === 'disk') ? 'file' : 'module_log';
-		$cache = CacheFactory::create($cacheBackend, $this->external_module_id, $this->cache_dir);
+		require_once __DIR__ . '/classes/FhirQuestionnaireIndexBuilder.php';
 
 		// Builders (dummy for now).
 		$builders = [
-			new DummyIndexBuilder(),
+			new FhirQuestionnaireIndexBuilder(),
 		];
 
 		// Load repeatable sources.
@@ -174,24 +173,24 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		foreach ($entries as $i => $entry) {
 			if (!is_array($entry)) continue;
 
-			$titleOverride = $entry[$settingKeyPrefix.'fhir-title'] ?? '';
-			$descOverride = $entry[$settingKeyPrefix.'fhir-desc'] ?? '';
+			$titleOverride = $entry[$settingKeyPrefix . 'fhir-title'] ?? '';
+			$descOverride = $entry[$settingKeyPrefix . 'fhir-desc'] ?? '';
 			$titleOverride = is_string($titleOverride) ? trim($titleOverride) : '';
 			$descOverride  = is_string($descOverride) ? trim($descOverride) : '';
 
 			// Ensure build + metadata sync.
 			$opts = [
-					'kind' => 'fhir_questionnaire', // May need to add autodetection (Questionnaire and ROME-specific "ROME_Annotation")
-					'doc_id_key' => $settingKeyPrefix.'fhir-file',
-					'meta_key' => $settingKeyPrefix.'fhir-metadata',
-					'title_key' => $settingKeyPrefix.'fhir-title',
-					'desc_key' => $settingKeyPrefix.'fhir-desc',
-					'active_key' => $settingKeyPrefix.'fhir-active',
-					'resolved_title' => $titleOverride,
-					'resolved_desc' => $descOverride,
-					'fallback_title' => 'Untitled',
-					'fallback_desc' => '',
-					'cache_ttl' => 0, // safe due to doc_id versioning
+				'kind' => 'fhir_questionnaire', // May need to add autodetection (Questionnaire and ROME-specific "ROME_Annotation")
+				'doc_id_key' => $settingKeyPrefix . 'fhir-file',
+				'meta_key' => $settingKeyPrefix . 'fhir-metadata',
+				'title_key' => $settingKeyPrefix . 'fhir-title',
+				'desc_key' => $settingKeyPrefix . 'fhir-desc',
+				'active_key' => $settingKeyPrefix . 'fhir-active',
+				'resolved_title' => $titleOverride,
+				'resolved_desc' => $descOverride,
+				'fallback_title' => 'Untitled',
+				'fallback_desc' => '',
+				'cache_ttl' => 0, // safe due to doc_id versioning
 			];
 			$res = $this->ensureBuiltAndMetadata(
 				$cache,
@@ -220,13 +219,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					if ($project_id === null) {
 						$this->framework->setSystemSetting(
 							$key,
-							[ $idx => $value]
+							[$idx => $value]
 						);
-					}
-					else {
+					} else {
 						$this->framework->setProjectSetting(
 							$key,
-							[ $idx => $value],
+							[$idx => $value],
 							$project_id
 						);
 					}
@@ -315,8 +313,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$errors = [];
 		if ($this->checkCacheConfigured() == false) {
 			$errors[] = $this->tt('error_cache_not_configured');
-		}
-		else {
+		} else {
 			$sources_list = $this->buildSourceRegistry($this->project_id)['list'];
 		}
 		$warnings = [];
@@ -333,6 +330,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'errors' => $errors,
 			'warnings' => $warnings,
 			'sources' => $sources_list,
+			'searchEndpoint' => $this->framework->getUrl('ajax/search.php'),
 		];
 		// Add some language strings
 		$this->framework->tt_transferToJavascriptModuleObject([
@@ -345,7 +343,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$ih->js('js/ConsoleDebugLogger.js');
 		$ih->js('js/ROME_OnlineDesigner.js');
 		$ih->css('css/ROME_OnlineDesigner.css');
-		print RCView::script(self::NS_PREFIX . self::EM_NAME . '.init(' . json_encode($config) . ", $jsmo_name);");
+		echo RCView::script(self::NS_PREFIX . self::EM_NAME . '.init(' . json_encode($config) . ", $jsmo_name);");
 	}
 
 	private function add_templates($view)
@@ -712,7 +710,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * @param string|int $project_id 
 	 * @return void 
 	 */
-	private function initProject($project_id)
+	function initProject($project_id)
 	{
 		if ($project_id === null) return;
 		if ($this->proj == null) {
@@ -725,7 +723,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * Reads and sets commonly used module settings as fields of the class, for convenience
 	 * @return void 
 	 */
-	private function initConfig()
+	function initConfig()
 	{
 		if ($this->config_initialized) return;
 
@@ -1328,6 +1326,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'doc_id' => $docId,
 				]);
 
+				// Validate code systems in use
+				$systems = (isset($result->payload['systems']) && is_array($result->payload['systems'])) ? array_values($result->payload['systems']) : [];
+
 				$built = true;
 
 				$meta = [
@@ -1339,6 +1340,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'title' => $resolvedTitle,
 					'description' => $resolvedDesc,
 					'item_count' => (int)$result->itemCount,
+					'systems' => $systems,
 					'built_at' => date('c'),
 				];
 
@@ -1389,6 +1391,20 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'warnings' => $warnings,
 			'errors' => $errors,
 		];
+	}
+
+	function getCache()
+	{
+		// Check that cache backend config is available
+		if (!$this->checkCacheConfigured()) return null;
+
+		require_once __DIR__ . '/classes/Cache.php';
+		require_once __DIR__ . '/classes/CacheBuilder.php';
+
+		// Instantiate cache backend
+		$cacheBackend = ($this->cache_backend === 'disk') ? 'file' : 'module_log';
+		$cache = CacheFactory::create($cacheBackend, $this->external_module_id, $this->cache_dir);
+		return $cache;
 	}
 
 	#endregion
@@ -1484,16 +1500,16 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	private function getBuiltActiveFhirSources($project_id): array
 	{
 		$settingPrefix = $project_id === null ? 'sys-' : 'proj-';
-		$rows = $this->framework->getSubSettings($settingPrefix.'fhir-source', $project_id);
+		$rows = $this->framework->getSubSettings($settingPrefix . 'fhir-source', $project_id);
 		if (!is_array($rows)) $rows = [];
 
 		$out = [];
 		foreach ($rows as $row) {
 			if (!is_array($row)) continue;
 			// Skip inactive sources
-			if (!$row[$settingPrefix.'fhir-active']) continue;
+			if (!$row[$settingPrefix . 'fhir-active']) continue;
 
-			$meta = $this->decodeMetadata($row[$settingPrefix.'fhir-metadata'] ?? null);
+			$meta = $this->decodeMetadata($row[$settingPrefix . 'fhir-metadata'] ?? null);
 			if ($meta === null) continue;
 
 			// Require id + doc_id
@@ -1520,7 +1536,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $v == true;
 	}
 
-
 	#endregion
 
+	function getMinSearchLength(): int
+	{
+		return self::MIN_SEARCH_LENGTH;
+	}
 }

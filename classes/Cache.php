@@ -17,10 +17,6 @@ use RuntimeException;
  *  - Best-effort dogpile protection via short "lock" entries
  *  - TTL-based expiration for remote caches; versioned keys for "forever" local indexes (e.g. idx:<sid>:<fileId>)
  *
- * Requirements / assumptions:
- *  - You provide a global helper function: query(string $sql, array $params): mysqli_result|bool
- *    which supports '?' placeholders including LIMIT ?.
- *  - mysqli_fetch_assoc() is available (standard PHP mysqli).
  */
 
 /**
@@ -494,7 +490,7 @@ final class ModuleLogCacheBackend implements CacheBackend
 		$res = db_query($sql, [$this->emId, $record]);
 		if (!$res) return null;
 
-		$row = mysqli_fetch_assoc($res);
+		$row = db_fetch_assoc($res);
 		return $row ?: null;
 	}
 
