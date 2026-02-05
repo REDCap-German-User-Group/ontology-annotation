@@ -42,7 +42,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if ($page === 'Design/online_designer.php') {
 			$this->initProject($project_id);
 			$form = isset($_GET['page']) && array_key_exists($_GET['page'], $this->proj->forms) ? $_GET['page'] : null;
-			if ($form) $this->init_online_designer($form);
+			if ($form) $this->initOnlineDesigner($form);
 			else return;
 		}
 	}
@@ -136,27 +136,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 
-	/**
-	 * Decode metadata JSON stored in fhir-metadata.
-	 * Returns null if empty/invalid.
-	 */
-	private function decodeMetadata($json): ?array
-	{
-		if (!is_string($json)) return null;
-		$json = trim($json);
-		if ($json === '') return null;
-
-		$meta = json_decode($json, true);
-		return is_array($meta) ? $meta : null;
-	}
-
-
 	// After a module config has been saved
 	function redcap_module_save_configuration($project_id)
 	{
-		// Only run in system context for now
-		if ($project_id !== null && $project_id !== "") return;
-
+		$this->initProject($project_id);
 		$this->initConfig();
 
 		// Check that cache backend config is available
@@ -179,8 +162,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 
 		// Load repeatable sources.
-		$settingKey = 'sys-fhir-source';
-		$entries = $this->framework->getSubSettings($settingKey, null);
+		$settingKeyPrefix = $project_id === null ? 'sys-' : 'proj-';
+		$settingKey = $settingKeyPrefix . 'fhir-source';
+		$entries = $this->framework->getSubSettings($settingKey, $project_id);
 		if (!is_array($entries)) $entries = [];
 
 		$changed_entries = [];
@@ -190,29 +174,30 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		foreach ($entries as $i => $entry) {
 			if (!is_array($entry)) continue;
 
-			$titleOverride = $entry['sys-fhir-title'] ?? '';
-			$descOverride = $entry['sys-fhir-desc'] ?? '';
+			$titleOverride = $entry[$settingKeyPrefix.'fhir-title'] ?? '';
+			$descOverride = $entry[$settingKeyPrefix.'fhir-desc'] ?? '';
 			$titleOverride = is_string($titleOverride) ? trim($titleOverride) : '';
 			$descOverride  = is_string($descOverride) ? trim($descOverride) : '';
 
 			// Ensure build + metadata sync.
-			$res = $this->ensureBuiltAndMetadata(
-				$cache,
-				$builders,
-				$entry,
-				[
-					'kind' => 'fhir_questionnaire',
-					'doc_id_key' => 'sys-fhir-file',
-					'meta_key' => 'sys-fhir-metadata',
-					'title_key' => 'sys-fhir-title',
-					'desc_key' => 'sys-fhir-desc',
-					'active_key' => 'sys-fhir-active',
+			$opts = [
+					'kind' => 'fhir_questionnaire', // May need to add autodetection (Questionnaire and ROME-specific "ROME_Annotation")
+					'doc_id_key' => $settingKeyPrefix.'fhir-file',
+					'meta_key' => $settingKeyPrefix.'fhir-metadata',
+					'title_key' => $settingKeyPrefix.'fhir-title',
+					'desc_key' => $settingKeyPrefix.'fhir-desc',
+					'active_key' => $settingKeyPrefix.'fhir-active',
 					'resolved_title' => $titleOverride,
 					'resolved_desc' => $descOverride,
 					'fallback_title' => 'Untitled',
 					'fallback_desc' => '',
 					'cache_ttl' => 0, // safe due to doc_id versioning
-				]
+			];
+			$res = $this->ensureBuiltAndMetadata(
+				$cache,
+				$builders,
+				$entry,
+				$opts
 			);
 
 			foreach ($res['warnings'] as $w) $warnings[] = $w;
@@ -221,16 +206,30 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$newEntry = $res['updated_entry'];
 
 			// Persist only if metadata changed (we only mutate fhir-metadata).
-			if (($newEntry['sys-fhir-metadata'] ?? null) !== ($entry['sys-fhir-metadata'] ?? null)) {
+			$metadataKey = $settingKeyPrefix . 'fhir-metadata';
+			if (($newEntry[$metadataKey] ?? null) !== ($entry[$metadataKey] ?? null)) {
 				$changed_entries[$i] = $newEntry;
 			}
 		}
 
-		// Write back updated repeatable system setting if needed.
+		// Write back updated repeatable setting if needed.
 		if (count($changed_entries)) {
+			$log_msg = 'FHIR source build complete';
 			foreach ($changed_entries as $idx => $entry) {
 				foreach ($entry as $key => $value) {
-					$this->framework->setSystemSetting($key, [ $idx => $value]);
+					if ($project_id === null) {
+						$this->framework->setSystemSetting(
+							$key,
+							[ $idx => $value]
+						);
+					}
+					else {
+						$this->framework->setProjectSetting(
+							$key,
+							[ $idx => $value],
+							$project_id
+						);
+					}
 				}
 			}
 		}
@@ -240,8 +239,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$log_msg = 'FHIR source build issues:' . count($errors) . ' errors, ' . count($warnings) . ' warnings';
 
 			$this->log($log_msg, [
-				'errors' => json_encode($errors, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-				'warnings' => json_encode($warnings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+				'errors' => json_encode(
+					$errors,
+					JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+				),
+				'warnings' => json_encode(
+					$warnings,
+					JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+				),
 			]);
 		}
 	}
@@ -298,17 +303,21 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * @param string $form 
 	 * @return void 
 	 */
-	private function init_online_designer($form)
+	private function initOnlineDesigner($form)
 	{
 		$this->initConfig();
 		$this->framework->initializeJavascriptModuleObject();
 		$jsmo_name = $this->framework->getJavascriptModuleObjectName();
 		$this->add_templates('online_designer');
 
+		$sources_list = [];
 		// Check for conditions that prevent search from working
 		$errors = [];
 		if ($this->checkCacheConfigured() == false) {
 			$errors[] = $this->tt('error_cache_not_configured');
+		}
+		else {
+			$sources_list = $this->buildSourceRegistry($this->project_id)['list'];
 		}
 		$warnings = [];
 
@@ -323,6 +332,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'knownLinks' => $this->getKnownLinks(),
 			'errors' => $errors,
 			'warnings' => $warnings,
+			'sources' => $sources_list,
 		];
 		// Add some language strings
 		$this->framework->tt_transferToJavascriptModuleObject([
@@ -704,6 +714,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 */
 	private function initProject($project_id)
 	{
+		if ($project_id === null) return;
 		if ($this->proj == null) {
 			$this->proj = new \Project($project_id);
 			$this->project_id = $project_id;
@@ -1379,6 +1390,136 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'errors' => $errors,
 		];
 	}
+
+	#endregion
+
+
+
+	#region Sources Registry
+
+	public function buildSourceRegistry(int $project_id): array
+	{
+		$sys_sources = $this->getBuiltActiveFhirSources(null);
+		$proj_sources = $this->getBuiltActiveFhirSources($project_id);
+
+		$effective = [];
+
+		// Project-private sources (active + built)
+		foreach ($proj_sources as $id => $src) {
+			$effective[$id] = $src;
+		}
+
+		// System sources (opt-in per project)
+		foreach ($sys_sources as $id => $src) {
+			if ($this->isSystemSourceSelectedInProject($project_id, $id)) {
+				$effective[$id] = $src;
+			}
+		}
+
+		// Build JS list (id + label + optional hint/count)
+		$list = [];
+		foreach ($effective as $id => $src) {
+			$list[] = [
+				'id' => $src['id'],
+				'label' => $src['label'],
+				'desc' => $src['meta']['description'],
+				'count' => $src['item_count'],
+				'hint' => 'local',
+			];
+		}
+
+		// Stable ordering helps UX
+		usort($list, function ($a, $b) {
+			return strcasecmp((string)$a['label'], (string)$b['label']);
+		});
+
+		// Lookup map for server dispatch (by id)
+		$map = [];
+		foreach ($effective as $id => $src) {
+			$docId = (int)$src['doc_id'];
+			$map[$id] = [
+				'id' => $id,
+				'scope' => $src['scope'],
+				'kind' => $src['kind'],
+				'doc_id' => $docId,
+				'item_count' => (int)$src['item_count'],
+				// cache key for local index:
+				'index_cache_key' => 'idx:' . $id . ':' . $docId,
+			];
+		}
+
+		return [
+			'list' => $list,
+			'map' => $map,
+		];
+	}
+
+
+	/**
+	 * Decode metadata JSON stored in fhir-metadata.
+	 * Returns null if empty/invalid.
+	 */
+	private function decodeMetadata($json): ?array
+	{
+		if (!is_string($json)) return null;
+		$json = trim($json);
+		if ($json === '') return null;
+
+		$meta = json_decode($json, true);
+		return is_array($meta) ? $meta : null;
+	}
+
+	/** Minimal label normalization */
+	private function buildLabelFromMeta(array $meta): string
+	{
+		$title = isset($meta['title']) ? trim((string)$meta['title']) : '';
+		if ($title === '') $title = 'Untitled';
+
+		$count = isset($meta['item_count']) ? (int)$meta['item_count'] : 0;
+		$suffix = ($count === 0) ? ' (0 items)' : " ({$count} items)";
+
+		return $title . $suffix;
+	}
+
+	private function getBuiltActiveFhirSources($project_id): array
+	{
+		$settingPrefix = $project_id === null ? 'sys-' : 'proj-';
+		$rows = $this->framework->getSubSettings($settingPrefix.'fhir-source', $project_id);
+		if (!is_array($rows)) $rows = [];
+
+		$out = [];
+		foreach ($rows as $row) {
+			if (!is_array($row)) continue;
+			// Skip inactive sources
+			if (!$row[$settingPrefix.'fhir-active']) continue;
+
+			$meta = $this->decodeMetadata($row[$settingPrefix.'fhir-metadata'] ?? null);
+			if ($meta === null) continue;
+
+			// Require id + doc_id
+			$id = (string)($meta['id'] ?? '');
+			$docId = (int)($meta['doc_id'] ?? 0);
+			if ($id === '' || $docId <= 0) continue;
+
+			$out[$id] = [
+				'id' => $id,
+				'scope' => $project_id === null ? 'system' : 'project',
+				'kind' => (string)($meta['kind'] ?? 'fhir_questionnaire'),
+				'doc_id' => $docId,
+				'item_count' => intval($meta['item_count'] ?? 0),
+				'label' => $this->buildLabelFromMeta($meta),
+				'meta' => $meta,
+			];
+		}
+		return $out;
+	}
+
+	private function isSystemSourceSelectedInProject(int $project_id, string $sourceId): bool
+	{
+		$v = $this->getProjectSetting($sourceId, $project_id);
+		return $v == true;
+	}
+
 
 	#endregion
 
