@@ -57,23 +57,38 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			// We can continue and do a best effort scan
 		}
 
-		$systemsSet = [];
+		$url = '';
+		if (isset($data['url']) && is_string($data['url'])) {
+			$url = trim($data['url']);
+		}
+
+		$title = '';
+		if (isset($data['title']) && is_string($data['title'])) {
+			$title = trim($data['title']);
+		}
+
+		$description = '';
+		if (isset($data['description']) && is_string($data['description'])) {
+			$description = trim($data['description']);
+		}
+
 		$entries = [];
 		$items = $data['item'] ?? [];
 		if (is_array($items)) {
-			$this->walkItems($items, $entries, [], $systemsSet);
+			$this->walkItems($items, $entries, []);
 		}
 
-		// Deduplicate by code|display (keeps payload smaller and search stable)
+		// Deduplicate by system|code|display (keeps payload smaller and search stable)
 		$entries = $this->dedupeEntries($entries);
 
-		// Compute sorted unique systems
-		$systems = array_keys($systemsSet);
-		sort($systems, SORT_STRING);
+		$systemCounts = $this->countSystems($entries);
 
 		$payload = [
 			'v' => 0,
-			'systems' => $systems,
+			'url' => $url,
+			'title' => $title,
+			'description' => $description,
+			'system_counts' => $systemCounts,
 			'entries' => $entries,
 		];
 
@@ -86,10 +101,9 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 	 * @param array $items
 	 * @param array $entries out
 	 * @param array $path linkId path (internal only; not exposed to client)
-	 * @param array $systemsSet out
 	 * @return void
 	 */
-	private function walkItems(array $items, array &$entries, array $path, array &$systemsSet): void
+	private function walkItems(array $items, array &$entries, array $path): void
 	{
 		foreach ($items as $item) {
 			if (!is_array($item)) continue;
@@ -103,7 +117,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			// A) item.code[] (Coding)
 			if (isset($item['code']) && is_array($item['code'])) {
 				foreach ($item['code'] as $coding) {
-					$e = $this->codingToEntry($coding, $itemType, $systemsSet);
+					$e = $this->codingToEntry($coding, $itemType);
 					if ($e !== null) {
 						$entries[] = $e;
 					}
@@ -115,7 +129,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 				foreach ($item['answerOption'] as $ao) {
 					if (!is_array($ao)) continue;
 					if (isset($ao['valueCoding'])) {
-						$e = $this->codingToEntry($ao['valueCoding'], $itemType, $systemsSet);
+						$e = $this->codingToEntry($ao['valueCoding'], $itemType);
 						if ($e !== null) {
 							$entries[] = $e;
 						}
@@ -125,7 +139,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 
 			// Recurse into nested items
 			if (isset($item['item']) && is_array($item['item'])) {
-				$this->walkItems($item['item'], $entries, $nextPath, $systemsSet);
+				$this->walkItems($item['item'], $entries, $nextPath);
 			}
 		}
 	}
@@ -135,10 +149,9 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 	 *
 	 * @param mixed $coding
 	 * @param string $itemType FHIR Questionnaire item.type
-	 * @param array $systemsSet  Set of systems in the index
 	 * @return array|null
 	 */
-	private function codingToEntry($coding, string $itemType, array &$systemSet): ?array
+	private function codingToEntry($coding, string $itemType): ?array
 	{
 		if (!is_array($coding)) return null;
 
@@ -196,5 +209,17 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			$out[] = $e;
 		}
 		return $out;
+	}
+
+	private function countSystems(array $entries): array
+	{
+		$systemCounts = [];
+		foreach ($entries as $e) {
+			$sys = (string)($e['system'] ?? '');
+			if ($sys === '') continue;
+			$systemCounts[$sys] = ($systemCounts[$sys] ?? 0) + 1;
+		}
+		ksort($systemCounts, SORT_STRING);
+		return $systemCounts;
 	}
 }

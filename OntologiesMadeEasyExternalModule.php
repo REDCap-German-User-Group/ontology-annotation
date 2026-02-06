@@ -112,7 +112,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$badge_class = ($count === 0) ? 'badge-danger' : 'badge-info fw-normal';
 			$suffix = '<span style="vertical-align:top;margin-top: 2px;" class="me-1 badge badge-pill ' . $badge_class . '">&nbsp;' . $count . '&nbsp;</span>' . $this->framework->tt("conf_proj_fhir_active");
 			$desc = trim((string) $meta['description'] ?? '');
-			$desc = "Das ist eine Beschreibung";
 			if ($desc !== '') $desc = '<br><i class="text-muted">' . $desc . '</i>';
 
 			$injected[] = [
@@ -170,8 +169,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$warnings = [];
 		$errors = [];
 
-		foreach ($entries as $i => $entry) {
+		foreach ($entries as $repeatIdx => $entry) {
 			if (!is_array($entry)) continue;
+			// Skip first entry if it's empty.
+			if ($repeatIdx == 0 && empty($entry[$settingKeyPrefix . 'fhir-file']) &&
+				empty($entry[$settingKeyPrefix . 'fhir-metadata'])) continue;
 
 			$titleOverride = $entry[$settingKeyPrefix . 'fhir-title'] ?? '';
 			$descOverride = $entry[$settingKeyPrefix . 'fhir-desc'] ?? '';
@@ -191,6 +193,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'fallback_title' => 'Untitled',
 				'fallback_desc' => '',
 				'cache_ttl' => 0, // safe due to doc_id versioning
+				'is_system' => $project_id === null,
+				'repeat_idx'=> $repeatIdx,
 			];
 			$res = $this->ensureBuiltAndMetadata(
 				$cache,
@@ -207,7 +211,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			// Persist only if metadata changed (we only mutate fhir-metadata).
 			$metadataKey = $settingKeyPrefix . 'fhir-metadata';
 			if (($newEntry[$metadataKey] ?? null) !== ($entry[$metadataKey] ?? null)) {
-				$changed_entries[$i] = $newEntry;
+				$changed_entries[$repeatIdx] = $newEntry;
+			}
+			else {
+				// If source is to be deactivated, only update active status.
+				if ($newEntry[$settingKeyPrefix . 'active'] !== $entry[$settingKeyPrefix . 'active']) {
+					$changed_entries[$repeatIdx] = [
+						$settingKeyPrefix . 'active' => $newEntry[$settingKeyPrefix . 'active']
+					];
+				}
 			}
 		}
 
@@ -314,7 +326,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if ($this->checkCacheConfigured() == false) {
 			$errors[] = $this->tt('error_cache_not_configured');
 		} else {
-			$sources_list = $this->buildSourceRegistry($this->project_id)['list'];
+			$sources_list = $this->buildSourceRegistry($this->project_id);
 		}
 		$warnings = [];
 
@@ -329,7 +341,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'knownLinks' => $this->getKnownLinks(),
 			'errors' => $errors,
 			'warnings' => $warnings,
-			'sources' => $sources_list,
+			'sources' => $sources_list['list'],
 			'searchEndpoint' => $this->framework->getUrl('ajax/search.php'),
 		];
 		// Add some language strings
@@ -1219,13 +1231,23 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		$ttl = (int)($opts['cache_ttl'] ?? 0);
 
+		$repeatIdx = (int)($opts['repeat_idx'] ?? -1);
+		$isSystem  = (bool)($opts['is_system'] ?? false);
+
 		$docIdRaw = $entry[$docIdKey] ?? null;
 		$docId = is_numeric($docIdRaw) ? (int)$docIdRaw : 0;
 		if ($docId <= 0) {
 			$errors[] = "Missing or invalid doc_id in entry key '{$docIdKey}'.";
 			// When a file is gone, set the entry to inactive and the metadata to null
 			$entry[$activeKey] = false;
-			$entry[$metaKey] = null;
+
+			// IMPORTANT: For system repeatIdx 0, do NOT delete metadata (keeps stable id + semantic identity across delete→save→reopen→upload).
+			if ($isSystem && $repeatIdx === 0) {
+				// keep $entry[$metaKey] as-is
+			} else {
+				$entry[$metaKey] = null;
+			}
+
 			return [
 				'updated_entry' => $entry,
 				'meta' => null,
@@ -1240,7 +1262,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$t = is_string($t) ? trim($t) : '';
 			$resolvedTitle = ($t !== '') ? $t : $fallbackTitle;
 		}
-		if (!is_string($resolvedDesc)) {
+		if (!is_string($resolvedDesc) || trim($resolvedDesc) === '') {
 			$d = $entry[$descKey] ?? '';
 			$d = is_string($d) ? trim($d) : '';
 			$resolvedDesc = ($d !== '') ? $d : $fallbackDesc;
@@ -1256,6 +1278,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$metaId = is_array($meta) ? (string)($meta['id'] ?? '') : '';
 		$metaUuid = is_array($meta) ? (string)($meta['uuid'] ?? '') : '';
 		$metaDocId = is_array($meta) ? (int)($meta['doc_id'] ?? 0) : 0;
+
+		$oldUrl = is_array($meta) ? trim((string)($meta['url'] ?? '')) : '';
+		$oldTitleResolved = is_array($meta) ? trim((string)($meta['title_resolved'] ?? $meta['title'] ?? '')) : '';
+
 
 		// Determine if we need to build.
 		$needsBuild = ($meta === null) || ($metaId === '') || ($metaDocId !== $docId);
@@ -1314,6 +1340,41 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					// reserved for future use
 				]);
 
+				$srcTitle = trim((string)($result->payload['title'] ?? ''));
+				$srcDesc  = trim((string)($result->payload['description'] ?? ''));
+
+				// Override precedence already handled by caller via opts['resolved_*'].
+				// If no override was provided (i.e. opts value empty), use Questionnaire title/description as fallback.
+				if (isset($opts['resolved_title']) && trim((string)$opts['resolved_title']) === '') {
+					if ($srcTitle !== '') $resolvedTitle = $srcTitle;
+				}
+				if (isset($opts['resolved_desc']) && trim((string)$opts['resolved_desc']) === '') {
+					if ($srcDesc !== '') $resolvedDesc = $srcDesc;
+				}
+
+				$newUrl = trim((string)($result->payload['url'] ?? ''));
+
+				// Decide whether to reuse existing id (only relevant if we already have one)
+				$reuseId = false;
+				if ($metaId !== '' && $metaUuid !== '') {
+					if ($oldUrl !== '' && $newUrl !== '') {
+						$reuseId = ($oldUrl === $newUrl);
+					} elseif ($oldUrl === '' && $newUrl === '') {
+						// Fallback: decide based on resolved title (override-aware)
+						$reuseId = ($oldTitleResolved !== '' && $oldTitleResolved === $resolvedTitle);
+					} else {
+						$reuseId = false; // one has url, other doesn't => repurpose
+					}
+				}
+
+				// If this is a repurpose (not a replacement), generate a new id/uuid (even for repeatIdx 0).
+				$hasPriorIdentity = ($oldUrl !== '' || $oldTitleResolved !== '');
+				if (!$reuseId && $hasPriorIdentity) {
+					$ids = $this->generateSourceId();
+					$metaId = $ids['id'];
+					$metaUuid = $ids['uuid'];
+				}
+
 				// Cache key: versioned by doc_id.
 				// Format: idx:<src_id>:<doc_id>
 				$cacheKey = "idx:" . $metaId . ":" . $docId;
@@ -1327,7 +1388,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				]);
 
 				// Validate code systems in use
-				$systems = (isset($result->payload['systems']) && is_array($result->payload['systems'])) ? array_values($result->payload['systems']) : [];
+				$system_counts = $result->payload['system_counts'] ?? [];
+				if (!is_array($system_counts)) $system_counts = [];
 
 				$built = true;
 
@@ -1337,10 +1399,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'uuid' => $metaUuid,
 					'doc_id' => $docId,
 					'kind' => $result->kind,
-					'title' => $resolvedTitle,
-					'description' => $resolvedDesc,
+					'title' => $srcTitle,
+					'title_resolved' => $resolvedTitle,
+					'description' => $srcDesc,
+					'description_resolved' => $resolvedDesc,
 					'item_count' => (int)$result->itemCount,
-					'systems' => $systems,
+					'system_counts' => $system_counts,
+					'url' => (string)($result->payload['url'] ?? ''),
 					'built_at' => date('c'),
 				];
 
@@ -1440,6 +1505,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'label' => $src['label'],
 				'desc' => $src['meta']['description'],
 				'count' => $src['item_count'],
+				'system_counts' => $src['meta']['system_counts'],
 				'hint' => 'local',
 			];
 		}

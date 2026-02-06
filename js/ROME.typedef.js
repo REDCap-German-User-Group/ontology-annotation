@@ -27,6 +27,18 @@
  * @property {Object<string, string>=} knownLinks
  * @property {string[]=} fieldsExcluded
  * @property {string[]=} matrixGroupsExcluded
+ * @property {string[]=} sources
+ * @property {string=} searchEndpoint
+ */
+
+/**
+ * @typedef {Object} SourceInfo
+ * @property {string=} id
+ * @property {string=} label
+ * @property {string=} desc
+ * @property {string=} hint
+ * @property {Number=} count
+ * @property {Object<string, Number>=} systems
  */
 
 /**

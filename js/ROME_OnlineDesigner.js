@@ -9,6 +9,10 @@
 // - [ ] Add a config option/filter to limit searching to selected ontologies (from those configured in
 //       the module settings).
 // - [ ] Add a schema validator (such as https://github.com/ajv-validator/ajv) to the module
+// - [ ] Allow the client to restrict search results to certain code systems (relevant for FhirQuestionnaire stuff). A list is already available.
+// - [ ] Cleanup of module logs and unused src_ settings
+
+
 
 // * Backend structure:
 //   Array, each row represents one annotation. Store coordinates (i.e., field, choice, unit).
