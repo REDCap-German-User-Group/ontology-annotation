@@ -7,7 +7,13 @@ Example: A radio field, _Education Level_, with three options.
 `@ONTOLOGY=`
 ```jsonc
 {
+    // Note: `resourceType` is not present in the action tag.
     "resourceType": "ROME_Ontology_Annotation",
+    // Note: `url` is not present in the action tag. For exports, the value will be set to
+    // the base url of the originating REDCap instance + project id [ + form name/report id]
+    // depending on the export scope.
+    "url": "https://...",
+    // Note: `meta` is not present in export files and added for exports only
     "meta": {
         "version": "1.0.0",
         "created": "2025-07-25T12:45:00+02:00",
@@ -23,7 +29,7 @@ Example: A radio field, _Education Level_, with three options.
         // generated (from the REDCap field) when the ontology annotations are exported
         "name": "education_level",
         "label": "Höchster Bildungsabschluss",
-        // Note: `type` is present in the action tag - it is generated (from the REDCap field) when the ontology annotations are exported
+        // Note: `type` is not present in the action tag - it is generated (from the REDCap field) when the ontology annotations are exported. This is true for all type-related fields.
         "type": "radio",
         "coding": [
             {
@@ -41,7 +47,8 @@ Example: A radio field, _Education Level_, with three options.
         "text": "Höchster erreichter Bildungsabschluss",
         "valueCodingMap": {
             "1": {
-                "label": "Kein Abschluss", // label is the REDCap label - only added for multi-field export (derived from REDCap metadata)
+                // `label` is the REDCap label - only added for multi-field export (derived from REDCap metadata)
+                "label": "Kein Abschluss", 
                 "coding": [
                 {
                     "system": "http://snomed.info/sct",
@@ -91,7 +98,7 @@ Notes:
     "created": "2025-07-25T12:25:00+02:00",   // Initial annotation
     "updated": "2025-07-25T14:00:00+02:00",   // When this field's annotation was last changed
     "creator": "ROME v1.0.0",                 // Tool used to create the annotation
-    "language": "de",                         // The language used for 
+    "language": "de",                         // The language of REDCap field-derived labels
     "profile": [
         "https://..."
     ]
@@ -99,11 +106,13 @@ Notes:
 ```
 
 
-Example of a text field with email validation
+Example of a text field with email validation:
 
-```jsonc
+a) Export JSON
+
+```json
 {
-    "resourceType": "OntologyAnnotation",
+    "resourceType": "ROME_Ontology_Annotation",
     "meta": {
         "version": "1.0.0",
         "created": "2025-07-25T12:50:00+02:00",
@@ -112,8 +121,7 @@ Example of a text field with email validation
         "language": "de"
     },
     "dataElement": {
-        "name": "email",           // optional
-        "label": "E-Mail-Adresse", // optional
+        "name": "email",
         "type": "text",
         "format": "email",
         "coding": [
@@ -128,11 +136,29 @@ Example of a text field with email validation
 }
 ```
 
+b) Inline @ONTOLOGY annotation
+
+```json
+{
+    "dataElement": {
+        "coding": [
+            {
+                "system": "http://snomed.info/sct",
+                "code": "424966008",
+                "display": "Patient email address"
+            }
+        ],
+    }
+}
+```
+
+
+
 Example of a numerical data type (height) with a unit
 
 ```jsonc
 {
-    "resourceType": "OntologyAnnotation",
+    "resourceType": "ROME_Ontology_Annotation",
     "meta": {
         "version": "1.0.0",
         "created": "2025-07-25T12:55:00+02:00",
