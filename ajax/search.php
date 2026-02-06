@@ -20,10 +20,7 @@ $module->initConfig();
 
 $req = read_json_body();
 
-$req = [
-	'q' => 'te',
-	'rid' => 1,
-];
+$_POST;
 
 $q = isset($req['q']) && is_string($req['q']) ? trim($req['q']) : '';
 if ($q === '') json_fail(400, 'Missing query string q.');
@@ -123,7 +120,11 @@ function json_fail(int $code, string $message): void
 function read_json_body(): array
 {
 	$raw = file_get_contents('php://input');
-	if ($raw === false || trim($raw) === '') return [];
+	if ($raw === false) return [];
+	// Remove CSRF token
+	$pos = mb_strpos($raw, '&redcap_csrf_token');
+	if ($pos !== false) $raw = trim(mb_substr($raw, 0, $pos));
+	if ($raw === '') return [];
 	$data = json_decode($raw, true);
 	return is_array($data) ? $data : [];
 }

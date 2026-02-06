@@ -6,6 +6,7 @@ use Exception;
 use InvalidArgumentException;
 use Project;
 use RCView;
+use stdClass;
 use Throwable;
 
 class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternalModule
@@ -225,23 +226,27 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		// Write back updated repeatable setting if needed.
 		if (count($changed_entries)) {
-			$log_msg = 'FHIR source build complete';
-			foreach ($changed_entries as $idx => $entry) {
-				foreach ($entry as $key => $value) {
-					if ($project_id === null) {
-						$this->framework->setSystemSetting(
-							$key,
-							[$idx => $value]
-						);
-					} else {
-						$this->framework->setProjectSetting(
-							$key,
-							[$idx => $value],
-							$project_id
-						);
+			// Full per key arrays must be written. Therefore, we need to transform them first
+			$valuesByKey = [];
+			foreach ($entries as $idx => $entry) {
+				foreach (array_first($changed_entries) as $key => $value) {
+					if (array_key_exists($idx, $changed_entries)) {
+						// Use changed value
+						$value = $changed_entries[$idx][$key];
 					}
+					$valuesByKey[$key][$idx] = $value;
 				}
 			}
+			// Now write back the changed entries
+			foreach ($valuesByKey as $key => $values) {
+				if ($project_id === null) {
+					$this->framework->setSystemSetting($key, $values);
+				} else {
+					$this->framework->setProjectSetting($key, $values, $project_id);
+				}
+			}
+			// Set log message
+			$log_msg = 'FHIR source build complete';
 		}
 
 		// Log warnings / errors
@@ -392,7 +397,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 							<select id="rome-field-choice" class="form-select form-select-sm w-auto">
 								<option value="dataElement"><?= $this->tt('fieldedit_18') ?></option>
 							</select>
-							<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs"><?= $this->tt('fieldedit_10') ?></button>
+							<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs" disabled><?= $this->tt('fieldedit_10')?></button>
 							<div id="rome-edit-field-error">
 								<i class="fa-solid fa-circle-exclamation fa-lg fa-fade"></i>
 							</div>
@@ -497,6 +502,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		foreach ($this->getProjectSetting('minimal-dataset') as $minimal_dataset_string) {
 			if ($minimal_dataset_string == null) continue;
 			$minimal_datasets[] = $minimal_dataset_string;
+			return json_decode($minimal_dataset_string);
 		}
 		// enabled standard minimal datasets
 		foreach (glob(__DIR__ . '/minimal_datasets/*.json') as $filename) {
@@ -792,13 +798,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	function getMinimalAnnotationJSON()
 	{
 		$minimal = [
-			"resourceType" => "ROME_Annotation",
-			"meta" => null,
 			"dataElement" => [
-				"type" => '',
 				'coding' => [],
 				'text' => '',
-				'valueCodingMap' => null,
+				'valueCodingMap' => new stdClass(),
 			],
 		];
 		return json_encode($minimal, JSON_UNESCAPED_UNICODE);
@@ -1608,4 +1611,18 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	{
 		return self::MIN_SEARCH_LENGTH;
 	}
+
+
+	#region BioPortal
+
+	private function isBioPortalEnabled() {
+		
+		global $bioportal_api_token, $bioportal_ontology_list, $bioportal_ontology_list_cache_time;
+
+
+	}
+
+
+	#endregion
+
 }

@@ -88,7 +88,12 @@
 			if (ob && ob['id'] && ['div_add_field', 'addMatrixPopup'].includes(ob.id)) {
 				data.$dlg = $(ob);
 				data.isMatrix = ob.id == 'addMatrixPopup';
-				updateEditFieldUI();
+				try {
+					updateEditFieldUI();
+				}
+				catch (e) {
+					console.error(e);
+				}
 			}
 		}
 
@@ -134,6 +139,8 @@
 
 	//#endregion
 
+	//#region Help
+
 	/**
 	 * Shows a help dialog in response to the "Learn about using Ontology Annotations"
 	 */
@@ -152,6 +159,7 @@
 		}
 	}
 
+	//#endregion
 
 	//#region Edit Field UI
 
@@ -176,11 +184,7 @@
 		// Disable search when there are errors and add error indicator
 		if (config.errors?.length ?? 0 > 0) {
 			data.$dlg.find('#rome-search-bar :input').prop('disabled', true);
-			data.$dlg.find('#rome-edit-field-error')
-				.css('display', 'block')
-				.attr('data-bs-tooltip', 'hover')
-				.attr('title', config.errors.join('\n'))
-				.tooltip('enable');
+			showErrorBadge(config.errors.join('\n'));
 		}
 	}
 
@@ -274,57 +278,57 @@
 				$this.attr('for', id);
 			}
 		});
-		// Init auto completion
-		const $searchInput = $ui.find('input[name="rome-em-fieldedit-search"]');
-		const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
-		const throttledSearch = throttle(function (request, response) {
-			const payload = {
-				"term": request.term,
-				"data.isMatrix": data.isMatrix,
-				"name": data.isMatrix ? data.$dlg.find('input[name="grid_name"]').val() : data.$dlg.find('input[name="field_name"]').val(),
-				// TODO - maybe need add value from target dropdown, in case this affect what we do here
-			};
-			$searchSpinner.addClass('busy');
-			log('Search request:', payload);
-			JSMO.ajax('search', payload)
-				.then(searchResult => {
-					log('Search result:', searchResult);
-					response(searchResult);
-				})
-				.catch(err => error(err))
-				.finally(() => $searchSpinner.removeClass('busy'));
-		}, 500, { leading: false, trailing: true });
-		$searchInput.autocomplete({
-			source: throttledSearch,
-			minLength: 2,
-			delay: 0,
-			open: function (event, ui) {
-				// For some reason, the z-index of the parent dialog keeps shifting up
-				const z = '' + (Number.parseInt(data.$dlg.parents('[role="dialog"]').css('z-index') ?? '199') + 1);
-				const action = ('' + $searchInput.val()).length == 0 ? 'hide' : 'show';
-				$('.ui-autocomplete, .ui-menu-item').css('z-index', z)[action]();
-			},
-			focus: function (event, ui) {
-				return false;
-			},
-			select: function (event, ui) {
-				log('Autosuggest selected:', ui);
+		// // Init auto completion
+		// const $searchInput = $ui.find('input[name="rome-em-fieldedit-search"]');
+		// const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
+		// const throttledSearch = throttle(function (request, response) {
+		// 	const payload = {
+		// 		"term": request.term,
+		// 		"data.isMatrix": data.isMatrix,
+		// 		"name": data.isMatrix ? data.$dlg.find('input[name="grid_name"]').val() : data.$dlg.find('input[name="field_name"]').val(),
+		// 		// TODO - maybe need add value from target dropdown, in case this affect what we do here
+		// 	};
+		// 	$searchSpinner.addClass('busy');
+		// 	log('Search request:', payload);
+		// 	JSMO.ajax('search', payload)
+		// 		.then(searchResult => {
+		// 			log('Search result:', searchResult);
+		// 			response(searchResult);
+		// 		})
+		// 		.catch(err => error(err))
+		// 		.finally(() => $searchSpinner.removeClass('busy'));
+		// }, 500, { leading: false, trailing: true });
+		// $searchInput.autocomplete({
+		// 	source: throttledSearch,
+		// 	minLength: 2,
+		// 	delay: 0,
+		// 	open: function (event, ui) {
+		// 		// For some reason, the z-index of the parent dialog keeps shifting up
+		// 		const z = '' + (Number.parseInt(data.$dlg.parents('[role="dialog"]').css('z-index') ?? '199') + 1);
+		// 		const action = ('' + $searchInput.val()).length == 0 ? 'hide' : 'show';
+		// 		$('.ui-autocomplete, .ui-menu-item').css('z-index', z)[action]();
+		// 	},
+		// 	focus: function (event, ui) {
+		// 		return false;
+		// 	},
+		// 	select: function (event, ui) {
+		// 		log('Autosuggest selected:', ui);
 
-				if (ui.item.value !== '') {
-					$searchInput.val(ui.item.label);
-					document.getElementById("rome-add-button").onclick = function () {
-						updateOntologyActionTag(ui.item);
-					};
-				}
-				return false;
-			}
-		})
-			.data('ui-autocomplete')._renderItem = function (ul, item) {
-				return $("<li></li>")
-					.data("item", item)
-					.append("<a>" + item.display + "</a>")
-					.appendTo(ul);
-			};
+		// 		if (ui.item.value !== '') {
+		// 			$searchInput.val(ui.item.label);
+		// 			document.getElementById("rome-add-button").onclick = function () {
+		// 				updateOntologyActionTag(ui.item);
+		// 			};
+		// 		}
+		// 		return false;
+		// 	}
+		// })
+		// 	.data('ui-autocomplete')._renderItem = function (ul, item) {
+		// 		return $("<li></li>")
+		// 			.data("item", item)
+		// 			.append("<a>" + item.display + "</a>")
+		// 			.appendTo(ul);
+		// 	};
 
 		//#endregion
 
@@ -354,6 +358,7 @@
 			data.$dlg.find('#quesTextDiv > table > tbody').append($ui);
 		}
 
+		initializeSearchInput('input[name="rome-em-fieldedit-search"]');
 	}
 
 
@@ -1088,6 +1093,242 @@
 			return result;
 		};
 	};
+
+	//#region Error Handling
+
+	function showErrorBadge(errorMessage) {
+		if (errorMessage) {
+			data.$dlg.find('#rome-edit-field-error')
+				.css('display', 'block')
+				.attr('data-bs-tooltip', 'hover')
+				.attr('title', errorMessage)
+				.tooltip('enable');
+		}
+		else {
+			data.$dlg.find('#rome-edit-field-error')
+				.css('display', 'none')
+				.tooltip('disable');
+		}
+	}
+
+	//#endregion
+
+	//#region Search Implementation
+
+	const searchState = {
+		rid: 0,
+		term: '',
+		lastTerm: '',
+		lastTermCompleted: false, // true if last term was completed by the server
+		items: [],                // flattened items shown in dropdown
+		pending: {},              // for future polling (unused for now)
+		xhr: null,
+		debounceTimer: null,
+		refreshing: false,        // used later for polling refresh
+		cache: new Map(),         // term -> items[]
+	};
+
+	function showSpinner(state) {
+		const $searchSpinner = data.$dlg.find('.rome-edit-field-ui-spinner');
+		$searchSpinner[state ? 'addClass' : 'removeClass']('busy');
+	}
+
+	function initializeSearchInput(selector) {
+
+		const $input = data.$dlg.find(selector);
+
+		$input.autocomplete({
+			minLength: 2,
+			delay: 0, // we debounce manually
+			source: function (request, responseCb) {
+				const term = (request.term || '').trim();
+				if (term.length < 2) {
+					responseCb([]);
+					return;
+				}
+
+				// Refresh path (used later for polling)
+				if (searchState.refreshing && term === searchState.term) { 
+					responseCb(searchState.items); return;
+				}
+				
+				// Check cache first
+				if (searchState.cache.has(term)) {
+					searchState.term = term;
+					searchState.items = searchState.cache.get(term);
+					searchState.lastTermCompleted = true;
+					responseCb(searchState.items);
+					return;
+				}
+
+				// If autocomplete is re-triggering with the same term (arrow keys, focus, etc.),
+				// do NOT re-query server. Serve cached items (even if empty).
+				if (term === searchState.term && searchState.lastTermCompleted) {
+					responseCb(searchState.items);
+					return;
+				}
+
+				// If we get here, we need to query the server.
+				queueSearch(term, responseCb);
+			}
+		})
+		.data('ui-autocomplete')._renderItem = function (ul, item) {
+			const sys = shortSystem(item.hit.system);
+			const code = item.hit.code ? ` [${item.hit.code}]` : '';
+
+			return $('<li>')
+				.append($('<div>').text(`${sys}: ${item.label}${code}`))
+				.appendTo(ul);
+		};
+
+		$input.on('autocompleteselect', function (e, ui) {
+			if (searchState.debounceTimer) {
+				clearTimeout(searchState.debounceTimer);
+				searchState.debounceTimer = null;
+			}
+			const h = ui.item.hit;
+			setSelectedAnnotation({
+				sourceId: ui.item.sourceId,
+				system: h.system,
+				code: h.code,
+				display: h.display,
+				type: h.type || null
+			});
+		});
+	}
+
+	function setSelectedAnnotation(annotation) {
+		// Dummy
+		log('Selected annotation:', annotation);
+	}
+
+	/**
+	 * Maps known code systems to a short name
+	 * TODO: This should be configurable (server side)
+	 * @param {string} system 
+	 * @returns {string}
+	 */
+	function shortSystem(system) {
+		if (!system) return 'CODE';
+		if (system.includes('snomed')) return 'SNOMEDCT';
+		if (system.includes('loinc')) return 'LOINC';
+		return system;
+	}
+
+	function queueSearch(term, responseCb) {
+		if (searchState.debounceTimer) {
+			clearTimeout(searchState.debounceTimer);
+		}
+
+		searchState.debounceTimer = setTimeout(() => {
+			startSearch(term, responseCb);
+		}, 200);
+	}
+
+	function startSearch(term, responseCb) {
+		if (term.length < 2) {
+			stopSearch();
+			responseCb([]);
+			return;
+		}
+
+		// new query identity
+		searchState.rid += 1;
+		searchState.term = term;
+		searchState.items = [];
+		searchState.lastTermCompleted = false;
+		searchState.pending = {};
+
+		// abort previous request
+		if (searchState.xhr) {
+			searchState.xhr.abort();
+			searchState.xhr = null;
+		}
+
+		showSpinner(true);
+
+		const rid = searchState.rid;
+
+		searchState.xhr = $.ajax({
+			url: config.searchEndpoint,
+			method: 'POST',
+			contentType: 'application/json; charset=utf-8',
+			dataType: 'json',
+			data: JSON.stringify({ rid, q: term })
+		})
+			.done(resp => {
+				log('Search - received response', resp);
+				if (!resp || resp.rid !== searchState.rid) return;
+
+				searchState.items = flattenResults(resp.results || {});
+				searchState.cache.set(term, searchState.items);
+				searchState.lastTermCompleted = true;
+				responseCb(searchState.items);
+
+				// placeholder for future polling:
+				// searchState.pending = resp.pending || {};
+
+				showSpinner(false);
+				// Clear error badge if raised earlier
+				if (searchState.errorRaised) {
+					searchState.errorRaised = false;
+					showErrorBadge(false);
+				}
+			})
+			.fail((xhr, status) => {
+				let error = 'Unknown error';
+				if (xhr && xhr.responseJSON && xhr.responseJSON.error) {
+					error = xhr.responseJSON.error;
+				} 
+				log(`Search - failed (${status})`, error);
+				if (status === 'abort') return;
+
+				searchState.items = [];
+				searchState.lastTermCompleted = true;
+				responseCb([]);
+				showSpinner(false);
+				// Report error
+				searchState.errorRaised = true;
+				showErrorBadge(`Search could not be performed. The server reported this error: ${error}`);
+			})
+			.always(() => {
+				searchState.xhr = null;
+			});
+	}
+
+	function flattenResults(resultsBySource) {
+		const out = [];
+
+		for (const [sourceId, hits] of Object.entries(resultsBySource)) {
+			if (!Array.isArray(hits)) continue;
+
+			for (const h of hits) {
+				out.push({
+					label: h.display || h.code || '(no label)',
+					value: h.display || h.code || '',
+					hit: h,
+					sourceId
+				});
+			}
+		}
+
+		// stable sort: score desc, otherwise insertion order
+		out.sort((a, b) => (b.hit.score || 0) - (a.hit.score || 0));
+		return out;
+	}
+
+	function stopSearch() {
+		if (searchState.xhr) {
+			searchState.xhr.abort();
+			searchState.xhr = null;
+		}
+		searchState.items = [];
+		searchState.pending = {};
+		showSpinner(false);
+		showErrorBadge(false);
+	}
+
+	//#endregion
 
 
 })();

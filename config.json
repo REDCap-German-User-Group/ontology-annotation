@@ -188,6 +188,10 @@
 		"refresh-exclusions",
 		"discover"
 	],
+	"no-csrf-pages": [
+        "ajax/search",
+		"ajax/poll"
+    ],
 	"links": {
 		"project": [
 			{
