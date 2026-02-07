@@ -27,8 +27,9 @@
  * @property {Object<string, string>=} knownLinks
  * @property {string[]=} fieldsExcluded
  * @property {string[]=} matrixGroupsExcluded
- * @property {string[]=} sources
+ * @property {SourceInfo[]=} sources
  * @property {string=} searchEndpoint
+ * @property {string=} pollEndpoint
  */
 
 /**
@@ -59,6 +60,7 @@
  * @property {string=} enum
  * @property {boolean=} isMatrix
  * @property {JQuery<HTMLElement>=} $dlg
+ * @property {JQuery<HTMLElement>=} $input
  */
 
 /**

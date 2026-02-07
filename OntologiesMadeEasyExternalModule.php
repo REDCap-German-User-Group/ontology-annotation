@@ -122,6 +122,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			];
 		}
 
+
+		$bioportal_enabled = $this->isBioPortalAvailable();
+		// TODO - Add a BioPortal source config interface
+
 		// Inject into settings
 		if (!empty($injected)) {
 			$settings[] = [
@@ -173,8 +177,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		foreach ($entries as $repeatIdx => $entry) {
 			if (!is_array($entry)) continue;
 			// Skip first entry if it's empty.
-			if ($repeatIdx == 0 && empty($entry[$settingKeyPrefix . 'fhir-file']) &&
-				empty($entry[$settingKeyPrefix . 'fhir-metadata'])) continue;
+			if (
+				$repeatIdx == 0 && empty($entry[$settingKeyPrefix . 'fhir-file']) &&
+				empty($entry[$settingKeyPrefix . 'fhir-metadata'])
+			) continue;
 
 			$titleOverride = $entry[$settingKeyPrefix . 'fhir-title'] ?? '';
 			$descOverride = $entry[$settingKeyPrefix . 'fhir-desc'] ?? '';
@@ -195,7 +201,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'fallback_desc' => '',
 				'cache_ttl' => 0, // safe due to doc_id versioning
 				'is_system' => $project_id === null,
-				'repeat_idx'=> $repeatIdx,
+				'repeat_idx' => $repeatIdx,
 			];
 			$res = $this->ensureBuiltAndMetadata(
 				$cache,
@@ -213,8 +219,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$metadataKey = $settingKeyPrefix . 'fhir-metadata';
 			if (($newEntry[$metadataKey] ?? null) !== ($entry[$metadataKey] ?? null)) {
 				$changed_entries[$repeatIdx] = $newEntry;
-			}
-			else {
+			} else {
 				// If source is to be deactivated, only update active status.
 				if ($newEntry[$settingKeyPrefix . 'active'] !== $entry[$settingKeyPrefix . 'active']) {
 					$changed_entries[$repeatIdx] = [
@@ -331,7 +336,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if ($this->checkCacheConfigured() == false) {
 			$errors[] = $this->tt('error_cache_not_configured');
 		} else {
-			$sources_list = $this->buildSourceRegistry($this->project_id);
+			$sources_list = $this->buildSourceRegistry($this->project_id)['list'];
 		}
 		$warnings = [];
 
@@ -346,8 +351,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'knownLinks' => $this->getKnownLinks(),
 			'errors' => $errors,
 			'warnings' => $warnings,
-			'sources' => $sources_list['list'],
+			'sources' => $sources_list,
 			'searchEndpoint' => $this->framework->getUrl('ajax/search.php'),
+			'pollEndpoint' => $this->framework->getUrl('ajax/poll.php'),
 		];
 		// Add some language strings
 		$this->framework->tt_transferToJavascriptModuleObject([
@@ -389,7 +395,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					<div class="rome-edit-field-ui-body">
 						<div id="rome-search-bar" class="d-flex align-items-baseline gap-2">
 							<span><?= $this->tt('fieldedit_08') ?></span>
-							<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm " placeholder="<?= $this->tt('fieldedit_02') ?>">
+							<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm rome-search" placeholder="<?= $this->tt('fieldedit_02') ?>">
 							<span class="rome-edit-field-ui-spinner">
 								<i class="fa-solid fa-spinner fa-spin-pulse rome-edit-field-ui-spinner-spinning"></i>
 								<i class="fa-solid fa-arrow-right fa-lg rome-edit-field-ui-spinner-not-spinning"></i>
@@ -397,7 +403,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 							<select id="rome-field-choice" class="form-select form-select-sm w-auto">
 								<option value="dataElement"><?= $this->tt('fieldedit_18') ?></option>
 							</select>
-							<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs" disabled><?= $this->tt('fieldedit_10')?></button>
+							<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs" disabled><?= $this->tt('fieldedit_10') ?></button>
 							<div id="rome-edit-field-error">
 								<i class="fa-solid fa-circle-exclamation fa-lg fa-fade"></i>
 							</div>
@@ -1483,33 +1489,39 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	public function buildSourceRegistry(int $project_id): array
 	{
-		$sys_sources = $this->getBuiltActiveFhirSources(null);
-		$proj_sources = $this->getBuiltActiveFhirSources($project_id);
-
 		$effective = [];
 
 		// Project-private sources (active + built)
+		$proj_sources = $this->getBuiltActiveFhirSources($project_id);
 		foreach ($proj_sources as $id => $src) {
 			$effective[$id] = $src;
 		}
 
 		// System sources (opt-in per project)
+		$sys_sources = $this->getBuiltActiveFhirSources(null);
 		foreach ($sys_sources as $id => $src) {
 			if ($this->isSystemSourceSelectedInProject($project_id, $id)) {
 				$effective[$id] = $src;
 			}
 		}
 
+		// External sources
+		$ext_sources = $this->getConfiguredActiveExternalSources($project_id);
+		foreach ($ext_sources as $id => $src) {
+			$effective[$id] = $src;
+		}
+
 		// Build JS list (id + label + optional hint/count)
 		$list = [];
 		foreach ($effective as $id => $src) {
+			$system_counts = ($src['meta'] ?? [])['system_counts'] ?? null;
 			$list[] = [
 				'id' => $src['id'],
 				'label' => $src['label'],
-				'desc' => $src['meta']['description'],
-				'count' => $src['item_count'],
-				'system_counts' => $src['meta']['system_counts'],
-				'hint' => 'local',
+				'desc' => $src['desc'],
+				'count' => $src['item_count'] ?? null,
+				'system_counts' => $system_counts,
+				'hint' => ($src['external'] ?? false) ? 'local' : 'external',
 			];
 		}
 
@@ -1589,13 +1601,34 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$out[$id] = [
 				'id' => $id,
 				'scope' => $project_id === null ? 'system' : 'project',
+				'external' => false,
 				'kind' => (string)($meta['kind'] ?? 'fhir_questionnaire'),
 				'doc_id' => $docId,
 				'item_count' => intval($meta['item_count'] ?? 0),
 				'label' => $this->buildLabelFromMeta($meta),
+				'desc' => (string)($meta['description'] ?? ''),
 				'meta' => $meta,
 			];
 		}
+		return $out;
+	}
+
+	private function getConfiguredActiveExternalSources(int $project_id): array 
+	{
+		$out = [];
+		// TODO: get configured sources from project settings
+
+		return $out;
+
+		// For now, return hardcoded BioPortal SNOMEDCT
+		$out['src_bioportal_snomedct'] = [
+			'id' => 'src_bioportal_snomedct',
+			'kind' => 'bioportal',
+			'scope' => 'project',
+			'label' => 'BioPortal: SNOMEDCT',
+			'desc' => 'Search SNOMED CT via BioPortal',
+			'external' => true,
+		];
 		return $out;
 	}
 
@@ -1604,6 +1637,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$v = $this->getProjectSetting($sourceId, $project_id);
 		return $v == true;
 	}
+
 
 	#endregion
 
@@ -1615,14 +1649,256 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region BioPortal
 
-	private function isBioPortalEnabled() {
+	function isBioPortalAvailable()
+	{
+
+		$enabled = $GLOBALS['enable_ontology_auto_suggest'] == true;
+		$hasApiKey = trim($GLOBALS['bioportal_api_token']) != '';
+		return $enabled && $hasApiKey;
+	}
+
+	/**
+	 * Gets BioPortal API details (if available)
+	 * @return array{api_url: string, api_token: string, ontology_list: string, enabled: bool} 
+	 */
+	function getBioPortalApiDetails()
+	{
+		// Ontoloy list:
+		// "name": "VODANAFACILITIESLIST",
+		// "acronym": "VODANAMFLCODE",
+		// "@id": "https://data.bioontology.org/ontologies/VODANAMFLCODE",
+		// "@type": "http://data.bioontology.org/metadata/Ontology"
+
+		$details = [
+			'api_url' => (string)$GLOBALS['bioportal_api_url'] ?? '',
+			'api_token' => (string)$GLOBALS['bioportal_api_token'] ?? '',
+			'ontology_list' => (string)$GLOBALS['bioportal_ontology_list'] ?? '',
+			'enabled' => $this->isBioPortalAvailable(),
+		];
+		return $details;
+	}
+
+	/**
+	 * BioPortal search across multiple ontologies (acronyms).
+	 * - validates acronyms against REDCap cached ontology list
+	 * - returns per-acronym hit lists (each capped to $limit)
+	 * - does ONE BioPortal call for all cache misses
+	 *
+	 * @param Cache $cache
+	 * @param array{api_url: string, api_token: string, ontology_list: string, enabled: bool} $bp
+	 * @param array<int, string> $acronyms Requested ontology acronyms (any case)
+	 * @param string $q Query
+	 * @param int $limit Per-acronym limit
+	 * @param int $ttlSeconds Cache TTL per acronym (e.g. 1800)
+	 * @return array<string, array<int, array{system:string, code:string, display:string, score:int|float}>> keyed by ACRONYM (uppercase)
+	 */
+	function searchBioPortal(
+		Cache $cache,
+		array $bp,
+		array $acronyms,
+		string $q,
+		int $limit,
+		int $ttlSeconds = 1800
+	): array {
+		$out = [];
+		$q = trim($q);
+
+		if (empty($bp['enabled']) || $q === '' || $limit <= 0) return $out;
+
+		$base  = rtrim((string)($bp['api_url'] ?? ''), '/') . '/';
+		$token = (string)($bp['api_token'] ?? '');
+		if ($base === '/' || $token === '') return $out;
+
+		// Allowed acronyms (REDCap cached list)
+		$allowed = $this->getBioPortalAllowedAcronyms($bp);
+
+		// Normalize + validate requested acronyms
+		$req = [];
+		foreach ($acronyms as $a) {
+			if (!is_string($a)) continue;
+			$a = strtoupper(trim($a));
+			if ($a === '') continue;
+			if (!isset($allowed[$a])) continue; // only allow known ontologies
+			$req[$a] = true;
+		}
+		$reqAcronyms = array_keys($req);
+		if (!$reqAcronyms) return $out;
+
+		// Cache check per acronym
+		$misses = [];
+		foreach ($reqAcronyms as $acr) {
+			$cacheKey = $this->bioPortalCacheKey($acr, $q);
+			$cached = $cache->getPayload($cacheKey);
+			if (is_array($cached)) {
+				$out[$acr] = $cached;
+			} else {
+				$misses[] = $acr;
+			}
+		}
+
+		// If all hit cache, done
+		if (!$misses) return $out;
+
+		// One unified BioPortal call for misses
+		$pagesize = $limit * count($misses);
+
+
+		// TODO - fix
+		// Idea to get ACRONYM - DIFFERENT ACRONYM mapping is to do a simple request to search for a 
+		// single ontology and extract the id. 
+		// This is a bit of a hack, but it's the only way to get the ACRONYM - DIFFERENT ACRONYM mapping
 		
-		global $bioportal_api_token, $bioportal_ontology_list, $bioportal_ontology_list_cache_time;
+		$params = [
+			'q' => $q,
+			'ontologies' => implode(',', $misses),
+			'suggest' => 'true',
+			'include' => 'prefLabel,notation,cui',
+			'display_links' => 'false',
+			'display_context' => 'false',
+			'format' => 'json',
+			'pagesize' => (int)$pagesize,
+			'page' => 1,
+			'apikey' => $token,
+		];
+		$url = $base . 'search?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 
+		$headers = ['Accept: application/json'];
+		$ua = $this->getUserAgentString();
 
+		$resp = http_get($url, 5, '', $headers, $ua);
+		if ($resp === false || trim($resp) === '') {
+			// If BioPortal fails, return whatever cache hits we had (misses remain absent)
+			return $out;
+		}
+
+		$json = json_decode($resp, true);
+		$collection = is_array($json) ? ($json['collection'] ?? null) : null;
+		if (!is_array($collection)) return $out;
+
+		// Prepare buckets for misses
+		$fetched = [];
+		foreach ($misses as $acr) $fetched[$acr] = [];
+
+		// Split + map, enforcing per-acronym limit
+		foreach ($collection as $r) {
+			if (!is_array($r)) continue;
+
+			$id = isset($r['@id']) && is_string($r['@id']) ? $r['@id'] : '';
+			$acr = $this->bioPortalAcronymFromId($id);
+			if ($acr === '' || !isset($fetched[$acr])) continue;
+
+			if (count($fetched[$acr]) >= $limit) continue;
+
+			$display = isset($r['prefLabel']) && is_string($r['prefLabel']) ? trim($r['prefLabel']) : '';
+			if ($display === '' && isset($r['label']) && is_string($r['label'])) $display = trim($r['label']);
+			if ($display === '') continue;
+
+			// Prefer notation when present (canonical codes)
+			$code = isset($r['notation']) && is_string($r['notation']) ? trim($r['notation']) : '';
+			if ($code === '') {
+				// fallback (still stable, but BioPortal-specific)
+				$code = $id !== '' ? trim($id) : '';
+			}
+			if ($code === '') continue;
+
+			$fetched[$acr][] = [
+				'system' => $this->bioPortalSystemUriForAcronym($acr),
+				'code' => $code,
+				'display' => $display,
+				'score' => 1,
+			];
+		}
+
+		// Store misses into cache + merge into output (even if empty, cache empties to avoid hammering)
+		foreach ($misses as $acr) {
+			$hits = $fetched[$acr] ?? [];
+			$cacheKey = $this->bioPortalCacheKey($acr, $q);
+			$cache->setPayload($cacheKey, $hits, $ttlSeconds, [
+				'kind' => 'bioportal',
+				'acr' => $acr,
+			]); // <-- adapt if your Cache API differs
+			$out[$acr] = $hits;
+		}
+
+		return $out;
+	}
+
+	private function bioPortalCacheKey(string $acr, string $q): string
+	{
+		// normalize q for cache key (keep it cheap, no hashing needed)
+		$acr = strtoupper(trim($acr));
+		$q = mb_strtolower(trim($q));
+		$q = preg_replace('/\s+/', ' ', $q);
+		return 'bp:' . $acr . ':' . $q;
+	}
+
+	/**
+	 * Extract acronym from BioPortal @id like:
+	 * http://purl.bioontology.org/ontology/SNOMEDCT/111552007
+	 */
+	private function bioPortalAcronymFromId(string $id): string
+	{
+		if ($id === '') return '';
+		// Fast parse without regex
+		$needle = '/ontology/';
+		$pos = strpos($id, $needle);
+		if ($pos === false) return '';
+		$rest = substr($id, $pos + strlen($needle));
+		$slash = strpos($rest, '/');
+		if ($slash === false) return '';
+		$acr = substr($rest, 0, $slash);
+		$acr = strtoupper(trim($acr));
+		return $acr;
+	}
+
+	/**
+	 * System URI mapping (expand later).
+	 */
+	private function bioPortalSystemUriForAcronym(string $acr): string
+	{
+		$acr = strtoupper(trim($acr));
+		if ($acr === 'SNOMEDCT') return 'http://snomed.info/sct';
+		if ($acr === 'LOINC') return 'http://loinc.org';
+		return 'bioportal:' . $acr;
 	}
 
 
+
+	/**
+	 * @param array{ontology_list: string} $bp
+	 * @return array<string, true> Set of allowed acronyms (uppercase)
+	 */
+	private function getBioPortalAllowedAcronyms(array $bp): array
+	{
+		$set = [];
+
+		// TODO: The list is capped by what is configured to be searchable in the project
+
+
+		$raw = (string)($bp['ontology_list'] ?? '');
+		if ($raw === '') return $set;
+
+		$list = json_decode($raw, true);
+		if (!is_array($list)) return $set;
+
+		foreach ($list as $o) {
+			if (!is_array($o)) continue;
+			$acr = $o['acronym'] ?? '';
+			if (!is_string($acr)) continue;
+			$acr = trim($acr);
+			if ($acr === '') continue;
+			$set[strtoupper($acr)] = true;
+		}
+
+		return $set;
+	}
+
+	
 	#endregion
+
+	function getUserAgentString() 
+	{
+		return 'ROME-REDCap-EM (BioPortal search, experimental)';
+	}
 
 }

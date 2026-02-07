@@ -20,14 +20,18 @@ $module->initConfig();
 
 $req = read_json_body();
 
-$_POST;
-
+// Check query is present
 $q = isset($req['q']) && is_string($req['q']) ? trim($req['q']) : '';
 if ($q === '') json_fail(400, 'Missing query string q.');
+// Check query length
+$qLen = mb_strlen($q);
+$qMinLen = $module->getMinSearchLength();
+if ($qLen < $qMinLen) json_fail(400, "Query string must be at least $qMinLen characters long.");
+// Check request id
 $rid = $req['rid'] ?? null;
 if (!is_int($rid)) json_fail(400, 'Missing or invalid rid (must be an integer).');
 
-// source_ids: optional
+// Parse source_ids: optional
 $sourceIds = [];
 if (isset($req['source_ids'])) {
 	if (!is_array($req['source_ids'])) json_fail(400, 'source_ids must be an array.');
@@ -56,7 +60,7 @@ $results = [];
 $errors = [];
 $stats = [];
 
-// --- Dispatch search -------------------------------------------------------
+// --- Dispatch LOCAL search -------------------------------------------------
 
 foreach ($sourceIds as $sid) {
 	if (!isset($sources_map[$sid])) {
@@ -95,15 +99,52 @@ foreach ($sourceIds as $sid) {
 	}
 }
 
-if (empty($errors)) $errors = (object)[];
-if (empty($stats))  $stats  = (object)[];
+
+// --- Dispatch REMOTE search (defered) --------------------------------------
+
+// BioPortal
+$bp = $module->getBioPortalApiDetails();
+if (($bp['enabled'] ?? false) && $qLen >= 2) {
+	$ontologies_to_search = ['SNOMEDCT'];
+
+	foreach ($ontologies_to_search as $acr) {
+		$srcKey = 'src_bioportal_' . strtolower($acr);
+
+		// create a deferred job token (cheap + opaque)
+		$token = bin2hex(random_bytes(16));
+
+		// store job descriptor in cache (short-lived)
+		$cache->setPayload(
+			'job:' . $token,
+			[
+				'rid' => $rid,
+				'q' => $q,
+				'acronym' => $acr,
+				'srcKey' => $srcKey,
+				'created_at' => time(),
+			],
+			300, // 5 min TTL
+			['kind' => 'bioportal_job']
+		);
+
+		// tell client this source is pending
+		$pending[$srcKey] = [
+			'token' => $token,
+			'after_ms' => 300,
+		];
+	}
+}
+
+
+// --- Send response to client _______--------------------------------------
 
 header('Content-Type: application/json; charset=utf-8');
 echo json_encode([
 	'rid' => $rid,
 	'results' => $results,
-	'errors' => $errors,
-	'stats' => $stats,
+	'pending' => $pending,
+	'errors' => $errors ?: new stdClass(),
+	'stats' => $stats ?: new stdClass(),
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
 

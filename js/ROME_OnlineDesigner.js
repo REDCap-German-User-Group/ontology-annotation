@@ -1,6 +1,5 @@
 // Ontology Made Easy EM - Online Designer Integration
 
-
 // TODOs
 // - [ ] Scrap the whole Ontology table as is and replace with a DataTable and a backend structure*
 // - [ ] Instead of the search field, require manual search trigger and display results in a popover,
@@ -57,7 +56,7 @@
 	let JSMO = null;
 
 	/** @type {OnlineDesignerState} */
-	const data = {};
+	const designerState = {};
 
 	/** @type {OntologyAnnotationParser} */
 	let ontologyParser;
@@ -86,8 +85,8 @@
 		window['fitDialog'] = function (ob) {
 			orig_fitDialog(ob);
 			if (ob && ob['id'] && ['div_add_field', 'addMatrixPopup'].includes(ob.id)) {
-				data.$dlg = $(ob);
-				data.isMatrix = ob.id == 'addMatrixPopup';
+				designerState.$dlg = $(ob);
+				designerState.isMatrix = ob.id == 'addMatrixPopup';
 				try {
 					updateEditFieldUI();
 				}
@@ -145,9 +144,9 @@
 	 * Shows a help dialog in response to the "Learn about using Ontology Annotations"
 	 */
 	function showFieldHelp() {
-		if (!data.fieldHelpContent) {
+		if (!designerState.fieldHelpContent) {
 			JSMO.ajax('get-fieldhelp').then(response => {
-				data.fieldHelpContent = response;
+				designerState.fieldHelpContent = response;
 				showFieldHelp();
 			}).catch(err => {
 				error(err);
@@ -155,7 +154,7 @@
 		}
 		else {
 			log('Showing field help');
-			simpleDialog(data.fieldHelpContent, config.moduleDisplayName);
+			simpleDialog(designerState.fieldHelpContent, config.moduleDisplayName);
 		}
 	}
 
@@ -164,44 +163,44 @@
 	//#region Edit Field UI
 
 	function updateEditFieldUI() {
-		if (data.$dlg.find('.rome-edit-field-ui-container').length == 0) {
+		if (designerState.$dlg.find('.rome-edit-field-ui-container').length == 0) {
 			addEditFieldUI();
 		}
 		log('Updating Edit Field UI');
 		// Exclusion checkbox
 		let excluded = false;
-		if (data.isMatrix) {
-			const matrixGroupName = '' + data.$dlg.find('#grid_name').val();
+		if (designerState.isMatrix) {
+			const matrixGroupName = '' + designerState.$dlg.find('#grid_name').val();
 			excluded = config.matrixGroupsExcluded.includes(matrixGroupName);
 		}
 		else {
-			const fieldName = '' + data.$dlg.find('input[name="field_name"]').val();
+			const fieldName = '' + designerState.$dlg.find('input[name="field_name"]').val();
 			excluded = config.fieldsExcluded.includes(fieldName);
 		}
 		setExcludedCheckboxState(excluded);
-		data.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
+		designerState.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
 		updateAnnotationTable();
 		// Disable search when there are errors and add error indicator
 		if (config.errors?.length ?? 0 > 0) {
-			data.$dlg.find('#rome-search-bar :input').prop('disabled', true);
+			designerState.$dlg.find('#rome-search-bar :input').prop('disabled', true);
 			showErrorBadge(config.errors.join('\n'));
 		}
 	}
 
 	function isExcludedCheckboxChecked() {
-		return data.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked') == true;
+		return designerState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked') == true;
 	}
 
 	function setExcludedCheckboxState(state) {
-		data.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked', state);
-		$('input[name="rome-em-fieldedit-exclude"]').val(state ? '1' : '0');		
+		designerState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked', state);
+		$('input[name="rome-em-fieldedit-exclude"]').val(state ? '1' : '0');
 	}
 
 
 	function addEditFieldUI() {
-		if (data.$dlg.find('.rome-edit-field-ui-container').length > 0) return;
+		if (designerState.$dlg.find('.rome-edit-field-ui-container').length > 0) return;
 		let $ui;
-		if (data.isMatrix) {
+		if (designerState.isMatrix) {
 			log('Adding Edit Matrix UI');
 			$ui = $($('#rome-em-fieldedit-ui-template').html());
 		}
@@ -214,9 +213,9 @@
 		//#region Setup event handlers
 
 		// Track changes to the choices
-		const $enum = data.isMatrix
-			? data.$dlg.find('textarea[name="element_enum_matrix"]')
-			: data.$dlg.find('textarea[name="element_enum"]');
+		const $enum = designerState.isMatrix
+			? designerState.$dlg.find('textarea[name="element_enum_matrix"]')
+			: designerState.$dlg.find('textarea[name="element_enum"]');
 		// Detect user input
 		$enum[0].addEventListener('change', () => {
 			trackEnumChange($enum.val());
@@ -236,7 +235,7 @@
 		});
 		// Keep track of changes
 		function trackEnumChange(val) {
-			if (val !== data.enum) {
+			if (val !== designerState.enum) {
 				const fieldType = getFieldType();
 				if (['select', 'radio', 'checkbox'].includes(fieldType)) {
 					setEnum(val);
@@ -244,14 +243,14 @@
 			}
 		}
 		// Track changes of the field type and set enum
-		data.$dlg.find('select[name="field_type"]').on('change', () => {
-			data.fieldType = getFieldType();
-			log('Field type changed:', data.fieldType);
-			if (data.fieldType == 'yesno' || data.fieldType == 'truefalse') {
-				const val = $('#div_element_' + data.fieldType + '_enum div').last().html().trim().replace('<br>', '\n');
+		designerState.$dlg.find('select[name="field_type"]').on('change', () => {
+			designerState.fieldType = getFieldType();
+			log('Field type changed:', designerState.fieldType);
+			if (designerState.fieldType == 'yesno' || designerState.fieldType == 'truefalse') {
+				const val = $('#div_element_' + designerState.fieldType + '_enum div').last().html().trim().replace('<br>', '\n');
 				setEnum(val);
 			}
-			else if (['select', 'radio', 'checkbox'].includes(data.fieldType)) {
+			else if (['select', 'radio', 'checkbox'].includes(designerState.fieldType)) {
 				trackEnumChange($enum.val());
 			}
 			else {
@@ -261,14 +260,14 @@
 		// Init and track "Do not annotate this field/matrix"
 		$ui.find('.rome-em-fieldedit-exclude').each(function () {
 			const $this = $(this);
-			const id = 'rome-em-fieldedit-exclude-' + (data.isMatrix ? 'matrix' : 'field');
+			const id = 'rome-em-fieldedit-exclude-' + (designerState.isMatrix ? 'matrix' : 'field');
 			if ($this.is('input')) {
 				$this.attr('id', id);
 				$this.on('change', function () {
 					const checked = $(this).prop('checked');
-					if (!data.isMatrix) {
+					if (!designerState.isMatrix) {
 						// Store exclusion
-						data.$dlg.find('[name="rome-em-fieldedit-exclude"]').val(checked ? 1 : 0);
+						designerState.$dlg.find('[name="rome-em-fieldedit-exclude"]').val(checked ? 1 : 0);
 					}
 					log('Do not annotate is ' + (checked ? 'checked' : 'not checked'));
 					if (checked) performExclusionCheck();
@@ -332,10 +331,10 @@
 
 		//#endregion
 
-		if (data.isMatrix) {
+		if (designerState.isMatrix) {
 			// Matrix-specific adjustments
 			// Insert at end of the dialog
-			data.$dlg.append($ui);
+			designerState.$dlg.append($ui);
 		}
 		else {
 			// Single-field-specific adjustments
@@ -351,11 +350,11 @@
 			const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
 			$ui.css('display', actiontagsVisible ? 'table-row' : 'none');
 			// Add a hidden field to transfer exclusion
-			data.$dlg.find('#addFieldForm').prepend('<input type="hidden" name="rome-em-fieldedit-exclude" value="0">');
+			designerState.$dlg.find('#addFieldForm').prepend('<input type="hidden" name="rome-em-fieldedit-exclude" value="0">');
 			// Initial sync from the action tag
 			updateAnnotationTable()
 			// Insert the UI as a new table row
-			data.$dlg.find('#quesTextDiv > table > tbody').append($ui);
+			designerState.$dlg.find('#quesTextDiv > table > tbody').append($ui);
 		}
 
 		initializeSearchInput('input[name="rome-em-fieldedit-search"]');
@@ -366,11 +365,11 @@
 
 	function performExclusionCheck() {
 		const misc = [];
-		data.$dlg.find(data.isMatrix ? '[name="addFieldMatrixRow-annotation"]' : '[name="field_annotation"]').each(function () {
+		designerState.$dlg.find(designerState.isMatrix ? '[name="addFieldMatrixRow-annotation"]' : '[name="field_annotation"]').each(function () {
 			misc.push($(this).val() ?? '');
 		});
 		if (misc.join(' ').includes(config.atName)) {
-			simpleDialog(JSMO.tt(data.isMatrix ? 'fieldedit_15' : 'fieldedit_14', config.atName), JSMO.tt('fieldedit_13'));
+			simpleDialog(JSMO.tt(designerState.isMatrix ? 'fieldedit_15' : 'fieldedit_14', config.atName), JSMO.tt('fieldedit_13'));
 		}
 	}
 
@@ -404,10 +403,10 @@
 	 * @param {string} val 
 	 */
 	function setEnum(val) {
-		if (data.enum !== val) {
-			data.enum = val;
-			if (data.enum != '') {
-				log('Enum changed:', data.enum);
+		if (designerState.enum !== val) {
+			designerState.enum = val;
+			if (designerState.enum != '') {
+				log('Enum changed:', designerState.enum);
 			}
 			else {
 				log('Enum cleared.');
@@ -465,7 +464,7 @@
 	function isAnnotationEmpty(annotation) {
 		if (typeof annotation.dataElement !== 'object') return false;
 		const hasCoding = annotation.dataElement.coding
-			&& Array.isArray(annotation.dataElement.coding) 
+			&& Array.isArray(annotation.dataElement.coding)
 			&& annotation.dataElement.coding.length > 0;
 		const hasUnit = annotation.dataElement.unit
 			&& annotation.dataElement.unit.coding
@@ -875,7 +874,7 @@
 	 * @returns {Object}
 	 */
 	function getOntologyAnnotation(field = '') {
-		const selector = data.isMatrix ? "TODO" : '#field_annotation';
+		const selector = designerState.isMatrix ? "TODO" : '#field_annotation';
 		const $el = $(selector);
 		let content = '';
 		if ($el.is('input, textarea')) {
@@ -897,7 +896,7 @@
 
 	function getFieldNames() {
 		const fieldNames = [];
-		if (data.isMatrix) {
+		if (designerState.isMatrix) {
 			$('td.addFieldMatrixRowVar input').each(function () {
 				const fieldName = `${$(this).val()}`.trim();
 				if (fieldName !== '') {
@@ -907,7 +906,7 @@
 
 		}
 		else {
-			fieldNames.push(data.$dlg.find('input#field_name').val() ?? '??');
+			fieldNames.push(designerState.$dlg.find('input#field_name').val() ?? '??');
 		}
 		return fieldNames;
 	}
@@ -926,11 +925,11 @@
 			});
 		}
 		// Choices
-		
+
 		let choices = [["dataElement", "Field"]];
 		let choicesDict = { "dataElement": true };
-		if (data.enum) {
-			for (const line of data.enum?.split("\n")) {
+		if (designerState.enum) {
+			for (const line of designerState.enum?.split("\n")) {
 				const [code, rest] = line.split(',', 2);
 				choices.push([code, rest]);
 				choicesDict[code] = true;
@@ -999,7 +998,7 @@
 	 * @returns 
 	 */
 	function updateAnnotationTable() {
-		if (isExcludedCheckboxChecked()) return; 
+		if (isExcludedCheckboxChecked()) return;
 		const annotation = getOntologyAnnotationJsonObject();
 		let items = annotation.dataElement?.coding
 		let valueCodingMap = annotation.dataElement?.valueCodingMap
@@ -1043,7 +1042,7 @@
 		$(".rome-edit-field-ui-list").html(html).show()
 		items.forEach((item, i) => $(`#rome-delete-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, 'dataElement')))
 		values.forEach((item, i) => $(`#rome-delete-field-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, item.field)))
-	
+
 		updateAnnotationTargetsDropdown();
 	}
 
@@ -1098,14 +1097,14 @@
 
 	function showErrorBadge(errorMessage) {
 		if (errorMessage) {
-			data.$dlg.find('#rome-edit-field-error')
+			designerState.$dlg.find('#rome-edit-field-error')
 				.css('display', 'block')
 				.attr('data-bs-tooltip', 'hover')
 				.attr('title', errorMessage)
 				.tooltip('enable');
 		}
 		else {
-			data.$dlg.find('#rome-edit-field-error')
+			designerState.$dlg.find('#rome-edit-field-error')
 				.css('display', 'none')
 				.tooltip('disable');
 		}
@@ -1120,24 +1119,31 @@
 		term: '',
 		lastTerm: '',
 		lastTermCompleted: false, // true if last term was completed by the server
+
+		resultsBySource: {},
 		items: [],                // flattened items shown in dropdown
+
 		pending: {},              // for future polling (unused for now)
+		pollTimer: null,
 		xhr: null,
 		debounceTimer: null,
 		refreshing: false,        // used later for polling refresh
-		cache: new Map(),         // term -> items[]
+		errorRaised: false,
+
+		cache: new Map()          // cacheKey(term, sourceSet) -> snapshot
 	};
 
 	function showSpinner(state) {
-		const $searchSpinner = data.$dlg.find('.rome-edit-field-ui-spinner');
+		const $searchSpinner = designerState.$dlg.find('.rome-edit-field-ui-spinner');
 		$searchSpinner[state ? 'addClass' : 'removeClass']('busy');
+		designerState.$input[state ? 'addClass' : 'removeClass']('is-searching');
 	}
 
 	function initializeSearchInput(selector) {
 
-		const $input = data.$dlg.find(selector);
+		designerState.$input = designerState.$dlg.find(selector);
 
-		$input.autocomplete({
+		designerState.$input.autocomplete({
 			minLength: 2,
 			delay: 0, // we debounce manually
 			source: function (request, responseCb) {
@@ -1148,16 +1154,39 @@
 				}
 
 				// Refresh path (used later for polling)
-				if (searchState.refreshing && term === searchState.term) { 
+				if (searchState.refreshing && term === searchState.term) {
 					responseCb(searchState.items); return;
 				}
-				
-				// Check cache first
-				if (searchState.cache.has(term)) {
+
+				// Check cache first (term + desired source set)
+				const desiredSourceIds = getDesiredSourceIds();
+				const ck = makeCacheKey(term, desiredSourceIds);
+				if (searchState.cache.has(ck)) {
+					const snap = searchState.cache.get(ck);
+
 					searchState.term = term;
-					searchState.items = searchState.cache.get(term);
-					searchState.lastTermCompleted = true;
+					searchState.resultsBySource = snap.resultsBySource || {};
+					searchState.items = snap.items || flattenResults(searchState.resultsBySource);
+					searchState.pending = snap.pending || {};
+					searchState.lastTermCompleted = !!snap.completed;
+
 					responseCb(searchState.items);
+
+					// If incomplete, re-issue search for missing sources
+					if (!snap.completed) {
+						const missing = desiredSourceIds.filter(
+							sid => !(sid in searchState.resultsBySource) && !(sid in searchState.pending)
+						);
+						if (missing.length) {
+							// We don't want to wipe cached results; see startSearch opts below
+							queueSearchMissing(term, missing);
+						}
+						else if (Object.keys(searchState.pending).length) {
+							// No missing, just pending -> resume polling
+							searchState.rid += 1;
+							schedulePoll(searchState.rid);
+						}
+					}
 					return;
 				}
 
@@ -1172,16 +1201,16 @@
 				queueSearch(term, responseCb);
 			}
 		})
-		.data('ui-autocomplete')._renderItem = function (ul, item) {
-			const sys = shortSystem(item.hit.system);
-			const code = item.hit.code ? ` [${item.hit.code}]` : '';
+			.data('ui-autocomplete')._renderItem = function (ul, item) {
+				const sys = shortSystem(item.hit.system);
+				const code = item.hit.code ? ` [${item.hit.code}]` : '';
 
-			return $('<li>')
-				.append($('<div>').text(`${sys}: ${item.label}${code}`))
-				.appendTo(ul);
-		};
+				return $('<li>')
+					.append($('<div>').text(`${sys}: ${item.label}${code}`))
+					.appendTo(ul);
+			};
 
-		$input.on('autocompleteselect', function (e, ui) {
+		designerState.$input.on('autocompleteselect', function (e, ui) {
 			if (searchState.debounceTimer) {
 				clearTimeout(searchState.debounceTimer);
 				searchState.debounceTimer = null;
@@ -1225,21 +1254,48 @@
 		}, 200);
 	}
 
-	function startSearch(term, responseCb) {
+	function queueSearchMissing(term, sourceIds) {
+		// Reuse the same debounce timer
+		if (searchState.debounceTimer) clearTimeout(searchState.debounceTimer);
+
+		searchState.debounceTimer = setTimeout(() => {
+			startSearch(term, null, { sourceIds, merge: true });
+		}, 50);
+	}
+
+	function startSearch(term, responseCb, opts) {
+		opts = opts || {};
+		const sourceIds = Array.isArray(opts.sourceIds) ? opts.sourceIds : null; // null => all
+		const merge = !!opts.merge;
+
 		if (term.length < 2) {
 			stopSearch();
-			responseCb([]);
+			if (typeof responseCb === 'function') responseCb([]);
 			return;
 		}
+		showErrorBadge(false);
 
 		// new query identity
 		searchState.rid += 1;
 		searchState.term = term;
-		searchState.items = [];
-		searchState.lastTermCompleted = false;
-		searchState.pending = {};
+		if (!merge) {
+			searchState.resultsBySource = {};
+			searchState.items = [];
+			searchState.lastTermCompleted = false;
+			searchState.pending = {};
+			searchState.lastTermCompleted = false;
+		}
+		else {
+			// Merging into existing cached results.
+			if (!searchState.pending || typeof searchState.pending !== 'object') searchState.pending = {};
+			if (!searchState.resultsBySource || typeof searchState.resultsBySource !== 'object') searchState.resultsBySource = {};
+			// Drop pending for the sources we are about to re-issue (server will give fresh tokens)
+			if (sourceIds) {
+				for (const sid of sourceIds) delete searchState.pending[sid];
+			}
+		}
 
-		// abort previous request
+		// Abort previous request
 		if (searchState.xhr) {
 			searchState.xhr.abort();
 			searchState.xhr = null;
@@ -1249,43 +1305,91 @@
 
 		const rid = searchState.rid;
 
+		const payload = { rid, q: term };
+		if (sourceIds && sourceIds.length) payload.source_ids = sourceIds;
+
 		searchState.xhr = $.ajax({
 			url: config.searchEndpoint,
 			method: 'POST',
 			contentType: 'application/json; charset=utf-8',
 			dataType: 'json',
-			data: JSON.stringify({ rid, q: term })
+			data: JSON.stringify(payload)
 		})
 			.done(resp => {
 				log('Search - received response', resp);
 				if (!resp || resp.rid !== searchState.rid) return;
 
-				searchState.items = flattenResults(resp.results || {});
-				searchState.cache.set(term, searchState.items);
-				searchState.lastTermCompleted = true;
-				responseCb(searchState.items);
+				const newResults = resp.results || {};
+				const newPending = resp.pending || {};
 
-				// placeholder for future polling:
-				// searchState.pending = resp.pending || {};
+				if (merge) {
+					mergeIntoResultsBySource(newResults); // NEW helper; see below
 
-				showSpinner(false);
-				// Clear error badge if raised earlier
-				if (searchState.errorRaised) {
-					searchState.errorRaised = false;
-					showErrorBadge(false);
+					// merge pending for requested sources (server returns exactly requested keys)
+					if (sourceIds) {
+						for (const sid of sourceIds) {
+							if (newPending[sid]) searchState.pending[sid] = newPending[sid];
+							else delete searchState.pending[sid]; // just in case
+						}
+					} else {
+						// merge mode without sourceIds shouldn't happen; but handle anyway
+						searchState.pending = { ...searchState.pending, ...newPending };
+					}
+				} else {
+					searchState.resultsBySource = newResults;
+					searchState.pending = newPending;
+				}
+
+				searchState.items = flattenResults(searchState.resultsBySource);
+
+				const desired = getDesiredSourceIds();
+				const ck = makeCacheKey(term, desired);
+				const completed =
+					desired.every(sid => (sid in searchState.resultsBySource)) &&
+					Object.keys(searchState.pending).length === 0;
+
+				searchState.lastTermCompleted = completed;
+
+				searchState.cache.set(ck, {
+					resultsBySource: searchState.resultsBySource,
+					pending: searchState.pending,
+					completed,
+					items: searchState.items
+				});
+
+				if (typeof responseCb === 'function') {
+					responseCb(searchState.items);
+				} else {
+					// refresh dropdown in-place (merge path)
+					designerState.$input.autocomplete('search', term);
+				}
+
+				if (Object.keys(searchState.pending).length) {
+					schedulePoll(searchState.rid);
+				} else {
+					showSpinner(false);
+					if (searchState.errorRaised) searchState.errorRaised = false;
 				}
 			})
 			.fail((xhr, status) => {
 				let error = 'Unknown error';
 				if (xhr && xhr.responseJSON && xhr.responseJSON.error) {
 					error = xhr.responseJSON.error;
-				} 
+				}
 				log(`Search - failed (${status})`, error);
 				if (status === 'abort') return;
 
-				searchState.items = [];
-				searchState.lastTermCompleted = true;
-				responseCb([]);
+				if (!merge) {
+					searchState.resultsBySource = {};
+					searchState.items = [];
+					searchState.pending = {};
+					searchState.lastTermCompleted = true;
+					if (typeof responseCb === 'function') responseCb([]);
+				}
+				else {
+					// Merge failure: keep whatever we had (cached results still valid)
+					designerState.$input.autocomplete('search', term);
+				}
 				showSpinner(false);
 				// Report error
 				searchState.errorRaised = true;
@@ -1294,6 +1398,118 @@
 			.always(() => {
 				searchState.xhr = null;
 			});
+	}
+
+	function schedulePoll(rid) {
+		if (searchState.pollTimer) clearTimeout(searchState.pollTimer);
+
+		let wait = 300;
+		for (const p of Object.values(searchState.pending)) {
+			if (p && typeof p.after_ms === 'number') wait = Math.min(wait, p.after_ms);
+		}
+		searchState.pollTimer = setTimeout(() => poll(rid), wait);
+	}
+
+	function poll(rid) {
+		if (rid !== searchState.rid) return;
+		if (!Object.keys(searchState.pending).length) return;
+
+		const pendingMap = {};
+		for (const [src, p] of Object.entries(searchState.pending)) pendingMap[src] = p.token;
+
+		$.ajax({
+			url: config.pollEndpoint,
+			method: 'POST',
+			contentType: 'application/json; charset=utf-8',
+			dataType: 'json',
+			data: JSON.stringify({ rid, pending: pendingMap })
+		})
+			.done(resp => {
+				if (!resp || resp.rid !== searchState.rid) return;
+
+				// Errors? We show the error indicator with a generic "See console" and output 
+				// details to the console.
+				if (Object.keys(resp.errors || {}).length) {
+					showErrorBadge('Some errors were reported. See console for details.');
+					console.error('Error polling for search results:', resp.errors);
+				}
+
+				// Merge results into state
+				mergeIntoResultsBySource(resp.results || {});
+				searchState.items = flattenResults(searchState.resultsBySource);
+
+				// Update pending
+				searchState.pending = resp.pending || {};
+
+				const desired = getDesiredSourceIds();
+				const ck = makeCacheKey(searchState.term, desired);
+				const completed =
+					desired.every(sid => (sid in searchState.resultsBySource)) &&
+					Object.keys(searchState.pending).length === 0;
+
+				searchState.cache.set(ck, {
+					resultsBySource: searchState.resultsBySource,
+					pending: searchState.pending,
+					completed,
+					items: searchState.items
+				});
+
+				designerState.$input.autocomplete('search', searchState.term);
+
+				if (Object.keys(searchState.pending).length) {
+					schedulePoll(rid);
+				} else {
+					searchState.lastTermCompleted = true;
+					showSpinner(false);
+				}
+			})
+			.fail((xhr, status) => {
+				if (status === 'abort') return;
+				// stop polling but keep whatever we have
+				searchState.pending = {};
+				showSpinner(false);
+				// optional: set error badge
+			});
+	}
+
+	function mergeIntoResultsBySource(newResultsBySource) {
+		if (!newResultsBySource || typeof newResultsBySource !== 'object') return;
+
+		for (const [sourceId, newHits] of Object.entries(newResultsBySource)) {
+			if (!Array.isArray(newHits)) continue;
+
+			const oldHits = Array.isArray(searchState.resultsBySource[sourceId])
+				? searchState.resultsBySource[sourceId]
+				: [];
+
+			if (!oldHits.length) {
+				searchState.resultsBySource[sourceId] = newHits.slice();
+				continue;
+			}
+
+			const seen = new Set();
+			for (const h of oldHits) {
+				const k = hitKey(h);
+				if (k) seen.add(k);
+			}
+
+			for (const h of newHits) {
+				const k = hitKey(h);
+				if (!k || seen.has(k)) continue;
+				seen.add(k);
+				oldHits.push(h);
+			}
+
+			searchState.resultsBySource[sourceId] = oldHits;
+		}
+	}
+
+	function hitKey(h) {
+		if (!h || typeof h !== 'object') return '';
+		const system = (h.system || '').trim();
+		const code = (h.code || '').trim();
+		if (!system || !code) return '';
+		return system + '|' + code;
 	}
 
 	function flattenResults(resultsBySource) {
@@ -1322,10 +1538,30 @@
 			searchState.xhr.abort();
 			searchState.xhr = null;
 		}
-		searchState.items = [];
+		if (searchState.pollTimer) {
+			clearTimeout(searchState.pollTimer);
+			searchState.pollTimer = null;
+		}
 		searchState.pending = {};
+		searchState.resultsBySource = {};
+		searchState.items = [];
 		showSpinner(false);
 		showErrorBadge(false);
+	}
+
+	function sourceSetKey(sourceIds) {
+		// Sort a copy in order not to change the original
+		const sortedCopy = sourceIds.slice().sort();
+		return sortedCopy.join('|');
+	}
+
+	function makeCacheKey(term, sourceIds) {
+		return `${term}::${sourceSetKey(sourceIds)}`;
+	}
+
+	function getDesiredSourceIds() {
+		// TODO: later: return subset chosen in UI
+		return config.sources.map(s => s.id);
 	}
 
 	//#endregion

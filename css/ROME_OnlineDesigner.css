@@ -5,19 +5,23 @@
 	border: 1px solid #ccc;
 	padding: 6px 8px 10px 8px;
 }
+
 #addMatrixPopup .rome-edit-field-ui-container {
 	max-width: unset;
 }
+
 .rome-edit-field-ui-container h1 {
 	font-size: 13px;
 	font-weight: bold;
 	margin: 2px 0 5px 0;
 }
+
 .rome-edit-field-ui-container h2 {
 	font-size: 13px;
 	font-weight: 500;
 	margin: 5px 0 2px 0;
 }
+
 .rome-edit-field-ui-container input[type="search"] {
 	max-width: 500px;
 }
@@ -31,9 +35,11 @@
 	font-size: 11px;
 	color: #808080;
 }
+
 .rome-edit-field-ui-footer a {
 	text-decoration: underline;
 }
+
 .rome-edit-field-ui-header {
 	display: flex;
 }
@@ -41,12 +47,15 @@
 #div_add_field .rome-em-fieldedit-exclude-matrix {
 	display: none;
 }
+
 #addMatrixPopup .rome-em-fieldedit-exclude-field {
 	display: none;
 }
+
 .rome-edit-field-ui-body {
 	margin-bottom: 10px;
 }
+
 .rome-edit-field-ui-container:has(input.rome-em-fieldedit-exclude:checked) .rome-edit-field-ui-body {
 	display: none;
 }
@@ -56,34 +65,73 @@
 	width: 20px;
 	text-align: center;
 }
-.rome-edit-field-ui-spinner .rome-edit-field-ui-spinner-spinning { 
-	color: gray;
+
+.rome-edit-field-ui-spinner .rome-edit-field-ui-spinner-spinning {
+	color: rgb(80, 103, 235);
 	display: none;
 }
-.rome-edit-field-ui-spinner.busy .rome-edit-field-ui-spinner-spinning { 
+
+.rome-edit-field-ui-spinner.busy .rome-edit-field-ui-spinner-spinning {
 	display: inline-block;
 }
+
 .rome-edit-field-ui-spinner.busy .rome-edit-field-ui-spinner-not-spinning {
 	display: none;
 }
+
 .rome-edit-field-ui-search-match {
 	color: #319aff;
 	font-weight: bold;
 }
 
 .form-select-xs {
-    padding-top: .15rem;
-    padding-bottom: .15rem;
-    padding-left: .5rem;
-    font-size: 0.7rem !important;
-    border-radius: var(--bs-border-radius-sm);
+	padding-top: .15rem;
+	padding-bottom: .15rem;
+	padding-left: .5rem;
+	font-size: 0.7rem !important;
+	border-radius: var(--bs-border-radius-sm);
 }
 
 #rome-edit-field-error {
 	color: var(--bs-danger);
 	display: none;
 }
+
 #rome-edit-field-error .fa-fade {
 	--fa-animation-duration: 1.5s;
 	--fa-fade-opacity: 0.7;
+}
+
+.rome-search {
+  border: 2px solid var(--bs-border-color);
+}
+
+/* Busy state: animated border */
+.rome-search.is-searching{
+  border: 2px solid transparent;          /* creates a real border-box to paint into */
+  background:
+    linear-gradient(var(--bs-body-bg), var(--bs-body-bg)) padding-box,
+    linear-gradient(90deg,
+      var(--bs-border-color),
+      var(--bs-primary),
+      var(--bs-border-color)
+    ) border-box;
+
+  /* IMPORTANT: make the border gradient wider so moving it is visible */
+  background-size: 100% 100%, 200% 100%;
+  background-position: 0 0, 0 0;
+
+  animation: bs-search-border-scan 2.2s linear infinite;
+}
+
+/* Keep Bootstrap focus ring */
+.rome-search.is-searching:focus{
+    color: var(--bs-body-color);
+    background-color: var(--bs-body-bg);
+    outline: 0;
+    box-shadow: 0 0 0 .25rem rgba(13,110,253,.25);
+}
+
+@keyframes bs-search-border-scan{
+  to { background-position: 0 0, 200% 0; }
 }
