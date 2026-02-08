@@ -1,7 +1,7 @@
 # ROME: REDCap Ontology Annotation Made Easy
 
 
-**NOTICE**: This is a work in progress. This is an early preview release. **It is not yet ready for production use.** Active development is ongoing on the `revamp` branch. A first release is planned within early in Q2 2026.
+**NOTICE**: This is a work in progress. **Currently, it is not yet ready for production use.** Active development is ongoing and a first release is planned early in Q2 2026.
 
 ---
 
