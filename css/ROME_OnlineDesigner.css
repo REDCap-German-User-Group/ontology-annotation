@@ -26,6 +26,10 @@
 	max-width: 500px;
 }
 
+.rome-edit-field-ui-list {
+	margin-top: 10px;
+}
+
 .rome-edit-field-ui-list-empty {
 	color: #999;
 	font-style: italic;
@@ -92,7 +96,7 @@
 	border-radius: var(--bs-border-radius-sm);
 }
 
-#rome-edit-field-error {
+#rome-search-errors {
 	color: var(--bs-danger);
 	display: none;
 }
@@ -108,9 +112,44 @@
 	font-size: 12px;
 }
 
-#rome-edit-field-error .fa-fade {
+#rome-search-errors .fa-fade {
 	--fa-animation-duration: 1.5s;
 	--fa-fade-opacity: 0.7;
+}
+
+.rome-edit-field-ui-content-wrapper {
+	position: relative;
+}
+
+.rome-json-error-overlay {
+	position: absolute;
+	inset: 0;
+	background: rgba(255, 235, 235, 0.8);
+	z-index: 15;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 12px;
+}
+
+.rome-json-error-overlay-content {
+	background: #ffffff;
+	border: 1px solid #dc3545;
+	border-radius: 6px;
+	padding: 12px 14px;
+	max-width: 720px;
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.rome-json-error-overlay-content h3 {
+	margin: 0 0 8px 0;
+	font-size: 16px;
+	font-weight: 700;
+	color: #b02a37;
+}
+
+.rome-json-error-overlay-content p {
+	margin: 8px 0 0 0;
 }
 
 .rome-search {
@@ -155,4 +194,31 @@
 
 .rome-target-warning {
 	margin-left: 4px;
+}
+
+.target-missing {
+	outline: 2px solid #dc3545;
+}
+
+.rome-save-remove-button {
+	border: 1px solid #dc3545 !important;
+	color: #495057 !important;
+	background: #ffffff !important;
+}
+
+.rome-cancel-save-button {
+	font-weight: 700 !important;
+}
+
+.rome-save-keep-button {
+	border: 1px solid #198754 !important;
+	color: #495057 !important;
+	background: #ffffff !important;
+}
+
+#rome-annotation-table thead tr th {
+	font-size: 11px;
+	padding: 4px;
+	padding-right: 20px;
+
 }

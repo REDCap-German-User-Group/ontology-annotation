@@ -106,6 +106,8 @@
 	/** @type {number|null} */
 	let manualImportTimer = null;
 
+	const SAVE_SKIP_SENTINEL_KEY = '__romeSkipMissingChoicePrompt';
+
 	/**
 	 * Implements the public init method.
 	 * @param {ROMEOnlineDesignerConfig=} config_data
@@ -122,6 +124,7 @@
 			tag: config.atName,
 			getMinAnnotation: getMinimalOntologyAnnotation
 		});
+		ensureFieldSaveHook();
 		ensureMatrixSaveHook();
 
 		//#region Hijack Hooks
@@ -236,7 +239,7 @@
 		// Disable search when there are errors and add error indicator
 		if (config.errors?.length ?? 0 > 0) {
 			designerState.$dlg.find('#rome-search-bar :input').prop('disabled', true);
-			showErrorBadge(config.errors.join('\n'));
+			showSearchErrorBadge(config.errors.join('\n'));
 		}
 		resetSearchState();
 		log('Search state has been reset.', searchState);
@@ -602,6 +605,7 @@
 		annotationDraftState.parseErrorMessage = result.error ? result.errorMessage : '';
 		annotationDraftState.manualMode = false;
 		annotationDraftState.lastSyncedTextarea = `${designerState.$dlg.find('#field_annotation').val() ?? ''}`;
+		setJsonIssueOverlay(result.error ? result.errorMessage : false);
 		log('Initialized single-field draft state:', annotationDraftState);
 	}
 
@@ -627,7 +631,21 @@
 			};
 			matrixDraftState.rowOrder.push(rowId);
 		});
+		refreshJsonOverlayFromMatrixState();
 		log('Initialized matrix draft state:', matrixDraftState);
+	}
+
+	/**
+	 * Refreshes JSON error overlay for matrix mode based on invalid row parse states.
+	 * @returns {void}
+	 */
+	function refreshJsonOverlayFromMatrixState() {
+		const invalidRow = Object.values(matrixDraftState.rows).find((row) => row.parseStatus === 'invalid');
+		if (!invalidRow) {
+			setJsonIssueOverlay(false);
+			return;
+		}
+		setJsonIssueOverlay(`Row "${invalidRow.varName || invalidRow.rowId}" has invalid ontology JSON: ${invalidRow.parseErrorMessage}`);
 	}
 
 	/**
@@ -822,7 +840,7 @@
 		if (parse.error) {
 			annotationDraftState.parseStatus = 'invalid';
 			annotationDraftState.parseErrorMessage = parse.errorMessage;
-			showErrorBadge(parse.errorMessage);
+			setJsonIssueOverlay(parse.errorMessage);
 			return false;
 		}
 		annotationDraftState.parseStatus = 'valid';
@@ -832,7 +850,7 @@
 		annotationDraftState.base = normalizeAnnotation(cloneAnnotation(parse.json));
 		annotationDraftState.dirty = false;
 		annotationDraftState.lastSyncedTextarea = `${designerState.$dlg.find('#field_annotation').val() ?? ''}`;
-		showErrorBadge(false);
+		setJsonIssueOverlay(false);
 		log('Updated internal annotation state from manual textarea edit:', annotationDraftState);
 		updateAnnotationTable();
 		return true;
@@ -851,7 +869,7 @@
 		if (parse.error) {
 			rowState.parseStatus = 'invalid';
 			rowState.parseErrorMessage = parse.errorMessage;
-			showErrorBadge(`Row "${rowState.varName || rowId}" has invalid ontology JSON: ${parse.errorMessage}`);
+			refreshJsonOverlayFromMatrixState();
 			return false;
 		}
 		rowState.parseStatus = 'valid';
@@ -859,7 +877,7 @@
 		rowState.current = normalizeAnnotation(cloneAnnotation(parse.json));
 		rowState.base = normalizeAnnotation(cloneAnnotation(parse.json));
 		rowState.dirty = false;
-		showErrorBadge(false);
+		refreshJsonOverlayFromMatrixState();
 		log('Updated internal matrix row annotation state:', rowState);
 		updateAnnotationTable();
 		return true;
@@ -869,7 +887,7 @@
 	 * Ensures current UI draft can be saved and blocks submit if ONTOLOGY JSON is invalid.
 	 * @returns {boolean}
 	 */
-	function validateBeforeSave() {
+	function validateBeforeSave(onProceedAfterMissingChoiceWarning = null, skipMissingChoicePrompt = false) {
 		if (designerState.isMatrix) {
 			syncAllMatrixDraftsToTextareas();
 			const invalidRows = [];
@@ -890,7 +908,7 @@
 				);
 				return false;
 			}
-			return true;
+			return maybeWarnMissingChoiceTargetsOnSave(onProceedAfterMissingChoiceWarning, skipMissingChoicePrompt);
 		}
 		syncSingleDraftToTextarea(true);
 		const parse = getOntologyAnnotation();
@@ -902,7 +920,135 @@
 			);
 			return false;
 		}
-		return true;
+		return maybeWarnMissingChoiceTargetsOnSave(onProceedAfterMissingChoiceWarning, skipMissingChoicePrompt);
+	}
+
+	/**
+	 * Warns and blocks save when annotations are still mapped to missing choice targets.
+	 * Save can continue only after explicit user acknowledgement.
+	 * @param {null|(() => void)} onProceedAfterWarning
+	 * @returns {boolean}
+	 */
+	function maybeWarnMissingChoiceTargetsOnSave(onProceedAfterWarning = null, skipMissingChoicePrompt = false) {
+		if (skipMissingChoicePrompt) return true;
+		const missing = getMissingChoiceTargetRows();
+		if (missing.length === 0) return true;
+		log('Save warning: missing choice targets detected.', missing);
+		showMissingChoiceSaveDialog(missing.length, onProceedAfterWarning || null);
+		return false;
+	}
+
+	/**
+	 * Removes choice-target mappings whose choice code is no longer present in current enum.
+	 * @returns {number} number of removed choice buckets
+	 */
+	function removeMissingChoiceTargetsFromDraft() {
+		const validCodes = new Set(getChoiceOptions().map(c => c.code));
+		let removed = 0;
+
+		/**
+		 * @param {OntologyAnnotationJSON} annotation
+		 * @returns {number}
+		 */
+		const pruneAnnotation = (annotation) => {
+			let localRemoved = 0;
+			const normalized = normalizeAnnotation(annotation);
+			for (const code of Object.keys(normalized.dataElement.valueCodingMap || {})) {
+				if (!validCodes.has(code)) {
+					delete normalized.dataElement.valueCodingMap[code];
+					localRemoved++;
+				}
+			}
+			return localRemoved;
+		};
+
+		if (designerState.isMatrix) {
+			for (const rowId of matrixDraftState.rowOrder) {
+				const rowState = matrixDraftState.rows[rowId];
+				if (!rowState) continue;
+				const rowRemoved = pruneAnnotation(rowState.current);
+				if (rowRemoved > 0) {
+					rowState.dirty = true;
+				}
+				removed += rowRemoved;
+			}
+			if (removed > 0) {
+				syncAllMatrixDraftsToTextareas();
+			}
+		} else {
+			const annotation = getSingleDraftAnnotation();
+			removed = pruneAnnotation(annotation);
+			if (removed > 0) {
+				annotationDraftState.dirty = true;
+				syncSingleDraftToTextarea(true);
+			}
+		}
+
+		if (removed > 0) {
+			log('Removed missing choice-target mappings before save:', removed);
+			updateAnnotationTable();
+		}
+		return removed;
+	}
+
+	/**
+	 * Displays a blocking confirmation dialog for missing choice targets.
+	 * @param {number} count
+	 * @param {null|(() => void)} onProceed
+	 * @returns {void}
+	 */
+	function showMissingChoiceSaveDialog(count, onProceed = null) {
+		designerState.$dlg.find('.rome-missing-choice-save-dialog').remove();
+		const $dlg = $('<div></div>')
+			.addClass('rome-missing-choice-save-dialog')
+			.html(
+				`${count} annotation(s) target choice values that no longer exist.<br><br>` +
+				`Any untargeted choice annotations may be lost when saving.<br><br>` +
+				`How do you want to proceed?`
+			)
+			.dialog({
+				modal: true,
+				title: 'Warning: Missing Choice Targets',
+				width: 520,
+				open: function () {
+					const $widget = $(this).dialog('widget');
+					const $buttons = $widget.find('.ui-dialog-buttonpane button');
+					$buttons.eq(0).addClass('rome-cancel-save-button');
+					$buttons.eq(1).addClass('rome-save-remove-button');
+					$buttons.eq(2).addClass('rome-save-keep-button');
+				},
+				close: function () {
+					$(this).dialog('destroy').remove();
+				},
+				buttons: [
+					{
+						text: 'Cancel',
+						click: function () {
+							$(this).dialog('close');
+						}
+					},
+					{
+						text: 'Save and remove',
+						click: function () {
+							removeMissingChoiceTargetsFromDraft();
+							$(this).dialog('close');
+							if (typeof onProceed === 'function') {
+								onProceed();
+							}
+						}
+					},
+					{
+						text: 'Save and keep',
+						click: function () {
+							$(this).dialog('close');
+							if (typeof onProceed === 'function') {
+								onProceed();
+							}
+						}
+					}
+				]
+			});
+		log('Displayed blocking missing-choice warning dialog.', { count, hasProceed: typeof onProceed === 'function' });
 	}
 
 	/**
@@ -926,7 +1072,7 @@
 		$(document).off(`click.${dialogId}`);
 		$(document).on(`click.${dialogId}`, `#${dialogId} .rome-invalid-revert`, function () {
 			onRevert();
-			showErrorBadge(false);
+			setJsonIssueOverlay(false);
 			$(`#${dialogId}`).closest('.ui-dialog-content').dialog('close');
 			$(document).off(`click.${dialogId}`);
 		});
@@ -974,14 +1120,38 @@
 	 */
 	function setupSaveValidationHooks() {
 		if (!designerState.isMatrix) {
-			designerState.$dlg.find('#addFieldForm').off('submit.rome').on('submit.rome', function (event) {
-				if (!validateBeforeSave()) {
-					event.preventDefault();
-					return false;
-				}
-				return true;
-			});
+			ensureFieldSaveHook();
 		}
+	}
+
+	/**
+	 * Ensures REDCap single-field save entrypoint is wrapped with validation logic.
+	 * @returns {void}
+	 */
+	function ensureFieldSaveHook() {
+		const existing = window.addEditFieldSave;
+		if (typeof existing !== 'function') return;
+		if (existing.__romeWrapped === true) return;
+		const wrapped = function () {
+			const self = this;
+			const args = Array.from(arguments);
+			let skipMissingChoicePrompt = false;
+			const last = args[args.length - 1];
+			if (last && typeof last === 'object' && last[SAVE_SKIP_SENTINEL_KEY] === true) {
+				skipMissingChoicePrompt = true;
+				args.pop();
+			}
+			if (!validateBeforeSave(() => {
+				window.setTimeout(() => {
+					window.addEditFieldSave.apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
+				}, 0);
+			}, skipMissingChoicePrompt)) return false;
+			return existing.apply(self, args);
+		};
+		// @ts-ignore
+		wrapped.__romeWrapped = true;
+		window.addEditFieldSave = wrapped;
+		log('Wrapped REDCap addEditFieldSave() for annotation validation.');
 	}
 
 	/**
@@ -993,8 +1163,20 @@
 		if (typeof existing !== 'function') return;
 		if (existing.__romeWrapped === true) return;
 		const wrapped = function () {
-			if (!validateBeforeSave()) return false;
-			return existing.apply(this, arguments);
+			const self = this;
+			const args = Array.from(arguments);
+			let skipMissingChoicePrompt = false;
+			const last = args[args.length - 1];
+			if (last && typeof last === 'object' && last[SAVE_SKIP_SENTINEL_KEY] === true) {
+				skipMissingChoicePrompt = true;
+				args.pop();
+			}
+			if (!validateBeforeSave(() => {
+				window.setTimeout(() => {
+					window.matrixGroupSave.apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
+				}, 0);
+			}, skipMissingChoicePrompt)) return false;
+			return existing.apply(self, args);
 		};
 		// @ts-ignore
 		wrapped.__romeWrapped = true;
@@ -1802,12 +1984,53 @@
 	}
 
 	/**
+	 * Builds a map from choice code to choice label for the current enum.
+	 * @returns {Object<string,string>}
+	 */
+	function getChoiceLabelMap() {
+		const map = {};
+		for (const choice of getChoiceOptions()) {
+			map[choice.code] = choice.label;
+		}
+		return map;
+	}
+
+	/**
+	 * Returns rows that target missing choice codes.
+	 * @returns {AnnotationTableRow[]}
+	 */
+	function getMissingChoiceTargetRows() {
+		const choiceCodes = new Set(getChoiceOptions().map(c => c.code));
+		return flattenAnnotationRows().filter(r => r.targetType === 'choice' && !choiceCodes.has(r.choiceCode));
+	}
+
+	/**
+	 * Builds stable sort key for target column.
+	 * Sort order: field, choice(label), unit.
+	 * @param {AnnotationTableRow} row
+	 * @param {Object<string,string>} choiceLabelMap
+	 * @returns {string}
+	 */
+	function getTargetSortKey(row, choiceLabelMap) {
+		if (row.targetType === 'field') {
+			const fieldName = (row.matrixFieldName || 'field').toLowerCase();
+			return `0|${fieldName}`;
+		}
+		if (row.targetType === 'choice') {
+			const label = (choiceLabelMap[row.choiceCode] || row.choiceCode || '').toLowerCase();
+			return `1|${label}|${(row.choiceCode || '').toLowerCase()}`;
+		}
+		return '2|unit';
+	}
+
+	/**
 	 * Flattens current draft annotation(s) into table rows for DataTables.
 	 * @returns {AnnotationTableRow[]}
 	 */
 	function flattenAnnotationRows() {
 		const rows = [];
 		let index = 0;
+		const choiceLabelMap = getChoiceLabelMap();
 		const appendRowsFromAnnotation = (annotation, matrixRowId = '', matrixFieldName = '') => {
 			const normalized = normalizeAnnotation(annotation);
 			for (const c of normalized.dataElement.coding || []) {
@@ -1849,7 +2072,7 @@
 						display: `${c.display || ''}`,
 						targetType: 'choice',
 						targetValue: designerState.isMatrix ? `choice:${matrixRowId}:${choiceCode}` : `choice:${choiceCode}`,
-						targetLabel: `Choice - ${choiceCode}`,
+						targetLabel: `Choice - ${choiceLabelMap[choiceCode] || choiceCode}`,
 						choiceCode
 					});
 				}
@@ -1900,10 +2123,13 @@
 		`).show();
 		const $tbody = $wrapper.find('tbody');
 		const targets = buildTargetOptions();
+		const choiceLabelMap = getChoiceLabelMap();
+		const currentChoiceCodes = new Set(Object.keys(choiceLabelMap));
 		for (const row of rows) {
 			const link = config.knownLinks?.[row.system]
 				? `<a target="_blank" href="${escapeHTML(config.knownLinks[row.system] + row.code)}">${escapeHTML(row.code || '?')}</a>`
 				: escapeHTML(row.code || '?');
+			const isMissingTarget = row.targetType === 'choice' && !currentChoiceCodes.has(row.choiceCode);
 			const rowTargets = targets.slice();
 			if (!rowTargets.some(t => t.value === row.targetValue)) {
 				rowTargets.unshift({
@@ -1911,9 +2137,10 @@
 					label: `Missing target: ${row.targetLabel}`
 				});
 			}
-			const targetSelect = `<select class="form-select form-select-xs rome-row-target" data-rome-row-id="${row.rowId}">
+			const targetSelect = `<select class="form-select form-select-xs rome-row-target ${isMissingTarget ? 'target-missing' : ''}" data-rome-row-id="${row.rowId}">
 				${rowTargets.map(target => `<option value="${escapeHTML(target.value)}" ${target.value === row.targetValue ? 'selected' : ''}>${escapeHTML(target.label)}</option>`).join('')}
 			</select>`;
+			const targetSortKey = getTargetSortKey(row, choiceLabelMap);
 			const matrixCell = designerState.isMatrix ? `<td>${escapeHTML(row.matrixFieldName || row.matrixRowId)}</td>` : '';
 			$tbody.append(`
 				<tr data-rome-row-id="${row.rowId}">
@@ -1921,7 +2148,7 @@
 					<td>${escapeHTML(row.system || '?')}</td>
 					<td>${link}</td>
 					<td>${escapeHTML(row.display || '')}</td>
-					<td>${targetSelect}</td>
+					<td data-order="${escapeHTML(targetSortKey)}">${targetSelect}</td>
 					<td><button type="button" class="btn btn-xs btn-link text-danger p-0 rome-row-delete" data-rome-row-id="${row.rowId}" title="Delete annotation"><i class="fa fa-trash"></i></button></td>
 				</tr>
 			`);
@@ -2005,22 +2232,38 @@
 	//#region Error Handling
 
 	/**
-	 * Shows or hides the error badge next to the search bar.
+	 * Shows or hides the search-error badge next to the search bar.
 	 * @param {string|false} errorMessage
 	 * @returns {void}
 	 */
-	function showErrorBadge(errorMessage) {
+	function showSearchErrorBadge(errorMessage) {
 		if (errorMessage) {
-			designerState.$dlg.find('#rome-edit-field-error')
+			designerState.$dlg.find('#rome-search-errors')
 				.css('display', 'block')
 				.attr('data-bs-tooltip', 'hover')
 				.attr('title', errorMessage)
 				.tooltip('enable');
 		}
 		else {
-			designerState.$dlg.find('#rome-edit-field-error')
+			designerState.$dlg.find('#rome-search-errors')
 				.css('display', 'none')
 				.tooltip('disable');
+		}
+	}
+
+	/**
+	 * Shows or hides the JSON error overlay that blocks search/table controls.
+	 * @param {string|false} errorMessage
+	 * @returns {void}
+	 */
+	function setJsonIssueOverlay(errorMessage) {
+		const $overlay = designerState.$dlg.find('.rome-json-error-overlay');
+		if ($overlay.length === 0) return;
+		if (errorMessage) {
+			$overlay.find('.rome-json-error-overlay-message').text(errorMessage);
+			$overlay.show();
+		} else {
+			$overlay.hide();
 		}
 	}
 
@@ -2330,7 +2573,7 @@
 			if (typeof responseCb === 'function') responseCb([]);
 			return;
 		}
-		showErrorBadge(false);
+		showSearchErrorBadge(false);
 
 		// new query identity
 		searchState.rid += 1;
@@ -2449,7 +2692,7 @@
 				showSpinner(false);
 				// Report error
 				searchState.errorRaised = true;
-				showErrorBadge(`Search could not be performed. The server reported this error: ${error}`);
+				showSearchErrorBadge(`Search could not be performed. The server reported this error: ${error}`);
 			})
 			.always(() => {
 				searchState.xhr = null;
@@ -2496,7 +2739,7 @@
 				// Errors? We show the error indicator with a generic "See console" and output 
 				// details to the console.
 				if (Object.keys(resp.errors || {}).length) {
-					showErrorBadge('Some errors were reported. See console for details.');
+					showSearchErrorBadge('Some errors were reported. See console for details.');
 					console.error('Error polling for search results:', resp.errors);
 				}
 
@@ -2678,7 +2921,7 @@
 		searchState.items = [];
 		setSelectedAnnotation(null);
 		showSpinner(false);
-		showErrorBadge(false);
+		showSearchErrorBadge(false);
 	}
 
 	function resetSearchState() {

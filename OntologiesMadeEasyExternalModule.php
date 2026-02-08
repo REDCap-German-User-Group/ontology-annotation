@@ -401,29 +401,38 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 						</label>
 					</div>
 					<div class="rome-edit-field-ui-body">
-						<div id="rome-search-bar" class="d-flex align-items-baseline gap-2">
-							<span><?= $this->tt('fieldedit_08') ?></span>
-							<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm rome-search" placeholder="<?= $this->tt('fieldedit_02') ?>">
-							<span class="rome-edit-field-ui-spinner">
-								<i class="fa-solid fa-spinner fa-spin-pulse rome-edit-field-ui-spinner-spinning"></i>
-								<i class="fa-solid fa-arrow-right fa-lg rome-edit-field-ui-spinner-not-spinning"></i>
-							</span>
-							<select id="rome-field-choice" class="form-select form-select-sm w-auto">
-								<option value="dataElement"><?= $this->tt('fieldedit_18') ?></option>
-							</select>
-							<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs" disabled><?= $this->tt('fieldedit_10') ?></button>
-							<div id="rome-add-selection-info" class="rome-add-selection-info" title="No selection">
-								<i class="fa-solid fa-circle-info"></i>
+						<div class="rome-edit-field-ui-content-wrapper">
+							<div id="rome-search-bar" class="d-flex align-items-baseline gap-2">
+								<span><?= $this->tt('fieldedit_08') ?></span>
+								<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm rome-search" placeholder="<?= $this->tt('fieldedit_02') ?>">
+								<span class="rome-edit-field-ui-spinner">
+									<i class="fa-solid fa-spinner fa-spin-pulse rome-edit-field-ui-spinner-spinning"></i>
+									<i class="fa-solid fa-arrow-right fa-lg rome-edit-field-ui-spinner-not-spinning"></i>
+								</span>
+								<select id="rome-field-choice" class="form-select form-select-sm w-auto">
+									<option value="dataElement"><?= $this->tt('fieldedit_18') ?></option>
+								</select>
+								<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs" disabled><?= $this->tt('fieldedit_10') ?></button>
+								<div id="rome-add-selection-info" class="rome-add-selection-info" title="No selection">
+									<i class="fa-solid fa-circle-info"></i>
+								</div>
+								<div id="rome-search-errors">
+									<i class="fa-solid fa-circle-exclamation fa-lg fa-fade"></i>
+								</div>
 							</div>
-							<div id="rome-edit-field-error">
-								<i class="fa-solid fa-circle-exclamation fa-lg fa-fade"></i>
+							<div class="rome-edit-field-ui-list">
+								<h2><?= $this->tt('fieldedit_03') ?></h2>
 							</div>
-						</div>
-						<div class="rome-edit-field-ui-list">
-							<h2><?= $this->tt('fieldedit_03') ?></h2>
-						</div>
-						<div class="rome-edit-field-ui-list-empty mt-2">
-							<?= $this->tt('fieldedit_07') ?>
+							<div class="rome-edit-field-ui-list-empty mt-2">
+								<?= $this->tt('fieldedit_07') ?>
+							</div>
+							<div class="rome-json-error-overlay" style="display:none;">
+								<div class="rome-json-error-overlay-content">
+									<h3>Annotation JSON Error</h3>
+									<div class="rome-json-error-overlay-message"></div>
+									<p>Please fix the `@ONTOLOGY` JSON in Field Annotation. Search and table actions are temporarily disabled.</p>
+								</div>
+							</div>
 						</div>
 					</div>
 					<div class="rome-edit-field-ui-footer">
