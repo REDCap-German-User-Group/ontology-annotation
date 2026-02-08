@@ -350,7 +350,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
        (select exs.project_id
            from redcap_external_modules ex inner join redcap_external_module_settings exs
 	   on ex.external_module_id=exs.external_module_id and
-	   ex.directory_prefix = 'rome' and exs.key = 'discoverable' and
+	   ex.directory_prefix = ? and exs.key = 'discoverable' and
 	   exs.value='true'),
     -- name + contact info of the projects
     project_infos as
@@ -387,7 +387,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			                                       'code', code, 'display', display, 'projects', projects))
 		               from grouped_annotations)) as info;
 SQL;
-        return ($this->query($sql, [])->fetch_assoc())["info"];
+        return ($this->query($sql, [$this->PREFIX])->fetch_assoc())["info"];
     }
 
 	#region Private Helpers
