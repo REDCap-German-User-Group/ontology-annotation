@@ -692,7 +692,49 @@
 	 * @returns {string}
 	 */
 	function buildOntologyTag(annotation) {
-		return `${config.atName}=${JSON.stringify(annotation, null, 2)}`;
+		const pruned = pruneAnnotationForActionTag(annotation);
+		return `${config.atName}=${JSON.stringify(pruned, null, 2)}`;
+	}
+
+	/**
+	 * Produces a trimmed annotation payload for the ONTOLOGY action tag.
+	 * Always removes `dataElement.text` and `dataElement.type` and drops empty containers.
+	 * @param {OntologyAnnotationJSON} annotation
+	 * @returns {Object}
+	 */
+	function pruneAnnotationForActionTag(annotation) {
+		const normalized = normalizeAnnotation(cloneAnnotation(annotation));
+		/** @type {any} */
+		const out = { dataElement: {} };
+
+		const coding = Array.isArray(normalized.dataElement.coding)
+			? normalized.dataElement.coding.filter(c => c && c.system && c.code)
+			: [];
+		if (coding.length > 0) {
+			out.dataElement.coding = coding;
+		}
+
+		const unitCoding = Array.isArray(normalized.dataElement.unit?.coding)
+			? normalized.dataElement.unit.coding.filter(c => c && c.system && c.code)
+			: [];
+		if (unitCoding.length > 0) {
+			out.dataElement.unit = { coding: unitCoding };
+		}
+
+		const valueCodingMap = {};
+		for (const [choiceCode, bucket] of Object.entries(normalized.dataElement.valueCodingMap || {})) {
+			const items = Array.isArray(bucket?.coding)
+				? bucket.coding.filter(c => c && c.system && c.code)
+				: [];
+			if (items.length > 0) {
+				valueCodingMap[choiceCode] = { coding: items };
+			}
+		}
+		if (Object.keys(valueCodingMap).length > 0) {
+			out.dataElement.valueCodingMap = valueCodingMap;
+		}
+
+		return out;
 	}
 
 	/**
@@ -1066,6 +1108,8 @@
 			addCodingToAnnotation(rowState.current, targetType, parts.slice(2).join(':'), coding);
 			rowState.dirty = true;
 			log('Updated matrix row draft after add:', rowState);
+			// Keep matrix row annotation textareas in sync with UI edits.
+			syncAllMatrixDraftsToTextareas();
 			return;
 		}
 		const annotation = getSingleDraftAnnotation();
@@ -1074,6 +1118,8 @@
 		addCodingToAnnotation(annotation, targetType, parts.slice(1).join(':'), coding);
 		annotationDraftState.dirty = true;
 		log('Updated single-field draft after add:', annotationDraftState.current);
+		// Keep action-tags textarea synchronized with UI edits.
+		syncSingleDraftToTextarea(true);
 	}
 
 	/**
@@ -1131,8 +1177,12 @@
 		removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
 		if (designerState.isMatrix) {
 			matrixDraftState.rows[row.matrixRowId].dirty = true;
+			// Keep matrix row annotation textareas in sync with UI edits.
+			syncAllMatrixDraftsToTextareas();
 		} else {
 			annotationDraftState.dirty = true;
+			// Keep action-tags textarea synchronized with UI edits.
+			syncSingleDraftToTextarea(true);
 		}
 		updateAnnotationTable();
 		log('Delete completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationDraftState);
@@ -1164,8 +1214,12 @@
 		});
 		if (designerState.isMatrix) {
 			matrixDraftState.rows[row.matrixRowId].dirty = true;
+			// Keep matrix row annotation textareas in sync with UI edits.
+			syncAllMatrixDraftsToTextareas();
 		} else {
 			annotationDraftState.dirty = true;
+			// Keep action-tags textarea synchronized with UI edits.
+			syncSingleDraftToTextarea(true);
 		}
 		updateAnnotationTable();
 		log('Reassign completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationDraftState);
