@@ -401,13 +401,19 @@ function deleteOntologyAnnotation(system, code, field) {
 }
 
 function extractOntologyJSON(text) {
+	const minimalJson = {
+		dataElement: {
+			coding: []
+		}
+	}
+
 	const name = config.atName;
 	const startIdx = text.indexOf(name);
-	if (startIdx === -1) return null;
+	if (startIdx === -1) return minimalJson;
 
 	const afterEquals = text.slice(startIdx + name.length);
 	const eqMatch = afterEquals.match(/^\s*=\s*/);
-	if (!eqMatch) return null;
+	if (!eqMatch) return minimalJson;
 
 	let jsonStart = startIdx + name.length + eqMatch[0].length;
 	let braceCount = 0;
@@ -442,17 +448,20 @@ function extractOntologyJSON(text) {
 		}
 	}
 
+
 	if (braceCount !== 0 || endIdx === -1) {
 		console.error("Unbalanced braces in JSON");
-		return null;
+		return minimalJson;
 	}
 
 	const jsonText = text.slice(jsonStart, endIdx);
 	try {
-		return JSON.parse(jsonText);
+		const json = JSON.parse(jsonText);
+		if (!json) return minimalJson;
+		return json;
 	} catch (e) {
 	    console.error(`Failed to parse JSON (${jsonText}):`, e);
-		return null;
+		return minimalJson;
 	}
 }
 
