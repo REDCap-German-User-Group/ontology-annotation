@@ -5,7 +5,7 @@
 
 ---
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18525818.svg)](https://doi.org/10.5281/zenodo.18525818)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18525817.svg)](https://doi.org/10.5281/zenodo.18525817)
 
 
 This module provides support to annotate fields in REDCap with references to various ontologies. The aim is to make data *Findable* as described in [FAIR data](https://en.wikipedia.org/wiki/FAIR_data). This is different from using ontologies like ICD10 or SNOMED-CT to describe *data*, which is already supported by REDCap. 
