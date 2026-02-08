@@ -204,7 +204,7 @@
 	},
 	"crons": [
 		{
-			"cron_name": "prune",
+			"cron_name": "Cache Prune",
 			"cron_description": "Cron that runs every hour to prune the cache.",
 			"method": "cron_prune",
 			"cron_frequency": 3600,
