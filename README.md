@@ -1,5 +1,13 @@
 # ROME: REDCap Ontology annotation Made Easy
 
+
+**NOTICE**: This is a work in progress. This is an early preview release. **It is not yet ready for production use.** Active development is ongoing on the `revamp` branch. A first release is planned within early in Q2 2026.
+
+---
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18525818.svg)](https://doi.org/10.5281/zenodo.18525818)
+
+
 This module provides support to annotate fields in REDCap with references to various ontologies. The aim is to make data *Findable* as described in [FAIR data](https://en.wikipedia.org/wiki/FAIR_data). This is different from using ontologies like ICD10 or SNOMED-CT to describe *data*, which is already supported by REDCap. 
 
 For context, see also this thread on Community: https://redcap.vumc.org/community/post.php?id=261549 (account required).
@@ -17,28 +25,33 @@ Thus, annotations are integral parts of fields and consequently part of the data
 
 ## Installation
 
-To install this external module in a REDCap instance, download a release.   
-TODO
+Automatic installation:
+
+- Automatic installation will be available once a release is available and has been submitted to the External Module Repository.
+
+Manual installation:
+
+- Clone this repo into `<redcap-root>/modules/rome_v<version-number>`.
+- Go to _Control Center > Technical / Developer Tools > External Modules_ and enable 'ROME: REDCap Ontology Annotation Made Easy'.
 
 ## Configuration
 
-TODO
+Use the built-in external module configuration.
 
 ## Usage
 
 ### Adding annotations
 
-TODO
+Annotation is done in the _Online Designer_'s **Edit Field** dialog.
 
 ### Searching an instance
 
-TODO
+Use the **ROME - Discover projects** plugin page in any project with the module enabled.
 
 ### Merging annotated data
 
-TODO
-
+Check out the **ROME - Utility functions** plugin page.
 
 ## How to cite this work
 
-TODO
+Detals are still being formalized. The DOI (see above) is stable already.
