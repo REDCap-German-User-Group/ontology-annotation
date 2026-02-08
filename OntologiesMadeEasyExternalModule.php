@@ -368,22 +368,22 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
     annotations as 
     (select project_id, field_name, j.system, j.code, j.display from
            fields, json_table(ontology,
-                   '$.dataElement.coding[*]' columns(system varchar(255) path '$.system',
+                   '$.dataElement.coding[*]' columns(`system` varchar(255) path '$.system',
 		               code   varchar(255) path '$.code',
             display varchar(255) path '$.display')) j where json_valid(ontology)),
     -- grouped annotations
     grouped_annotations as
-    (select system, code, display,
+    (select `system`, code, display,
             json_objectagg(project_id, field_name) as field_names,
 	    json_arrayagg(project_id) as projects
-    from annotations group by system, code, display)
+    from annotations group by `system`, code, display)
     -- putting it all together: project_info and grouped annotated fields
     select json_object('projects',
                        (select json_objectagg(project_id,
 		                    json_object('app_title', app_title, 'email', email, 'contact', contact))
 				from project_infos),
 		       'fields',
-		              (select json_arrayagg(json_object('field_names', field_names, 'system', system,
+		              (select json_arrayagg(json_object('field_names', field_names, 'system', `system`,
 			                                       'code', code, 'display', display, 'projects', projects))
 		               from grouped_annotations)) as info;
 SQL;
