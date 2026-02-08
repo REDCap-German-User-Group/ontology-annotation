@@ -16,7 +16,7 @@ $user = $module->framework->getUser();
 if ($user == null) exit;
 $is_project = $config['pid'] !== null;
 
-$manage_enabled = $is_project && $user->hasDesignRights();
+$annotate_enabled = $manage_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
 $configure_enabled = $user->isSuperUser() || 
 	(
 		$is_project && 
@@ -33,7 +33,7 @@ $nav_tabs = [
 	"annotate" => [
 		"label" => "Annotate",
 		"icon" => "fa-solid fa-diagram-project",
-		"enabled" => $is_project,
+		"enabled" => $annotate_enabled,
 	],
 	"discover" => [
 		"label" => "Discover",
@@ -61,7 +61,9 @@ $nav_tabs = [
 		"enabled" => $configure_enabled,
 	]
 ];
-$default_tab = $is_project ? "annotate" : "configure";
+$default_tab = "about";
+if ($is_project && $annotate_enabled) { $default_tab = "annotate"; }
+if (!$is_project) { $default_tab = "configure"; }
 // Filter out disabled tabs
 $enabled_nav_tabs = array_filter($nav_tabs, function ($tab) {
 	return $tab['enabled']; 

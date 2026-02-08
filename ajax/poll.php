@@ -47,6 +47,7 @@ $supported_types = [
 	'bioportal',
 ];
 $jobs_by_type = [];
+$requested_pending_ok = [];
 
 foreach ($requested_pending as $sid => $token) {
 	$cacheKey = 'job:' . $token;
@@ -74,7 +75,9 @@ foreach ($requested_pending as $sid => $token) {
 		continue;
 	}
 	$jobs_by_type[$type][] = $job;
+	$requested_pending_ok[] = $sid;
 }
+
 
 #endregion
 
@@ -83,6 +86,15 @@ foreach ($requested_pending as $sid => $token) {
 $results = [];
 $pending = [];
 $errors = [];
+// Add an error for any pending request that could not be assigned
+foreach ($requested_pending as $sid => $_) {
+	if (!in_array($sid, $requested_pending_ok, true)) {
+		$errors[$sid] = [
+			'rid' => $rid,
+			'error' => 'job_not_found',
+		];
+	}
+}
 $limitPerSource = $module->getMaxSearchResultsPerSource();
 
 foreach ($jobs_by_type as $type => $jobs) {

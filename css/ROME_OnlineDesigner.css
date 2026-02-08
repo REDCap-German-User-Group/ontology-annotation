@@ -135,3 +135,9 @@
 @keyframes bs-search-border-scan{
   to { background-position: 0 0, 200% 0; }
 }
+
+
+.rome-ac-hl {
+	font-weight: 700;
+	color:rgb(80, 103, 235)
+}

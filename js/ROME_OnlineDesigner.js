@@ -1166,25 +1166,18 @@
 
 					searchState.term = term;
 					searchState.resultsBySource = snap.resultsBySource || {};
-					searchState.items = snap.items || flattenResults(searchState.resultsBySource);
-					searchState.pending = snap.pending || {};
+					searchState.items = snap.items || flattenResults(searchState.resultsBySource, term);
+					searchState.pending = {}; // <-- never resume pending from cache
 					searchState.lastTermCompleted = !!snap.completed;
 
 					responseCb(searchState.items);
 
 					// If incomplete, re-issue search for missing sources
 					if (!snap.completed) {
-						const missing = desiredSourceIds.filter(
-							sid => !(sid in searchState.resultsBySource) && !(sid in searchState.pending)
-						);
+						const missing = desiredSourceIds.filter(sid => !(sid in searchState.resultsBySource));
 						if (missing.length) {
 							// We don't want to wipe cached results; see startSearch opts below
 							queueSearchMissing(term, missing);
-						}
-						else if (Object.keys(searchState.pending).length) {
-							// No missing, just pending -> resume polling
-							searchState.rid += 1;
-							schedulePoll(searchState.rid);
 						}
 					}
 					return;
@@ -1205,8 +1198,13 @@
 				const sys = shortSystem(item.hit.system);
 				const code = item.hit.code ? ` [${item.hit.code}]` : '';
 
+				const safeCode = escapeHtml(code); // code contains brackets etc.
+				const safeSys = escapeHtml(sys);
+
 				return $('<li>')
-					.append($('<div>').text(`${sys}: ${item.label}${code}`))
+					.append(
+						$('<div>').html(`${safeSys}: ${item.labelHtml}${safeCode}`)
+					)
 					.appendTo(ul);
 			};
 
@@ -1263,6 +1261,15 @@
 		}, 50);
 	}
 
+	function refreshDropdown(term) {
+		searchState.refreshing = true;
+		try {
+			designerState.$input.autocomplete('search', term);
+		} finally {
+			searchState.refreshing = false;
+		}
+	}
+
 	function startSearch(term, responseCb, opts) {
 		opts = opts || {};
 		const sourceIds = Array.isArray(opts.sourceIds) ? opts.sourceIds : null; // null => all
@@ -1281,7 +1288,6 @@
 		if (!merge) {
 			searchState.resultsBySource = {};
 			searchState.items = [];
-			searchState.lastTermCompleted = false;
 			searchState.pending = {};
 			searchState.lastTermCompleted = false;
 		}
@@ -1340,7 +1346,7 @@
 					searchState.pending = newPending;
 				}
 
-				searchState.items = flattenResults(searchState.resultsBySource);
+				searchState.items = flattenResults(searchState.resultsBySource, searchState.term);
 
 				const desired = getDesiredSourceIds();
 				const ck = makeCacheKey(term, desired);
@@ -1360,8 +1366,8 @@
 				if (typeof responseCb === 'function') {
 					responseCb(searchState.items);
 				} else {
-					// refresh dropdown in-place (merge path)
-					designerState.$input.autocomplete('search', term);
+					// Refresh dropdown in-place (merge path)
+					refreshDropdown(term);
 				}
 
 				if (Object.keys(searchState.pending).length) {
@@ -1388,7 +1394,7 @@
 				}
 				else {
 					// Merge failure: keep whatever we had (cached results still valid)
-					designerState.$input.autocomplete('search', term);
+					refreshDropdown(term);
 				}
 				showSpinner(false);
 				// Report error
@@ -1436,7 +1442,7 @@
 
 				// Merge results into state
 				mergeIntoResultsBySource(resp.results || {});
-				searchState.items = flattenResults(searchState.resultsBySource);
+				searchState.items = flattenResults(searchState.resultsBySource, searchState.term);
 
 				// Update pending
 				searchState.pending = resp.pending || {};
@@ -1449,12 +1455,11 @@
 
 				searchState.cache.set(ck, {
 					resultsBySource: searchState.resultsBySource,
-					pending: searchState.pending,
 					completed,
 					items: searchState.items
 				});
 
-				designerState.$input.autocomplete('search', searchState.term);
+				refreshDropdown(searchState.term);
 
 				if (Object.keys(searchState.pending).length) {
 					schedulePoll(rid);
@@ -1512,25 +1517,55 @@
 		return system + '|' + code;
 	}
 
-	function flattenResults(resultsBySource) {
+	function flattenResults(resultsBySource, term) {
 		const out = [];
 
 		for (const [sourceId, hits] of Object.entries(resultsBySource)) {
 			if (!Array.isArray(hits)) continue;
 
 			for (const h of hits) {
+				const label = h.display || h.code || '(no label)';
+				const value = h.display || h.code || '';
+
 				out.push({
-					label: h.display || h.code || '(no label)',
-					value: h.display || h.code || '',
+					label,
+					labelHtml: highlightTermHtml(label, term),
+					value,
 					hit: h,
 					sourceId
 				});
 			}
 		}
 
-		// stable sort: score desc, otherwise insertion order
+		// Stable sort: score desc, otherwise insertion order
 		out.sort((a, b) => (b.hit.score || 0) - (a.hit.score || 0));
 		return out;
+	}
+
+	function escapeHtml(s) {
+		return String(s)
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+	}
+
+	function escapeRegExp(s) {
+		return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	}
+
+	/**
+	 * Returns HTML with occurrences of term wrapped in <span class="rome-ac-hl">...</span>.
+	 * Safe: escapes input first, then injects spans on the escaped string.
+	 */
+	function highlightTermHtml(text, term) {
+		const t = (term || '').trim();
+		if (!t) return escapeHtml(text);
+
+		const escapedText = escapeHtml(text);
+		const re = new RegExp(escapeRegExp(t), 'ig');
+		return escapedText.replace(re, (m) => `<span class="rome-ac-hl">${m}</span>`);
 	}
 
 	function stopSearch() {
