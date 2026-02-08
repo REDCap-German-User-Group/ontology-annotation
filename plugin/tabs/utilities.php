@@ -8,15 +8,16 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 /** @var OntologiesMadeEasyExternalModule $module */
 
+$code_theme = $module->framework->getUserSetting("code-theme") ?? "dark";
+$theme_file = ["dark" => "github-dark.min.css", "light" => "github.min.css"][$code_theme];
+
 $ih = $module->getInjectionHelper();
 // Inject additional JS and CSS
-$ih->js("libs/highlightjs_11.11.1/highlight.min.js");
-$ih->js("libs/highlightjs_11.11.1/r.min.js");
-$ih->js("libs/highlightjs_11.11.1/json.min.js");
-$ih->css($code_theme = [
-	"dark" => "libs/highlightjs_11.11.1/github-dark.min.css",
-	"light" => "libs/highlightjs_11.11.1/github.min.css",
-][$module->getProjectSetting("code-theme") ?? "dark"]);
+$hljs_path = "libs/highlightjs_11.11.1/";
+$ih->js($hljs_path."highlight.min.js");
+$ih->js($hljs_path."r.min.js");
+$ih->js($hljs_path."json.min.js");
+$ih->css($hljs_path.$theme_file);
 
 $combine_script = $module->framework->getSafePath("plugin/utils/rome_combine.r");
 

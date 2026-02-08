@@ -33,6 +33,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Hooks
 
+	function redcap_module_link_check_display($project_id, $link) {
+		// Allow for all users in all contexts
+		return $link;
+	}
+
 	// Injection
 	function redcap_every_page_top($project_id)
 	{
@@ -303,12 +308,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 */
 	function get_plugin_base_config()
 	{
+		$pid = intval($this->framework->getProjectId());
+		if ($pid === 0) $pid = null;
+		$debug = $pid ? $this->getProjectSetting('javascript-debug') == true : $this->getSystemSetting("sys-javascript-debug") == true;
 		$js_base_config = [
-			'debug' => $this->getProjectSetting('javascript-debug') == true,
+			'debug' => $debug,
 			'version' => $this->VERSION,
 			'moduleDisplayName' => $this->tt('module_name'),
 			'isAdmin' => $this->framework->isSuperUser(),
-			'pid' => intval($this->framework->getProjectId()),
+			'pid' => $pid,
 		];
 		return $js_base_config;
 	}

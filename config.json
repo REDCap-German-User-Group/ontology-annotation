@@ -26,6 +26,11 @@
 	],
 	"system-settings": [
 		{
+			"key": "sys-javascript-debug",
+			"name": "Output debug information to the browser console",
+			"type": "checkbox"
+		},
+		{
 			"key": "cache-config-note",
 			"name": "Background info on cache mechanism - see English.ini",
 			"tt_name": "conf_cache_config_note",
@@ -115,19 +120,11 @@
 			"type": "checkbox"
 		},
 		{
-			"key": "code-theme",
-			"name": "Theme for code displays",
-			"type": "radio",
-			"choices": [
-				{
-					"name": "Light",
-					"value": "light"
-				},
-				{
-					"name": "Dark",
-					"value": "dark"
-				}
-			]
+			"key": "can-configure",
+			"name": "Enable system-wide module configuration to be accessible from this project (always enabled for REDCap admins)",
+
+			"type": "checkbox",
+			"super-users-only": true
 		},
 		{
 			"key": "discoverable",
@@ -200,11 +197,19 @@
 				"url": "plugin/index.php",
 				"show-header-and-footer": true
 			}
+		],
+		"control-center": [
+			{
+				"name": "<b>ROME</b>: Ontology Annotations Made Easy",
+				"icon": "fa-solid fa-tags",
+				"url": "plugin/index.php",
+				"show-header-and-footer": true
+			}
 		]
 	},
 	"crons": [
 		{
-			"cron_name": "Cache Prune",
+			"cron_name": "cache_prune",
 			"cron_description": "Cron that runs every hour to prune the cache.",
 			"method": "cron_prune",
 			"cron_frequency": 3600,
