@@ -185,7 +185,10 @@
 			designerState.$dlg.find('#rome-search-bar :input').prop('disabled', true);
 			showErrorBadge(config.errors.join('\n'));
 		}
+		resetSearchState();
+		log('Search state has been reset.', searchState);
 	}
+
 
 	function isExcludedCheckboxChecked() {
 		return designerState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked') == true;
@@ -1142,10 +1145,32 @@
 	function initializeSearchInput(selector) {
 
 		designerState.$input = designerState.$dlg.find(selector);
+		// Re-init safely if this input already had an autocomplete instance.
+		if (designerState.$input.data('ui-autocomplete')) {
+			designerState.$input.autocomplete('destroy');
+		}
+		designerState.$input.off('.romeAutocomplete');
+
+		function raiseAutocompleteMenu() {
+			const ac = designerState.$input.data('ui-autocomplete');
+			const $menu = ac?.menu?.element;
+			if (!$menu || $menu.length === 0) return;
+
+			const baseZ = Number.parseInt(
+				designerState.$dlg.closest('[role="dialog"]').css('z-index') ?? '199',
+				10
+			);
+			const zIndex = Number.isFinite(baseZ) ? baseZ + 2 : 201;
+			$menu.css('z-index', String(zIndex));
+		}
 
 		designerState.$input.autocomplete({
 			minLength: 2,
 			delay: 0, // we debounce manually
+			appendTo: 'body',
+			open: function () {
+				raiseAutocompleteMenu();
+			},
 			source: function (request, responseCb) {
 				const term = (request.term || '').trim();
 				if (term.length < 2) {
@@ -1208,7 +1233,7 @@
 					.appendTo(ul);
 			};
 
-		designerState.$input.on('autocompleteselect', function (e, ui) {
+		designerState.$input.on('autocompleteselect.romeAutocomplete', function (e, ui) {
 			if (searchState.debounceTimer) {
 				clearTimeout(searchState.debounceTimer);
 				searchState.debounceTimer = null;
@@ -1583,6 +1608,16 @@
 		showSpinner(false);
 		showErrorBadge(false);
 	}
+
+	function resetSearchState() {
+		stopSearch();
+		designerState.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
+		searchState.term = '';
+		searchState.lastTerm = '';
+		searchState.lastTermCompleted = false;
+		searchState.debounceTimer = null;
+	}
+
 
 	function sourceSetKey(sourceIds) {
 		// Sort a copy in order not to change the original
