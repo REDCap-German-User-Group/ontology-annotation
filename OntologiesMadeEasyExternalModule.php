@@ -412,6 +412,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 								<option value="dataElement"><?= $this->tt('fieldedit_18') ?></option>
 							</select>
 							<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs" disabled><?= $this->tt('fieldedit_10') ?></button>
+							<div id="rome-add-selection-info" class="rome-add-selection-info" title="No selection">
+								<i class="fa-solid fa-circle-info"></i>
+							</div>
 							<div id="rome-edit-field-error">
 								<i class="fa-solid fa-circle-exclamation fa-lg fa-fade"></i>
 							</div>

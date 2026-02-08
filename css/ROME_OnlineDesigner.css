@@ -97,6 +97,29 @@
 	display: none;
 }
 
+.rome-add-selection-info {
+	display: none;
+	color: #6c757d;
+	cursor: pointer;
+}
+
+#rome-search-bar.rome-add-ready .rome-add-selection-info {
+	display: inline-block;
+}
+
+#rome-add-button.rome-add-ready {
+	box-shadow: 0 0 0 .2rem rgba(10, 125, 44, 0.2);
+}
+
+.rome-add-selection-info.rome-add-selection-ready {
+	color: #0a7d2c;
+}
+
+.rome-add-popover {
+	max-width: 320px;
+	font-size: 12px;
+}
+
 #rome-edit-field-error .fa-fade {
 	--fa-animation-duration: 1.5s;
 	--fa-fade-opacity: 0.7;
@@ -140,4 +163,8 @@
 .rome-ac-hl {
 	font-weight: 700;
 	color:rgb(80, 103, 235)
+}
+
+.rome-target-warning {
+	margin-left: 4px;
 }

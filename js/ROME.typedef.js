@@ -64,6 +64,70 @@
  */
 
 /**
+ * @typedef {Object} AnnotationDraftState
+ * @property {OntologyAnnotationJSON|null} base
+ * @property {OntologyAnnotationJSON|null} current
+ * @property {OntologyAnnotationParseResult|null} lastParseResult
+ * @property {boolean} dirty
+ * @property {'valid'|'invalid'} parseStatus
+ * @property {string} parseErrorMessage
+ * @property {boolean} manualMode
+ * @property {string} lastSyncedTextarea
+ */
+
+/**
+ * @typedef {Object} MatrixDraftRowState
+ * @property {string} rowId
+ * @property {string} varName
+ * @property {'valid'|'invalid'} parseStatus
+ * @property {string} parseErrorMessage
+ * @property {OntologyAnnotationJSON} base
+ * @property {OntologyAnnotationJSON} current
+ * @property {boolean} dirty
+ */
+
+/**
+ * @typedef {Object} MatrixDraftState
+ * @property {Object<string, MatrixDraftRowState>} rows
+ * @property {string[]} rowOrder
+ * @property {MutationObserver|null} observer
+ */
+
+/**
+ * @typedef {Object} SelectedAnnotationHit
+ * @property {string=} sourceId
+ * @property {string} system
+ * @property {string} code
+ * @property {string=} display
+ * @property {string=} type
+ */
+
+/**
+ * @typedef {Object} AnnotationSelectionState
+ * @property {SelectedAnnotationHit|null} selected
+ */
+
+/**
+ * @typedef {Object} AnnotationTableState
+ * @property {any} dt
+ * @property {boolean} advancedUiEnabled
+ */
+
+/**
+ * @typedef {Object} AnnotationTableRow
+ * @property {string} rowId
+ * @property {string} matrixRowId
+ * @property {string} matrixFieldName
+ * @property {string} system
+ * @property {string} code
+ * @property {string} display
+ * @property {'field'|'unit'|'choice'} targetType
+ * @property {string} targetValue
+ * @property {string} targetLabel
+ * @property {string} choiceCode
+ */
+
+/**
  * @typedef {Object} DiscoveryState
  * @property {TomSelect=} TS
  * @property {DiscoveryData=} data
@@ -108,6 +172,9 @@
 /**
  * @typedef {Object} OntologyAnnotationDataElement
  * @property {string} type
+ * @property {Array<{system:string, code:string, display?:string}>=} coding
+ * @property {Object<string, {coding:Array<{system:string, code:string, display?:string}>}>=} valueCodingMap
+ * @property {{coding:Array<{system:string, code:string, display?:string}>}=} unit
  */
 
 
