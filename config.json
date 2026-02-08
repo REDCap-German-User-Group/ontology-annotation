@@ -207,7 +207,7 @@
 			"cron_name": "prune",
 			"cron_description": "Cron that runs every hour to prune the cache.",
 			"method": "cron_prune",
-			"cron_frequency": 60,
+			"cron_frequency": 3600,
 			"cron_max_run_time": 300
 		}
 	]
