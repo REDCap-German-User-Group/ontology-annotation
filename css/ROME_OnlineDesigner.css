@@ -103,18 +103,6 @@
 	cursor: pointer;
 }
 
-#rome-search-bar.rome-add-ready .rome-add-selection-info {
-	display: inline-block;
-}
-
-#rome-add-button.rome-add-ready {
-	box-shadow: 0 0 0 .2rem rgba(10, 125, 44, 0.2);
-}
-
-.rome-add-selection-info.rome-add-selection-ready {
-	color: #0a7d2c;
-}
-
 .rome-add-popover {
 	max-width: 320px;
 	font-size: 12px;

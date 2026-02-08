@@ -697,6 +697,28 @@
 	}
 
 	/**
+	 * Ensures there is at least one blank line between existing text and appended ontology tag.
+	 * @param {string} text
+	 * @param {string} tag
+	 * @returns {string}
+	 */
+	function appendTagWithBlankLine(text, tag) {
+		if (!tag) return text;
+		const trimmed = text.replace(/\s+$/, '');
+		if (trimmed.length === 0) return tag;
+		return `${trimmed}\n\n${tag}`;
+	}
+
+	/**
+	 * Removes a single trailing blank line (if present) after ontology tag removal.
+	 * @param {string} text
+	 * @returns {string}
+	 */
+	function trimTrailingEmptyLine(text) {
+		return text.replace(/\n\s*\n$/, '\n').replace(/\n$/, '');
+	}
+
+	/**
 	 * Produces a trimmed annotation payload for the ONTOLOGY action tag.
 	 * Always removes `dataElement.text` and `dataElement.type` and drops empty containers.
 	 * @param {OntologyAnnotationJSON} annotation
@@ -752,9 +774,12 @@
 		let next = currentText;
 		const replacement = isAnnotationEmpty(annotation) ? '' : buildOntologyTag(annotation);
 		if (parse.usedFallback) {
-			next = replacement ? `${currentText}${currentText.endsWith('\n') || currentText.length === 0 ? '' : '\n'}${replacement}` : currentText;
+			next = replacement ? appendTagWithBlankLine(currentText, replacement) : currentText;
 		} else {
 			next = `${currentText.slice(0, parse.start)}${replacement}${currentText.slice(parse.end)}`;
+			if (!replacement) {
+				next = trimTrailingEmptyLine(next);
+			}
 		}
 		$area.val(next);
 		annotationDraftState.lastSyncedTextarea = next;
@@ -776,9 +801,12 @@
 			const replacement = isAnnotationEmpty(rowState.current) ? '' : buildOntologyTag(rowState.current);
 			let next = currentText;
 			if (parse.usedFallback) {
-				next = replacement ? `${currentText}${currentText.endsWith('\n') || currentText.length === 0 ? '' : '\n'}${replacement}` : currentText;
+				next = replacement ? appendTagWithBlankLine(currentText, replacement) : currentText;
 			} else {
 				next = `${currentText.slice(0, parse.start)}${replacement}${currentText.slice(parse.end)}`;
+				if (!replacement) {
+					next = trimTrailingEmptyLine(next);
+				}
 			}
 			$area.val(next);
 			rowState.dirty = false;
@@ -1056,7 +1084,7 @@
 					trigger: 'hover focus click',
 					html: true,
 					sanitize: false,
-					container: 'body',
+					container: designerState.$dlg.get(0),
 					content: 'No annotation selected.'
 				});
 			}
@@ -1863,7 +1891,6 @@
 		annotationTableState.advancedUiEnabled = showAdvanced;
 		const matrixCol = designerState.isMatrix ? '<th>Matrix Field</th>' : '';
 		$wrapper.html(`
-			<h2>Current Annotations</h2>
 			<table id="rome-annotation-table" class="table table-sm table-striped align-middle">
 				<thead>
 					<tr>${matrixCol}<th>System</th><th>Code</th><th>Display</th><th>Target</th><th>Action</th></tr>
@@ -2141,7 +2168,13 @@
 				type: h.type || null
 			});
 		});
-		designerState.$input.on('input', function () {
+		designerState.$input.on('keydown.romeAutocomplete', function (event) {
+			if (event.key === 'Enter') {
+				// Let jQuery UI autocomplete handle Enter, but block REDCap's parent dialog handlers.
+				event.stopPropagation();
+			}
+		});
+		designerState.$input.on('input.romeAutocomplete', function () {
 			if (selectionState.selected) {
 				setSelectedAnnotation(null);
 			}
@@ -2157,6 +2190,12 @@
 		selectionState.selected = annotation;
 		log('Selected annotation:', annotation);
 		refreshAddButtonState();
+		if (annotation) {
+			const $addButton = designerState.$dlg.find('#rome-add-button');
+			if ($addButton.length > 0 && !$addButton.prop('disabled')) {
+				window.setTimeout(() => $addButton.trigger('focus'), 0);
+			}
+		}
 	}
 
 	/**
@@ -2165,15 +2204,12 @@
 	 */
 	function refreshAddButtonState() {
 		const $button = designerState.$dlg.find('#rome-add-button');
-		const $bar = designerState.$dlg.find('#rome-search-bar');
 		const $indicator = designerState.$dlg.find('#rome-add-selection-info');
 		const hasSelection = !!selectionState.selected;
 		log('Refreshing Add button state. hasSelection=', hasSelection);
 		$button.prop('disabled', !hasSelection);
-		$bar.toggleClass('rome-add-ready', hasSelection);
-		$button.toggleClass('rome-add-ready', hasSelection);
+		$indicator.css('display', hasSelection ? 'inline-block' : 'none');
 		if ($indicator.length === 0) return;
-		$indicator.toggleClass('rome-add-selection-ready', hasSelection);
 		const html = hasSelection ? getSelectedAnnotationPopoverHtml(selectionState.selected) : 'No annotation selected.';
 		$indicator.attr('data-bs-content', html).attr('data-content', html).attr('title', hasSelection ? 'Selected annotation' : 'No selection');
 		if (typeof $indicator.popover === 'function') {
@@ -2186,7 +2222,7 @@
 				trigger: 'hover focus click',
 				html: true,
 				sanitize: false,
-				container: 'body',
+				container: designerState.$dlg.get(0),
 				content: html,
 				title: hasSelection ? 'Selected annotation' : 'No selection'
 			});
