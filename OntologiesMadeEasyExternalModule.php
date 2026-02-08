@@ -1756,7 +1756,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Cache check per acronym
 		$misses = [];
 		foreach ($reqAcronyms as $q_acr) {
-			$cacheKey = $this->bioPortalCacheKey($q_acr, $q);
+			$cacheKey = $this->generateBioPortalSearchCacheKey($q_acr, $q);
 			$cached = $cache->getPayload($cacheKey);
 			if (is_array($cached)) {
 				$out[$q_acr] = $cached;
@@ -1810,7 +1810,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			if (!is_array($r)) continue;
 
 			$id = isset($r['@id']) && is_string($r['@id']) ? $r['@id'] : '';
-			$r_acr = $this->bioPortalAcronymFromId($id);
+			$r_acr = $this->getBioPortalAcronymFromId($id);
 			if ($r_acr === '' || !isset($r_q_map[$r_acr])) continue;
 			$acr = $r_q_map[$r_acr];
 
@@ -1839,7 +1839,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Store misses into cache + merge into output (even if empty, cache empties to avoid hammering)
 		foreach ($misses as $acr) {
 			$hits = $fetched[$acr] ?? [];
-			$cacheKey = $this->bioPortalCacheKey($acr, $q);
+			$cacheKey = $this->generateBioPortalSearchCacheKey($acr, $q);
 			$cache->setPayload($cacheKey, $hits, $ttlSeconds, [
 				'kind' => 'bioportal',
 				'acr' => $acr,
@@ -1850,20 +1850,96 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $out;
 	}
 
-	private function bioPortalCacheKey(string $acr, string $q): string
+	/**
+	 * Build a remote cache key stored in redcap_external_modules_log.record (VARCHAR(100)).
+	 *
+	 * Format:
+	 *   r:<remote>:<segments...>[:<preview>][:<hash>]
+	 *
+	 * - All keys start with "r:" so prune can delete "r:%".
+	 * - Segments are ':'-separated.
+	 * - Preview is optional (human readable, truncated to fit).
+	 * - Hash is optional (short sha1 over a canonical string).
+	 */
+	private function remoteCacheKey(
+		string $remote,         // e.g. 'bp', 'ss', 'umls'
+		array $segments = [],   // e.g. ['s', 'SNOMEDCT']
+		string $hashInput = '', // canonical string to hash (already normalized)
+		?string $preview = null // human-readable preview (already normalized), truncated to fit
+	): string {
+		$maxLen = 100;
+
+		$remote = trim($remote);
+		if ($remote === '') {
+			throw new \InvalidArgumentException('remoteCacheKey: remote must be non-empty');
+		}
+
+		// Normalize/escape segments (no ':' to keep keys readable)
+		$cleanSegs = [];
+		foreach ($segments as $seg) {
+			if ($seg === null) continue;
+			$seg = trim((string)$seg);
+			if ($seg === '') continue;
+			$seg = str_replace(':', '∶', $seg);
+			$cleanSegs[] = $seg;
+		}
+
+		$base = 'r:' . str_replace(':', '∶', $remote);
+		if ($cleanSegs) {
+			$base .= ':' . implode(':', $cleanSegs);
+		}
+
+		$hashPart = ':' . substr(sha1($hashInput), 0, 12);
+		$fixed = $base . $hashPart;
+
+		if ($preview === null || $preview === '') {
+			return $fixed; // already short; hash always present
+		}
+
+		$p = str_replace(':', '∶', $preview);
+		$p = preg_replace('/[\x00-\x1F\x7F]+/u', '', $p) ?? $p;
+
+		// Fit ":<preview>" into maxLen, shrinking by characters until byte length fits
+		$key = $fixed . ':' . $p;
+		if (strlen($key) <= $maxLen) {
+			return $key;
+		}
+
+		// Reduce preview safely (character-wise) until the overall key fits in bytes
+		while ($p !== '' && strlen($fixed . ':' . $p) > $maxLen) {
+			$p = mb_substr($p, 0, mb_strlen($p) - 1);
+		}
+
+		return $p === '' ? $fixed : ($fixed . ':' . $p);
+	}
+
+
+
+	private function generateBioPortalSearchCacheKey(string $acr, string $q): string
 	{
-		// normalize q for cache key (keep it cheap, no hashing needed)
 		$acr = strtoupper(trim($acr));
-		$q = mb_strtolower(trim($q));
-		$q = preg_replace('/\s+/', ' ', $q);
-		return 'bp:' . $acr . ':' . $q;
+
+		$qNorm = mb_strtolower(trim($q));
+		$qNorm = preg_replace('/\s+/u', ' ', $qNorm) ?? $qNorm;
+
+		$preview = mb_substr($qNorm, 0, 40); // you can keep 40 as a goal; builder will truncate if needed
+
+		$cacheKey = $this->remoteCacheKey(
+			'bp',
+			['s', $acr],
+			$qNorm,      // hashInput (canonical)
+			$preview,      // preview
+			100,
+			12
+		);
+		return $cacheKey;
 	}
 
 	/**
 	 * Extract acronym from BioPortal @id like:
 	 * http://purl.bioontology.org/ontology/SNOMEDCT/111552007
 	 */
-	private function bioPortalAcronymFromId(string $id): string
+	private function getBioPortalAcronymFromId(string $id): string
 	{
 		if ($id === '') return '';
 		// Fast parse without regex
@@ -1927,5 +2003,27 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	{
 		return 'ROME-REDCap-EM (BioPortal search, experimental)';
 	}
+
+	#region Crons
+
+	/**
+	 * Prune the cache. 
+	 * @param array $cronInfo 
+	 * @return string 
+	 */
+	function cron_prune($cronInfo) {
+		try {
+			$this->initConfig();
+			$cache = $this->getCache();
+			$cache->prune();
+		}
+		catch (Exception $e) {
+			$this->framework->log('Cache pruning failed: '.$e->getMessage());
+			return "ROME: Pruning failed.";
+		}
+		return "ROME: Pruning completed successfully.";
+	}
+
+	#endregion
 
 }

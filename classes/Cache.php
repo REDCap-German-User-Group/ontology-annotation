@@ -193,6 +193,7 @@ interface CacheBackend
 	 *  - 'lock'   => age seconds for lock artifacts
 	 *  - 'remote' => age seconds for remote cache artifacts
 	 *  - 'index'  => age seconds for local index artifacts
+	 *  - 'index'  => age seconds for job artifacts
 	 *  - 'batch'  => max rows/files to delete per category
 	 *
 	 * @param array $policy Prune policy.
@@ -327,7 +328,7 @@ final class Cache
 	 * @param array $policy Policy (see CacheBackend::prune()).
 	 * @return void
 	 */
-	public function prune(array $policy): void
+	public function prune(array $policy = []): void
 	{
 		$this->backend->prune($policy);
 	}
@@ -461,12 +462,17 @@ final class ModuleLogCacheBackend implements CacheBackend
 		$batch = (int)($policy['batch'] ?? 20000);
 		$batch = max(1, min(50000, $batch));
 
-		$lockAge   = max(60, (int)($policy['lock'] ?? 3600));
-		$remoteAge = max(60, (int)($policy['remote'] ?? 3 * 86400));
-		$indexAge  = max(60, (int)($policy['index'] ?? 180 * 86400));
+		$lockAge   = max(60, (int)($policy['lock'] ?? 3600));          // 1 hour
+		$jobAge    = max(60, (int)($policy['job'] ?? 10 * 60));        // 10 minutes
+		$remoteAge = max(60, (int)($policy['remote'] ?? 3 * 86400));   // 3 days
+		$indexAge  = max(60, (int)($policy['index'] ?? 180 * 86400));  // 180 days
 
 		$this->deleteByPrefixAndAge('lock:%', $lockAge, $batch);
+		// Pending/coordination artifacts
+		$this->deleteByPrefixAndAge('job:%', $jobAge, $batch);
+		// Remote result caches 
 		$this->deleteByPrefixAndAge('r:%', $remoteAge, $batch);
+		// Local index artifacts
 		$this->deleteByPrefixAndAge('idx:%', $indexAge, $batch);
 	}
 
@@ -626,12 +632,17 @@ final class FileCacheBackend implements CacheBackend
 		$batch = (int)($policy['batch'] ?? 20000);
 		$batch = max(1, min(50000, $batch));
 
-		$lockAge   = max(60, (int)($policy['lock'] ?? 3600));
-		$remoteAge = max(60, (int)($policy['remote'] ?? 3 * 86400));
-		$indexAge  = max(60, (int)($policy['index'] ?? 180 * 86400));
+		$lockAge   = max(60, (int)($policy['lock'] ?? 3600));          // 1 hour
+		$jobAge    = max(60, (int)($policy['job'] ?? 10 * 60));        // 10 minutes
+		$remoteAge = max(60, (int)($policy['remote'] ?? 3 * 86400));   // 3 days
+		$indexAge  = max(60, (int)($policy['index'] ?? 180 * 86400));  // 180 days
 
 		$this->pruneByGlobAndAge('lock_*.lock', $lockAge, $batch);
+		// Pending/coordination artifacts
+		$this->pruneByGlobAndAge('job_*.json', $jobAge, $batch);
+		// Remote result caches 
 		$this->pruneByGlobAndAge('r_*.json', $remoteAge, $batch);
+		// Local index artifacts
 		$this->pruneByGlobAndAge('idx_*.json', $indexAge, $batch);
 	}
 
