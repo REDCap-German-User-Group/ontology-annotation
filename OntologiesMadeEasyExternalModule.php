@@ -1505,8 +1505,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			}
 		}
 
-		// External sources
-		$ext_sources = $this->getConfiguredActiveExternalSources($project_id);
+		// Remote sources
+		$ext_sources = $this->getConfiguredActiveRemoteSources($project_id);
 		foreach ($ext_sources as $id => $src) {
 			$effective[$id] = $src;
 		}
@@ -1521,7 +1521,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'desc' => $src['desc'],
 				'count' => $src['item_count'] ?? null,
 				'system_counts' => $system_counts,
-				'hint' => ($src['external'] ?? false) ? 'local' : 'external',
+				'hint' => ($src['deferred'] === true) ? 'remote' : 'local',
 			];
 		}
 
@@ -1533,15 +1533,29 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Lookup map for server dispatch (by id)
 		$map = [];
 		foreach ($effective as $id => $src) {
-			$docId = (int)$src['doc_id'];
+			if ($src['deferred'] === true) {
+				$docId = null;
+				$indexCacheKey = null;
+				$itemCount = -1;
+				$meta = $src['meta'] ?? [];
+			}
+			else {
+				$docId = (int)$src['doc_id'];
+				$indexCacheKey = 'idx:' . $id . ':' . $docId;
+				$itemCount = (int)($src['item_count'] ?? 0);
+				$meta = null;
+			}
 			$map[$id] = [
 				'id' => $id,
 				'scope' => $src['scope'],
 				'kind' => $src['kind'],
+				'deferred' => $src['deferred'] === true,
 				'doc_id' => $docId,
-				'item_count' => (int)$src['item_count'],
+				'item_count' => $itemCount,
 				// cache key for local index:
-				'index_cache_key' => 'idx:' . $id . ':' . $docId,
+				'index_cache_key' => $indexCacheKey,
+				// meta for remote sources (e.g. for access details)
+				'meta' => $meta,
 			];
 		}
 
@@ -1601,7 +1615,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$out[$id] = [
 				'id' => $id,
 				'scope' => $project_id === null ? 'system' : 'project',
-				'external' => false,
+				'deferred' => false,
 				'kind' => (string)($meta['kind'] ?? 'fhir_questionnaire'),
 				'doc_id' => $docId,
 				'item_count' => intval($meta['item_count'] ?? 0),
@@ -1613,12 +1627,18 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $out;
 	}
 
-	private function getConfiguredActiveExternalSources(int $project_id): array 
+	function getConfiguredActiveRemoteSources(int $project_id): array 
 	{
 		$out = [];
 		// TODO: get configured sources from project settings
 
-		return $out;
+		// return $out;
+
+		// TODO - fix query/result acronym mismatch
+		// Idea to get ACRONYM - DIFFERENT ACRONYM mapping is to do a simple request to search for a 
+		// single ontology and extract the id. 
+		// This is a bit of a hack, but it's the only way to get the ACRONYM - DIFFERENT ACRONYM mapping
+
 
 		// For now, return hardcoded BioPortal SNOMEDCT
 		$out['src_bioportal_snomedct'] = [
@@ -1627,7 +1647,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'scope' => 'project',
 			'label' => 'BioPortal: SNOMEDCT',
 			'desc' => 'Search SNOMED CT via BioPortal',
-			'external' => true,
+			'deferred' => true,
+			'meta' => [
+				'type' => 'bioportal',
+				'q_acronym' => 'SNOMEDCT',
+				'r_acronym' => 'SNOMEDCT', // CAVE: Need to get creatively, see LOINC<>LNC
+				'sys_uri' => 'http://snomed.info/sct',
+			],
 		];
 		return $out;
 	}
@@ -1644,6 +1670,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	function getMinSearchLength(): int
 	{
 		return self::MIN_SEARCH_LENGTH;
+	}
+
+	function getMaxSearchResultsPerSource(): int
+	{
+		// TODO: Make this configurable
+		return 20;
 	}
 
 
@@ -1686,24 +1718,24 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 *
 	 * @param Cache $cache
 	 * @param array{api_url: string, api_token: string, ontology_list: string, enabled: bool} $bp
-	 * @param array<int, string> $acronyms Requested ontology acronyms (any case)
+	 * @param array<int, string> $acronym_query_response_map Requested ontology acronyms as a map: QUERY ACRONYM => RESPONSE ACRONYM
 	 * @param string $q Query
-	 * @param int $limit Per-acronym limit
+	 * @param int $limit_per_acronym Limit per acronym
 	 * @param int $ttlSeconds Cache TTL per acronym (e.g. 1800)
-	 * @return array<string, array<int, array{system:string, code:string, display:string, score:int|float}>> keyed by ACRONYM (uppercase)
+	 * @return array<string, array<int, array{system:string, code:string, display:string, score:int|float}>> keyed by QUERY ACRONYM
 	 */
 	function searchBioPortal(
 		Cache $cache,
 		array $bp,
-		array $acronyms,
+		array $acronym_query_response_map,
 		string $q,
-		int $limit,
+		int $limit_per_acronym,
 		int $ttlSeconds = 1800
 	): array {
 		$out = [];
 		$q = trim($q);
 
-		if (empty($bp['enabled']) || $q === '' || $limit <= 0) return $out;
+		if (empty($bp['enabled']) || $q === '' || $limit_per_acronym <= 0) return $out;
 
 		$base  = rtrim((string)($bp['api_url'] ?? ''), '/') . '/';
 		$token = (string)($bp['api_token'] ?? '');
@@ -1714,25 +1746,22 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		// Normalize + validate requested acronyms
 		$req = [];
-		foreach ($acronyms as $a) {
-			if (!is_string($a)) continue;
-			$a = strtoupper(trim($a));
-			if ($a === '') continue;
-			if (!isset($allowed[$a])) continue; // only allow known ontologies
-			$req[$a] = true;
+		foreach ($acronym_query_response_map as $q_acr => $r_acr) {
+			if (!in_array($q_acr, $allowed, true)) continue; // only allow known ontologies
+			$req[$q_acr] = true;
 		}
 		$reqAcronyms = array_keys($req);
 		if (!$reqAcronyms) return $out;
 
 		// Cache check per acronym
 		$misses = [];
-		foreach ($reqAcronyms as $acr) {
-			$cacheKey = $this->bioPortalCacheKey($acr, $q);
+		foreach ($reqAcronyms as $q_acr) {
+			$cacheKey = $this->bioPortalCacheKey($q_acr, $q);
 			$cached = $cache->getPayload($cacheKey);
 			if (is_array($cached)) {
-				$out[$acr] = $cached;
+				$out[$q_acr] = $cached;
 			} else {
-				$misses[] = $acr;
+				$misses[] = $q_acr;
 			}
 		}
 
@@ -1740,13 +1769,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if (!$misses) return $out;
 
 		// One unified BioPortal call for misses
-		$pagesize = $limit * count($misses);
-
-
-		// TODO - fix
-		// Idea to get ACRONYM - DIFFERENT ACRONYM mapping is to do a simple request to search for a 
-		// single ontology and extract the id. 
-		// This is a bit of a hack, but it's the only way to get the ACRONYM - DIFFERENT ACRONYM mapping
+		$pagesize = $limit_per_acronym * count($misses);
 		
 		$params = [
 			'q' => $q,
@@ -1778,16 +1801,20 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Prepare buckets for misses
 		$fetched = [];
 		foreach ($misses as $acr) $fetched[$acr] = [];
+		// Prepare reverse lookup (last one wins if case of collision)
+		$r_q_map = [];
+		foreach ($acronym_query_response_map as $q_acr => $r_acr) $r_q_map[$r_acr] = $q_acr;
 
 		// Split + map, enforcing per-acronym limit
 		foreach ($collection as $r) {
 			if (!is_array($r)) continue;
 
 			$id = isset($r['@id']) && is_string($r['@id']) ? $r['@id'] : '';
-			$acr = $this->bioPortalAcronymFromId($id);
-			if ($acr === '' || !isset($fetched[$acr])) continue;
+			$r_acr = $this->bioPortalAcronymFromId($id);
+			if ($r_acr === '' || !isset($r_q_map[$r_acr])) continue;
+			$acr = $r_q_map[$r_acr];
 
-			if (count($fetched[$acr]) >= $limit) continue;
+			if (count($fetched[$acr]) >= $limit_per_acronym) continue;
 
 			$display = isset($r['prefLabel']) && is_string($r['prefLabel']) ? trim($r['prefLabel']) : '';
 			if ($display === '' && isset($r['label']) && is_string($r['label'])) $display = trim($r['label']);
@@ -1816,7 +1843,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$cache->setPayload($cacheKey, $hits, $ttlSeconds, [
 				'kind' => 'bioportal',
 				'acr' => $acr,
-			]); // <-- adapt if your Cache API differs
+			]);
 			$out[$acr] = $hits;
 		}
 
@@ -1866,7 +1893,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	/**
 	 * @param array{ontology_list: string} $bp
-	 * @return array<string, true> Set of allowed acronyms (uppercase)
+	 * @return array<string> List of allowed acronyms (uppercase)
 	 */
 	private function getBioPortalAllowedAcronyms(array $bp): array
 	{
@@ -1890,7 +1917,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$set[strtoupper($acr)] = true;
 		}
 
-		return $set;
+		return array_keys($set);
 	}
 
 	

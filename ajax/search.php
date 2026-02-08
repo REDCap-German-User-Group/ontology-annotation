@@ -2,11 +2,11 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+use Exception;
 use stdClass;
 use Throwable;
 
-// --- Check project context -------------------------------------------------
-
+// Check project context
 if (!defined('PROJECT_ID')) {
 	json_fail(403, 'Must be called in a project context.');
 }
@@ -16,7 +16,7 @@ if (!defined('PROJECT_ID')) {
 $module->initProject(PROJECT_ID);
 $module->initConfig();
 
-// --- Parse search request body ---------------------------------------------
+#region Parse search request body
 
 $req = read_json_body();
 
@@ -41,7 +41,9 @@ if (isset($req['source_ids'])) {
 	$sourceIds = array_values(array_unique($sourceIds));
 }
 
-// --- Build cache and registry ----------------------------------------------
+#endregion
+
+# region Init cache and build registry
 
 $cache = $module->getCache();
 if ($cache == null) {
@@ -56,11 +58,16 @@ if (count($sourceIds) === 0) {
 	$sourceIds = array_keys($sources_map);
 }
 
+
+#endregion
+
+#region Perform search in sources
+
+$limitPerSource = $module->getMaxSearchResultsPerSource();
 $results = [];
+$pending = [];
 $errors = [];
 $stats = [];
-
-// --- Dispatch LOCAL search -------------------------------------------------
 
 foreach ($sourceIds as $sid) {
 	if (!isset($sources_map[$sid])) {
@@ -69,74 +76,28 @@ foreach ($sourceIds as $sid) {
 	}
 
 	$src = $sources_map[$sid];
-
-	// Expected fields in your src descriptor:
-	// - doc_id (int)
-	// - kind (string) (optional if all are fhir for now)
-	$docId = (int)($src['doc_id'] ?? 0);
-	if ($docId <= 0) {
-		$errors[$sid] = 'Invalid source version.';
-		continue;
+	
+	if ($src['deferred'] !== true) {
+		try {
+			performLocalSearch($q, $src, $cache, $limitPerSource, $results, $errors, $stats);
+		}
+		catch (Exception $e) {
+			$errors[$sid] = 'Failed to perform search: ' . $e->getMessage();
+		}
 	}
-
-	$indexKey = 'idx:' . $sid . ':' . $docId;
-	$payload = $cache->getPayload($indexKey);
-	if ($payload === null) {
-		$errors[$sid] = 'Index missing (not built yet).';
-		continue;
-	}
-
-	// Real implementation later: search within payload
-	try {
-		$results[$sid] = search_local_index(
-			$payload,
-			$q,
-			$module->getMinSearchLength(),
-			20
-		);
-	} catch (Throwable $e) {
-		$errors[$sid] = 'Search failed: ' . $e->getMessage();
+	else {
+		try {
+			deferSearch($q, $rid, $sid, $cache, $pending);
+		}
+		catch (Exception $e) {
+			$errors[$sid] = 'Failed to defer search: ' . $e->getMessage();
+		}
 	}
 }
 
+#endregion
 
-// --- Dispatch REMOTE search (defered) --------------------------------------
-
-// BioPortal
-$bp = $module->getBioPortalApiDetails();
-if (($bp['enabled'] ?? false) && $qLen >= 2) {
-	$ontologies_to_search = ['SNOMEDCT'];
-
-	foreach ($ontologies_to_search as $acr) {
-		$srcKey = 'src_bioportal_' . strtolower($acr);
-
-		// create a deferred job token (cheap + opaque)
-		$token = bin2hex(random_bytes(16));
-
-		// store job descriptor in cache (short-lived)
-		$cache->setPayload(
-			'job:' . $token,
-			[
-				'rid' => $rid,
-				'q' => $q,
-				'acronym' => $acr,
-				'srcKey' => $srcKey,
-				'created_at' => time(),
-			],
-			300, // 5 min TTL
-			['kind' => 'bioportal_job']
-		);
-
-		// tell client this source is pending
-		$pending[$srcKey] = [
-			'token' => $token,
-			'after_ms' => 300,
-		];
-	}
-}
-
-
-// --- Send response to client _______--------------------------------------
+// Send response to client
 
 header('Content-Type: application/json; charset=utf-8');
 echo json_encode([
@@ -147,38 +108,35 @@ echo json_encode([
 	'stats' => $stats ?: new stdClass(),
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
+exit;
 
-#region Search / Search Helpers
+#region Local Search
 
-function json_fail(int $code, string $message): void
+function performLocalSearch($q, $src, $cache, $limit, &$results, &$errors, &$stats)
 {
-	http_response_code($code);
-	header('Content-Type: application/json; charset=utf-8');
-	echo json_encode(['error' => $message], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-	exit;
+	$sid = $src['id'];
+	// Local sources require a doc_id to be specified.
+	$docId = (int)($src['doc_id'] ?? 0);
+	if ($docId <= 0) {
+		$errors[$sid] = 'Invalid source version.';
+		return;
+	}
+	// Local sources must have been build (and therefor have a cached payload).
+	$indexKey = 'idx:' . $sid . ':' . $docId;
+	$payload = $cache->getPayload($indexKey);
+	if ($payload === null) {
+		$errors[$sid] = 'Index missing (not built yet).';
+		return;
+	}
+	try {
+		$results[$sid] = search_local_index($payload, $q, $limit);
+	} catch (Throwable $e) {
+		$errors[$sid] = 'Search failed: ' . $e->getMessage();
+	}
 }
 
-function read_json_body(): array
+function search_local_index(array $indexPayload, string $q, int $limitPerSource = 20): array
 {
-	$raw = file_get_contents('php://input');
-	if ($raw === false) return [];
-	// Remove CSRF token
-	$pos = mb_strpos($raw, '&redcap_csrf_token');
-	if ($pos !== false) $raw = trim(mb_substr($raw, 0, $pos));
-	if ($raw === '') return [];
-	$data = json_decode($raw, true);
-	return is_array($data) ? $data : [];
-}
-
-/**
- * Stub search: replace this with your real index search.
- * Must return an array of result objects.
- */
-function search_local_index(array $indexPayload, string $q, int $minChars = 2, int $limitPerSource = 20): array
-{
-	$q = trim($q);
-	if (mb_strlen($q) < $minChars) return [];
-
 	$needle = mb_strtolower($q);
 	$needle = preg_replace('/\s+/u', ' ', $needle) ?? $needle;
 	$needle = trim($needle);
@@ -223,6 +181,58 @@ function search_local_index(array $indexPayload, string $q, int $minChars = 2, i
 	if ($limitPerSource > 0) $hits = array_slice($hits, 0, $limitPerSource);
 
 	return $hits;
+}
+
+#endregion
+
+#region Deferred search
+
+function deferSearch($q, $rid, $sid, $cache, &$pending) {
+	// Create a deferred job token
+	$token = bin2hex(random_bytes(16));
+
+	// Store job descriptor in cache (short-lived)
+	$cache->setPayload(
+		'job:' . $token,
+		[
+			'rid' => $rid,
+			'q' => $q,
+			'sid' => $sid,
+			'created_at' => time(),
+		],
+		300, // 5 min TTL
+		[]
+	);
+
+	// Tell client this source is pending
+	$pending[$sid] = [
+		'token' => $token,
+		'after_ms' => 300,
+	];
+}
+
+#endregion
+
+#region JSON Helpers
+
+function json_fail(int $code, string $message): void
+{
+	http_response_code($code);
+	header('Content-Type: application/json; charset=utf-8');
+	echo json_encode(['error' => $message], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+	exit;
+}
+
+function read_json_body(): array
+{
+	$raw = file_get_contents('php://input');
+	if ($raw === false) return [];
+	// Remove CSRF token
+	$pos = mb_strpos($raw, '&redcap_csrf_token');
+	if ($pos !== false) $raw = trim(mb_substr($raw, 0, $pos));
+	if ($raw === '') return [];
+	$data = json_decode($raw, true);
+	return is_array($data) ? $data : [];
 }
 
 
