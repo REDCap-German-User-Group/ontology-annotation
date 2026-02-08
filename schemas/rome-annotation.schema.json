@@ -1,0 +1,182 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/REDCap-German-User-Group/ontology-annotation/schemas/rome-annotation.schema.json",
+    "title": "ROME Ontology Annotation Schema",
+    "type": "object",
+    "required": [
+        "resourceType",
+        "meta",
+        "dataElement"
+    ],
+    "properties": {
+        "resourceType": {
+            "const": "ROME_Annotation"
+        },
+        "meta": {
+            "type": "object",
+            "required": [
+                "version",
+                "created",
+                "creator"
+            ],
+            "properties": {
+                "version": {
+                    "type": "string"
+                },
+                "created": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "updated": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "creator": {
+                    "type": "string"
+                },
+                "language": {
+                    "type": "string"
+                },
+                "profile": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "uri"
+                    }
+                }
+            },
+            "additionalProperties": false
+        },
+        "dataElement": {
+            "type": "object",
+            "required": [
+                "coding",
+                "text"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "radio",
+                        "checkbox",
+                        "dropdown",
+                        "number",
+                        "text",
+                        "date",
+                        "datetime",
+                        "yesno",
+                        "truefalse"
+                    ]
+                },
+                "coding": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/Coding"
+                    },
+                    "minItems": 1
+                },
+                "text": {
+                    "type": "string"
+                },
+                "format": {
+                    "type": "string",
+                    "enum": [
+                        "email",
+                        "url",
+                        "phone"
+                    ]
+                },
+                "numericType": {
+                    "type": "string",
+                    "enum": [
+                        "integer",
+                        "decimal"
+                    ]
+                },
+                "precision": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "unit": {
+                    "type": "object",
+                    "required": [
+                        "coding",
+                        "text"
+                    ],
+                    "properties": {
+                        "coding": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/Coding"
+                            },
+                            "minItems": 1
+                        },
+                        "text": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "valueCodingMap": {
+                "type": "object",
+                "patternProperties": {
+                    "^[^\\s]+$": {
+                    "type": "object",
+                    "required": [
+                        "text",
+                        "coding"
+                    ],
+                    "properties": {
+                        "label": {
+                        "type": "string"
+                        },
+                        "text": {
+                        "type": "string"
+                        },
+                        "coding": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/$defs/Coding"
+                        },
+                        "minItems": 1
+                        }
+                    },
+                    "additionalProperties": false
+                    }
+                },
+                "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+            }
+        },
+    "additionalProperties": false,
+    "$defs": {
+        "Coding": {
+            "type": "object",
+            "required": [
+                "system",
+                "code"
+            ],
+            "properties": {
+                "system": {
+                    "type": "string",
+                    "format": "uri"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "display": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        }
+    }
+}

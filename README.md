@@ -15,6 +15,13 @@ The full annotation is captures as a JSON structure in the `@ONTOLOGY` action ta
 
 Thus, annotations are integral parts of fields and consequently part of the data dictionary. The annotation format is described in detail [here](docs/Annotation_Format.md).(ontology.md).
 
+## Requirements
+
+For the cross-project ontology search feature, the following minimal database versions are required:
+- MariaDB 10.6 or newer
+- MySql 8.0 or newer
+
+
 ## Installation
 
 To install this external module in a REDCap instance, download a release.   

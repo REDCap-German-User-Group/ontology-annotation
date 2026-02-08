@@ -1,66 +1,73 @@
 {
-    "recourceType": "AnnotatedDataset",
-    "meta" : {
-	"name" : "Test example",
-	"version": "1.0.0",
-	"created": "2025-09-08T12:00:00+02:00",
-        "updated": "2025-07-25T13:00:00+02:00",
-        "creator": "christof.meigen@medizin.uni-leipzig.de",
-    }
-    "dataElements": [
-	{
-	    "name": "Diabetes mellitus",
-	    "coding": [
+	"resourceType": "Questionnaire",
+	"title": "Minimal Annotation Test",
+	"status": "active",
+	"experimental": true,
+	"date": "2026-02-03T11:10:00+02:00",
+	"publisher": "Chrisof Meigen",
+	"contact": [
 		{
-		    "system": "urn:oid:1.2.276.0.76.5.409",
-		    "code": "E14",
-		    "display": "Nicht näher bezeichneter Diabetes mellitus"
+			"name": "Christof Meigen",
+			"telecom": [
+				{
+					"system": "email",
+					"value": "christof.meigen@medizin.uni-leipzig.de"
+				}
+			]
+		}
+	],
+	"item": [
+		{
+			"linkId": "diabetes",
+			"text": "Diabetes mellitus",
+			"type": "boolean",
+			"code": [
+				{
+					"system": "urn:oid:1.2.276.0.76.5.409",
+					"code": "E14",
+					"display": "Nicht näher bezeichneter Diabetes mellitus"
+				},
+				{
+					"system": "http://snomed.info/sct",
+					"code": "73211009",
+					"display": "Diabetes mellitus (disorder)"
+				}
+			]
 		},
 		{
-		    "system": "http://snomed.info/sct",
-		    "code": "73211009",
-		    "display": "Diabetes mellitus (disorder)"
+			"linkId": "sex",
+			"text": "Biological sex",
+			"type": "choice",
+			"code": [
+				{
+					"system": "http://snomed.info/sct",
+					"code": "734000001",
+					"display": "Biological sex (property)"
+				}
+			],
+			"answerOption": [
+				{
+					"valueCoding": {
+						"system": "http://snomed.info/sct",
+						"code": "248153007",
+						"display": "Male"
+					}
+				},
+				{
+					"valueCoding": {
+						"system": "http://snomed.info/sct",
+						"code": "246309004",
+						"display": "Female"
+					}
+				},
+				{
+					"valueCoding": {
+						"system": "http://snomed.info/sct",
+						"code": "32570691000036108",
+						"display": "Intersex"
+					}
+				}
+			]
 		}
-	    ]
-	},
-	{
-	    "name": "Biological sex",
-	    "coding": [
-		{
-		    "system": "http://snomed.info/sct",
-		    "code": "734000001",
-		    "display": "Biological sex (property)"
-		}
-	    ],
-	    "valueCodingMap": {
-		"1": {
-		    "coding": [
-			{
-			    "system": "http://snomed.info/sct",
-			    "code": "248153007",
-			    "display": "Male"
-			}
-		    ]
-		},
-		"2": {
-		    "coding": [
-			{
-			    "system": "http://snomed.info/sct",
-			    "code": "246309004",
-			    "display": "Female"
-			}
-		    ]
-		},
-		"3": {
-		    "coding": [
-			{
-			    "system": "http://snomed.info/sct",
-			    "code": "32570691000036108",
-			    "display": "Intersex"
-			}
-		    ]
-		}
-	    }
-	}
-    ]
+	]
 }
