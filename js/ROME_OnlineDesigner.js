@@ -2302,6 +2302,15 @@
 	}
 
 	/**
+	 * Toggles a visual marker when the latest returned search result set is empty.
+	 * @param {boolean} state
+	 * @returns {void}
+	 */
+	function showNoResultsState(state) {
+		designerState.$input[state ? 'addClass' : 'removeClass']('is-no-results');
+	}
+
+	/**
 	 * Initializes autocomplete search input for ontology lookup.
 	 * @param {string} selector
 	 * @returns {void}
@@ -2338,12 +2347,14 @@
 			source: function (request, responseCb) {
 				const term = (request.term || '').trim();
 				if (term.length < 2) {
+					showNoResultsState(false);
 					responseCb([]);
 					return;
 				}
 
 				// Refresh path (used later for polling)
 				if (searchState.refreshing && term === searchState.term) {
+					showNoResultsState(searchState.items.length === 0);
 					responseCb(searchState.items); return;
 				}
 
@@ -2359,6 +2370,7 @@
 					searchState.pending = {}; // <-- never resume pending from cache
 					searchState.lastTermCompleted = !!snap.completed;
 
+					showNoResultsState(searchState.items.length === 0);
 					responseCb(searchState.items);
 
 					// If incomplete, re-issue search for missing sources
@@ -2375,6 +2387,7 @@
 				// If autocomplete is re-triggering with the same term (arrow keys, focus, etc.),
 				// do NOT re-query server. Serve cached items (even if empty).
 				if (term === searchState.term && searchState.lastTermCompleted) {
+					showNoResultsState(searchState.items.length === 0);
 					responseCb(searchState.items);
 					return;
 				}
@@ -2573,6 +2586,7 @@
 			if (typeof responseCb === 'function') responseCb([]);
 			return;
 		}
+		showNoResultsState(false);
 		showSearchErrorBadge(false);
 
 		// new query identity
@@ -2655,6 +2669,7 @@
 					completed,
 					items: searchState.items
 				});
+				showNoResultsState(searchState.items.length === 0);
 
 				if (typeof responseCb === 'function') {
 					responseCb(searchState.items);
@@ -2921,6 +2936,7 @@
 		searchState.items = [];
 		setSelectedAnnotation(null);
 		showSpinner(false);
+		showNoResultsState(false);
 		showSearchErrorBadge(false);
 	}
 
