@@ -237,9 +237,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Write back updated repeatable setting if needed.
 		if (count($changed_entries)) {
 			// Full per key arrays must be written. Therefore, we need to transform them first
+			$firstChangedEntry = $changed_entries[array_key_first($changed_entries)] ?? [];
 			$valuesByKey = [];
 			foreach ($entries as $idx => $entry) {
-				foreach (array_first($changed_entries) as $key => $value) {
+				foreach ($firstChangedEntry as $key => $value) {
 					if (array_key_exists($idx, $changed_entries)) {
 						// Use changed value
 						$value = $changed_entries[$idx][$key];
