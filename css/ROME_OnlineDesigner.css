@@ -221,6 +221,12 @@
 #rome-annotation-table .select2-container--default .select2-selection--single .select2-selection__arrow {
 	top: -1px;
 }
+#div_add_field #rome-annotation-table {
+	min-width: 800px;
+}
+#addMatrixPopup #rome-annotation-table {
+	width: 100%;
+}
 
 .rome-save-remove-button {
 	border: 1px solid #dc3545 !important;
