@@ -1,10 +1,6 @@
 // Ontology Made Easy EM - Online Designer Integration
 
 // TODOs
-// - [ ] Scrap the whole Ontology table as is and replace with a DataTable and a backend structure*
-// - [ ] Instead of the search field, require manual search trigger and display results in a popover,
-//       which displays searches in internal and any external ontologies as they come in. Use a 
-//       DataTable for this, that can be searched and filtered further.
 // - [ ] Add a config option/filter to limit searching to selected ontologies (from those configured in
 //       the module settings).
 // - [ ] Add a schema validator (such as https://github.com/ajv-validator/ajv) to the module
@@ -154,7 +150,7 @@
 		$.ajaxPrefilter(function (options, originalOptions, jqXHR) {
 			if (options.url?.includes('Design/edit_matrix.php')) {
 				// Matrix saving
-				const matrixGroupName = $('#grid_name').val();
+				const matrixGroupName = String($('#grid_name').val());
 				const exclude = isExcludedCheckboxChecked();
 				const originalSuccess = options.success;
 				options.success = function (data, textStatus, jqXHR) {
@@ -291,7 +287,7 @@
 			: designerState.$dlg.find('textarea[name="element_enum"]');
 		// Detect user input
 		$enum[0].addEventListener('change', () => {
-			trackEnumChange($enum.val());
+			trackEnumChange(String($enum.val()));
 		});
 		// Detect programmatic changes by redefining .value
 		const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
@@ -329,7 +325,7 @@
 				setEnum(val);
 			}
 			else if (['select', 'radio', 'checkbox'].includes(designerState.fieldType)) {
-				trackEnumChange($enum.val());
+				trackEnumChange(String($enum.val()));
 			}
 			else {
 				setEnum('');
@@ -355,57 +351,6 @@
 				$this.attr('for', id);
 			}
 		});
-		// // Init auto completion
-		// const $searchInput = $ui.find('input[name="rome-em-fieldedit-search"]');
-		// const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
-		// const throttledSearch = throttle(function (request, response) {
-		// 	const payload = {
-		// 		"term": request.term,
-		// 		"data.isMatrix": data.isMatrix,
-		// 		"name": data.isMatrix ? data.$dlg.find('input[name="grid_name"]').val() : data.$dlg.find('input[name="field_name"]').val(),
-		// 		// TODO - maybe need add value from target dropdown, in case this affect what we do here
-		// 	};
-		// 	$searchSpinner.addClass('busy');
-		// 	log('Search request:', payload);
-		// 	JSMO.ajax('search', payload)
-		// 		.then(searchResult => {
-		// 			log('Search result:', searchResult);
-		// 			response(searchResult);
-		// 		})
-		// 		.catch(err => error(err))
-		// 		.finally(() => $searchSpinner.removeClass('busy'));
-		// }, 500, { leading: false, trailing: true });
-		// $searchInput.autocomplete({
-		// 	source: throttledSearch,
-		// 	minLength: 2,
-		// 	delay: 0,
-		// 	open: function (event, ui) {
-		// 		// For some reason, the z-index of the parent dialog keeps shifting up
-		// 		const z = '' + (Number.parseInt(data.$dlg.parents('[role="dialog"]').css('z-index') ?? '199') + 1);
-		// 		const action = ('' + $searchInput.val()).length == 0 ? 'hide' : 'show';
-		// 		$('.ui-autocomplete, .ui-menu-item').css('z-index', z)[action]();
-		// 	},
-		// 	focus: function (event, ui) {
-		// 		return false;
-		// 	},
-		// 	select: function (event, ui) {
-		// 		log('Autosuggest selected:', ui);
-
-		// 		if (ui.item.value !== '') {
-		// 			$searchInput.val(ui.item.label);
-		// 			document.getElementById("rome-add-button").onclick = function () {
-		// 				updateOntologyActionTag(ui.item);
-		// 			};
-		// 		}
-		// 		return false;
-		// 	}
-		// })
-		// 	.data('ui-autocomplete')._renderItem = function (ul, item) {
-		// 		return $("<li></li>")
-		// 			.data("item", item)
-		// 			.append("<a>" + item.display + "</a>")
-		// 			.appendTo(ul);
-		// 	};
 
 		//#endregion
 
@@ -1131,7 +1076,7 @@
 	 * @returns {void}
 	 */
 	function ensureFieldSaveHook() {
-		const existing = window.addEditFieldSave;
+		const existing = window['addEditFieldSave'];
 		if (typeof existing !== 'function') return;
 		if (existing.__romeWrapped === true) return;
 		const wrapped = function () {
@@ -1145,15 +1090,14 @@
 			}
 			if (!validateBeforeSave(() => {
 				window.setTimeout(() => {
-					window.addEditFieldSave.apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
+					window['addEditFieldSave'].apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
 				}, 0);
 			}, skipMissingChoicePrompt)) return false;
 			return existing.apply(self, args);
 		};
 		// @ts-ignore
 		wrapped.__romeWrapped = true;
-		window.addEditFieldSave = wrapped;
-		log('Wrapped REDCap addEditFieldSave() for annotation validation.');
+		window['addEditFieldSave'] = wrapped;
 	}
 
 	/**
@@ -1161,7 +1105,7 @@
 	 * @returns {void}
 	 */
 	function ensureMatrixSaveHook() {
-		const existing = window.matrixGroupSave;
+		const existing = window['matrixGroupSave'];
 		if (typeof existing !== 'function') return;
 		if (existing.__romeWrapped === true) return;
 		const wrapped = function () {
@@ -1175,14 +1119,14 @@
 			}
 			if (!validateBeforeSave(() => {
 				window.setTimeout(() => {
-					window.matrixGroupSave.apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
+					window['matrixGroupSave'].apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
 				}, 0);
 			}, skipMissingChoicePrompt)) return false;
 			return existing.apply(self, args);
 		};
 		// @ts-ignore
 		wrapped.__romeWrapped = true;
-		window.matrixGroupSave = wrapped;
+		window['matrixGroupSave'] = wrapped;
 	}
 
 	/**
@@ -1265,7 +1209,7 @@
 			if (typeof $indicator.popover === 'function') {
 				log('Initializing Bootstrap popover for add-selection indicator.');
 				$indicator.popover({
-					trigger: 'hover focus click',
+					trigger: 'click hover focus',
 					html: true,
 					sanitize: false,
 					container: designerState.$dlg.get(0),
@@ -1539,81 +1483,6 @@
 			delete normalized.dataElement.valueCodingMap[choiceCode];
 		}
 	}
-
-
-
-
-	/**
-	 * Extracts the JSON value after "@ONTOLOGY\s*=\s*" from a larger string.
-	 * Supports JSON objects `{...}` and arrays `[...]`.
-	 *
-	 * @param {string} text
-	 * @param {string} tag 
-	 * @returns {OntologyAnnotationJSON}
-	 */
-	function extractOntologyJson_DEPRECATED(text, tag = "@ONTOLOGY") {
-		if (typeof text !== "string") return null;
-
-		const tagIdx = text.indexOf(tag);
-		if (tagIdx === -1) return null;
-
-		let i = tagIdx + tag.length;
-		while (i < text.length && /\s/.test(text[i])) i++;
-		if (text[i] !== "=") return null;
-		i++;
-		while (i < text.length && /\s/.test(text[i])) i++;
-
-		const start = i;
-		const first = text[i];
-		if (first !== "{" && first !== "[") return null;
-
-		const stack = [];
-		let inString = false;
-		let escape = false;
-
-		const isOpen = (c) => c === "{" || c === "[";
-		const isClose = (c) => c === "}" || c === "]";
-		const matches = (open, close) =>
-			(open === "{" && close === "}") || (open === "[" && close === "]");
-
-		for (; i < text.length; i++) {
-			const ch = text[i];
-
-			if (inString) {
-				if (escape) escape = false;
-				else if (ch === "\\") escape = true;
-				else if (ch === '"') inString = false;
-				continue;
-			}
-
-			if (ch === '"') { inString = true; continue; }
-
-			if (isOpen(ch)) {
-				stack.push(ch);
-				continue;
-			}
-			if (isClose(ch)) {
-				const open = stack.pop();
-				if (!open || !matches(open, ch)) return null; // mismatched
-				if (stack.length === 0) {
-					const end = i + 1;
-					const jsonText = text.slice(start, end);
-					try {
-						return { jsonText, value: JSON.parse(jsonText), start, end };
-					} catch {
-						return null;
-					}
-				}
-			}
-		}
-
-		return null;
-	}
-
-
-
-
-
 
 
 	/**
@@ -1975,7 +1844,7 @@
 
 		}
 		else {
-			fieldNames.push(designerState.$dlg.find('input#field_name').val() ?? '??');
+			fieldNames.push(String(designerState.$dlg.find('input#field_name').val() ?? '??'));
 		}
 		return fieldNames;
 	}
@@ -2078,7 +1947,7 @@
 
 	/**
 	 * Builds a map from choice code to choice label for the current enum.
-	 * @returns {Object<string,string>}
+	 * @returns {Object<string?,string>}
 	 */
 	function getChoiceLabelMap() {
 		const map = {};
@@ -2121,6 +1990,7 @@
 	 * @returns {AnnotationTableRow[]}
 	 */
 	function flattenAnnotationRows() {
+		/** @type {AnnotationTableRow[]} */
 		const rows = [];
 		let index = 0;
 		const choiceLabelMap = getChoiceLabelMap();
@@ -2400,47 +2270,6 @@
 
 
 
-	/**
-	 * The throttle implementation from underscore.js
-	 * See https://stackoverflow.com/a/27078401
-	 * @param {Function} func
-	 * @param {number} wait
-	 * @param {Object} options
-	 * @returns {Function}
-	 */
-
-	function throttle(func, wait, options) {
-		let context, args, result;
-		let timeout = null;
-		let previous = 0;
-		if (!options) options = {};
-		const later = function () {
-			previous = options.leading === false ? 0 : Date.now();
-			timeout = null;
-			result = func.apply(context, args);
-			if (!timeout) context = args = null;
-		};
-		return function () {
-			const now = Date.now();
-			if (!previous && options.leading === false) previous = now;
-			const remaining = wait - (now - previous);
-			context = this;
-			args = arguments;
-			if (remaining <= 0 || remaining > wait) {
-				if (timeout) {
-					clearTimeout(timeout);
-					timeout = null;
-				}
-				previous = now;
-				result = func.apply(context, args);
-				if (!timeout) context = args = null;
-			} else if (!timeout && options.trailing !== false) {
-				timeout = setTimeout(later, remaining);
-			}
-			return result;
-		};
-	};
-
 	//#region Error Handling
 
 	/**
@@ -2687,7 +2516,7 @@
 				// ignore
 			}
 			$indicator.popover({
-				trigger: 'hover focus click',
+				trigger: 'click hover focus',
 				html: true,
 				sanitize: false,
 				container: designerState.$dlg.get(0),
