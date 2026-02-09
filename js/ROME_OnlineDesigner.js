@@ -393,6 +393,8 @@
 
 	//#endregion
 
+	//#region Dialog Exclusion State
+
 	/**
 	 * Shows an informational warning when exclusion is enabled while ontology tags exist.
 	 * @returns {void}
@@ -430,36 +432,11 @@
 		}
 	}
 
-	/**
-	 * Gets the current field type
-	 * @returns {string}
-	 */
-	function getFieldType() {
-		if (designerState.isMatrix) {
-			return designerState.$dlg.find('select#field_type_matrix').val()?.toString() ?? '';
-		}
-		return $('select#field_type').val()?.toString() ?? '';
-	}
+	//#endregion
 
-	/**
-	 * Updates the enum value store
-	 * @param {string} val 
-	 */
-	function setEnum(val) {
-		if (designerState.enum !== val) {
-			designerState.enum = val;
-			if (designerState.enum != '') {
-				log('Enum changed:', designerState.enum);
-			}
-			else {
-				log('Enum cleared.');
-			}
-		}
-		updateAnnotationTargetsDropdown();
-		updateAnnotationTable();
-	}
+	//#region Annotation Draft and Table Engine
 
-	//#region Update Ontology Action Tags and table
+	//#region Serialization and Draft Normalization
 
 	/**
 	 * Escapes text for safe HTML rendering.
@@ -1484,6 +1461,9 @@
 		}
 	}
 
+	//#endregion
+
+	//#region Parser and Annotation Access
 
 	/**
 	 * Create an ontology annotation parser with fixed options.
@@ -1771,11 +1751,9 @@
 		//#endregion
 	}
 
+	//#endregion
 
-
-
-
-
+	//#region Annotation Accessors
 
 	/**
 	 * Gets the contents of an element and extracts the ontology JSON.
@@ -1847,6 +1825,40 @@
 			fieldNames.push(String(designerState.$dlg.find('input#field_name').val() ?? '??'));
 		}
 		return fieldNames;
+	}
+
+	//#endregion
+
+	//#region Target Selection and Table Rendering
+
+	/**
+	 * Gets the current field type.
+	 * @returns {string}
+	 */
+	function getFieldType() {
+		if (designerState.isMatrix) {
+			return designerState.$dlg.find('select#field_type_matrix').val()?.toString() ?? '';
+		}
+		return $('select#field_type').val()?.toString() ?? '';
+	}
+
+	/**
+	 * Updates the enum value store.
+	 * @param {string} val
+	 * @returns {void}
+	 */
+	function setEnum(val) {
+		if (designerState.enum !== val) {
+			designerState.enum = val;
+			if (designerState.enum != '') {
+				log('Enum changed:', designerState.enum);
+			}
+			else {
+				log('Enum cleared.');
+			}
+		}
+		updateAnnotationTargetsDropdown();
+		updateAnnotationTable();
 	}
 
 	/**
@@ -2264,7 +2276,9 @@
 		});
 	}
 
-	//#endregion    
+	//#endregion
+
+	//#endregion
 
 
 
