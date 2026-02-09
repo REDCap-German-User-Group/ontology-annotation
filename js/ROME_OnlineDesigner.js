@@ -56,7 +56,9 @@
 	let JSMO = null;
 
 	/** @type {OnlineDesignerState} */
-	const designerState = {};
+	const designerState = {
+		minItemsForSelect2: 7
+	};
 
 	/** @type {OntologyAnnotationParser} */
 	let ontologyParser;
@@ -1312,6 +1314,29 @@
 		if (designerState.isMatrix) {
 			const parts = target.split(':');
 			const targetType = parts[0];
+			if (targetType === 'unit' && parts.length === 1) {
+				for (const rowId of matrixDraftState.rowOrder) {
+					const rowState = matrixDraftState.rows[rowId];
+					if (!rowState) continue;
+					addCodingToAnnotation(rowState.current, 'unit', '', coding);
+					rowState.dirty = true;
+				}
+				// Keep matrix row annotation textareas in sync with UI edits.
+				syncAllMatrixDraftsToTextareas();
+				return;
+			}
+			if (targetType === 'choice' && parts.length === 2) {
+				const choiceCode = parts[1] || '';
+				for (const rowId of matrixDraftState.rowOrder) {
+					const rowState = matrixDraftState.rows[rowId];
+					if (!rowState) continue;
+					addCodingToAnnotation(rowState.current, 'choice', choiceCode, coding);
+					rowState.dirty = true;
+				}
+				// Keep matrix row annotation textareas in sync with UI edits.
+				syncAllMatrixDraftsToTextareas();
+				return;
+			}
 			const rowId = parts[1] || '';
 			const rowState = matrixDraftState.rows[rowId];
 			if (!rowState) return;
@@ -1380,16 +1405,23 @@
 		const rows = flattenAnnotationRows();
 		const row = rows.find(r => r.rowId === rowId);
 		if (!row) return;
-		const annotation = designerState.isMatrix
-			? matrixDraftState.rows[row.matrixRowId]?.current
-			: getSingleDraftAnnotation();
-		if (!annotation) return;
-		removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
 		if (designerState.isMatrix) {
-			matrixDraftState.rows[row.matrixRowId].dirty = true;
+			const rowIds = row.isShared && Array.isArray(row.matrixRowIds) && row.matrixRowIds.length > 0
+				? row.matrixRowIds
+				: [row.matrixRowId];
+			for (const mrid of rowIds) {
+				const rowState = matrixDraftState.rows[mrid];
+				const annotation = rowState?.current;
+				if (!annotation) continue;
+				removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
+				rowState.dirty = true;
+			}
 			// Keep matrix row annotation textareas in sync with UI edits.
 			syncAllMatrixDraftsToTextareas();
 		} else {
+			const annotation = getSingleDraftAnnotation();
+			if (!annotation) return;
+			removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
 			annotationDraftState.dirty = true;
 			// Keep action-tags textarea synchronized with UI edits.
 			syncSingleDraftToTextarea(true);
@@ -1409,24 +1441,69 @@
 		const rows = flattenAnnotationRows();
 		const row = rows.find(r => r.rowId === rowId);
 		if (!row) return;
-		const annotation = designerState.isMatrix
-			? matrixDraftState.rows[row.matrixRowId]?.current
-			: getSingleDraftAnnotation();
-		if (!annotation) return;
-		removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
-		const parts = newTarget.split(':');
-		const targetType = parts[0];
-		const targetId = designerState.isMatrix ? parts.slice(2).join(':') : parts.slice(1).join(':');
-		addCodingToAnnotation(annotation, targetType, targetId, {
-			system: row.system,
-			code: row.code,
-			display: row.display
-		});
 		if (designerState.isMatrix) {
-			matrixDraftState.rows[row.matrixRowId].dirty = true;
+			const parts = newTarget.split(':');
+			const targetType = parts[0];
+			const sourceRowIds = row.isShared && Array.isArray(row.matrixRowIds) && row.matrixRowIds.length > 0
+				? row.matrixRowIds
+				: [row.matrixRowId];
+			for (const mrid of sourceRowIds) {
+				const sourceRow = matrixDraftState.rows[mrid];
+				const annotation = sourceRow?.current;
+				if (!annotation) continue;
+				removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
+				sourceRow.dirty = true;
+			}
+
+			if (targetType === 'field') {
+				const targetRowId = parts[1] || '';
+				const targetRow = matrixDraftState.rows[targetRowId];
+				if (targetRow?.current) {
+					addCodingToAnnotation(targetRow.current, 'field', '', {
+						system: row.system,
+						code: row.code,
+						display: row.display
+					});
+					targetRow.dirty = true;
+				}
+			} else if (targetType === 'unit') {
+				for (const mrid of sourceRowIds) {
+					const sourceRow = matrixDraftState.rows[mrid];
+					if (!sourceRow?.current) continue;
+					addCodingToAnnotation(sourceRow.current, 'unit', '', {
+						system: row.system,
+						code: row.code,
+						display: row.display
+					});
+					sourceRow.dirty = true;
+				}
+			} else if (targetType === 'choice') {
+				const targetChoiceCode = parts.length === 2 ? parts[1] : parts.slice(2).join(':');
+				for (const mrid of sourceRowIds) {
+					const sourceRow = matrixDraftState.rows[mrid];
+					if (!sourceRow?.current) continue;
+					addCodingToAnnotation(sourceRow.current, 'choice', targetChoiceCode, {
+						system: row.system,
+						code: row.code,
+						display: row.display
+					});
+					sourceRow.dirty = true;
+				}
+			}
 			// Keep matrix row annotation textareas in sync with UI edits.
 			syncAllMatrixDraftsToTextareas();
 		} else {
+			const annotation = getSingleDraftAnnotation();
+			if (!annotation) return;
+			removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
+			const parts = newTarget.split(':');
+			const targetType = parts[0];
+			const targetId = parts.slice(1).join(':');
+			addCodingToAnnotation(annotation, targetType, targetId, {
+				system: row.system,
+				code: row.code,
+				display: row.display
+			});
 			annotationDraftState.dirty = true;
 			// Keep action-tags textarea synchronized with UI edits.
 			syncSingleDraftToTextarea(true);
@@ -1920,6 +1997,7 @@
 		if (shouldShowUnitWarning()) {
 			$target.after('<span class="rome-target-warning text-warning" title="Unit targets are unusual for this field type."> <i class="fa-solid fa-triangle-exclamation"></i></span>');
 		}
+		applySelect2ToTargetSelects($target);
 	}
 
 	/**
@@ -1947,15 +2025,21 @@
 	function buildTargetOptions() {
 		const options = [];
 		if (designerState.isMatrix) {
-			for (const rowId of matrixDraftState.rowOrder) {
-				const row = matrixDraftState.rows[rowId];
-				if (!row) continue;
+			const fields = matrixDraftState.rowOrder
+				.map(rowId => ({ rowId, row: matrixDraftState.rows[rowId] }))
+				.filter(x => !!x.row)
+				.sort((a, b) => {
+					const aLabel = `${a.row.varName || a.rowId}`.toLowerCase();
+					const bLabel = `${b.row.varName || b.rowId}`.toLowerCase();
+					return aLabel.localeCompare(bLabel);
+				});
+			for (const { rowId, row } of fields) {
 				const rowLabel = row.varName || rowId;
 				options.push({ value: `field:${rowId}`, label: `Field - ${rowLabel}` });
-				options.push({ value: `unit:${rowId}`, label: `Unit - ${rowLabel}` });
-				for (const choice of getChoiceOptions()) {
-					options.push({ value: `choice:${rowId}:${choice.code}`, label: `${choice.code}: ${choice.label} - ${rowLabel}` });
-				}
+			}
+			options.push({ value: 'unit', label: 'Unit' });
+			for (const choice of getChoiceOptions()) {
+				options.push({ value: `choice:${choice.code}`, label: `${choice.code}: ${choice.label}` });
 			}
 			return options;
 		}
@@ -1965,6 +2049,15 @@
 			options.push({ value: `choice:${choice.code}`, label: `${choice.code}: ${choice.label}` });
 		}
 		return options;
+	}
+
+	/**
+	 * Returns canonical target option count used for Select2 search-threshold decisions.
+	 * Ignores row-local "missing target" fallback options.
+	 * @returns {number}
+	 */
+	function getTargetOptionCountForThreshold() {
+		return buildTargetOptions().length;
 	}
 
 	/**
@@ -2031,6 +2124,8 @@
 		const rows = [];
 		let index = 0;
 		const choiceLabelMap = getChoiceLabelMap();
+		const makeCodingKey = (coding) =>
+			`${`${coding.system || ''}`.trim()}|${`${coding.code || ''}`.trim()}|${`${coding.display || ''}`.trim().toLowerCase()}`;
 		const appendRowsFromAnnotation = (annotation, matrixRowId = '', matrixFieldName = '') => {
 			const normalized = normalizeAnnotation(annotation);
 			for (const c of normalized.dataElement.coding || []) {
@@ -2047,44 +2142,119 @@
 					choiceCode: ''
 				});
 			}
-			for (const c of normalized.dataElement.unit?.coding || []) {
-				rows.push({
-					rowId: `r_${index++}`,
-					matrixRowId,
-					matrixFieldName,
-					system: `${c.system || ''}`,
-					code: `${c.code || ''}`,
-					display: `${c.display || ''}`,
-					targetType: 'unit',
-					targetValue: designerState.isMatrix ? `unit:${matrixRowId}` : 'unit',
-					targetLabel: designerState.isMatrix ? `Unit - ${matrixFieldName || matrixRowId}` : 'Unit',
-					choiceCode: ''
-				});
-			}
-			for (const [choiceCode, bucket] of Object.entries(normalized.dataElement.valueCodingMap || {})) {
-				for (const c of bucket.coding || []) {
-					rows.push({
-						rowId: `r_${index++}`,
-						matrixRowId,
-						matrixFieldName,
-						system: `${c.system || ''}`,
-						code: `${c.code || ''}`,
-						display: `${c.display || ''}`,
-						targetType: 'choice',
-						targetValue: designerState.isMatrix ? `choice:${matrixRowId}:${choiceCode}` : `choice:${choiceCode}`,
-						targetLabel: `Choice - ${choiceLabelMap[choiceCode] || choiceCode}`,
-						choiceCode
-					});
-				}
-			}
 		};
 		if (designerState.isMatrix) {
+			const sharedUnitMap = new Map();
+			const sharedChoiceMaps = new Map();
 			for (const rowId of matrixDraftState.rowOrder) {
 				const row = matrixDraftState.rows[rowId];
 				if (!row) continue;
 				appendRowsFromAnnotation(row.current, rowId, row.varName);
+
+				const normalized = normalizeAnnotation(row.current);
+				for (const c of normalized.dataElement.unit?.coding || []) {
+					const key = makeCodingKey(c);
+					if (!sharedUnitMap.has(key)) {
+						sharedUnitMap.set(key, {
+							coding: {
+								system: `${c.system || ''}`,
+								code: `${c.code || ''}`,
+								display: `${c.display || ''}`
+							},
+							matrixRowIds: new Set()
+						});
+					}
+					sharedUnitMap.get(key).matrixRowIds.add(rowId);
+				}
+				for (const [choiceCode, bucket] of Object.entries(normalized.dataElement.valueCodingMap || {})) {
+					if (!sharedChoiceMaps.has(choiceCode)) {
+						sharedChoiceMaps.set(choiceCode, new Map());
+					}
+					const choiceMap = sharedChoiceMaps.get(choiceCode);
+					for (const c of bucket.coding || []) {
+						const key = makeCodingKey(c);
+						if (!choiceMap.has(key)) {
+							choiceMap.set(key, {
+								coding: {
+									system: `${c.system || ''}`,
+									code: `${c.code || ''}`,
+									display: `${c.display || ''}`
+								},
+								matrixRowIds: new Set()
+							});
+						}
+						choiceMap.get(key).matrixRowIds.add(rowId);
+					}
+				}
+			}
+			for (const entry of sharedUnitMap.values()) {
+				const matrixRowIds = Array.from(entry.matrixRowIds);
+				rows.push({
+					rowId: `r_${index++}`,
+					matrixRowId: matrixRowIds[0] || '',
+					matrixFieldName: '',
+					system: entry.coding.system,
+					code: entry.coding.code,
+					display: entry.coding.display,
+					targetType: 'unit',
+					targetValue: 'unit',
+					targetLabel: 'Unit',
+					choiceCode: '',
+					isShared: true,
+					matrixRowIds
+				});
+			}
+			for (const [choiceCode, choiceMap] of sharedChoiceMaps.entries()) {
+				for (const entry of choiceMap.values()) {
+					const matrixRowIds = Array.from(entry.matrixRowIds);
+					rows.push({
+						rowId: `r_${index++}`,
+						matrixRowId: matrixRowIds[0] || '',
+						matrixFieldName: '',
+						system: entry.coding.system,
+						code: entry.coding.code,
+						display: entry.coding.display,
+						targetType: 'choice',
+						targetValue: `choice:${choiceCode}`,
+						targetLabel: `Choice - ${choiceLabelMap[choiceCode] || choiceCode}`,
+						choiceCode,
+						isShared: true,
+						matrixRowIds
+					});
+				}
 			}
 			return rows;
+		}
+		const normalized = normalizeAnnotation(getSingleDraftAnnotation());
+		for (const c of normalized.dataElement.unit?.coding || []) {
+			rows.push({
+				rowId: `r_${index++}`,
+				matrixRowId: '',
+				matrixFieldName: '',
+				system: `${c.system || ''}`,
+				code: `${c.code || ''}`,
+				display: `${c.display || ''}`,
+				targetType: 'unit',
+				targetValue: 'unit',
+				targetLabel: 'Unit',
+				choiceCode: ''
+			});
+		}
+		for (const [choiceCode, bucket] of Object.entries(normalized.dataElement.valueCodingMap || {})) {
+			for (const c of bucket.coding || []) {
+				rows.push({
+					rowId: `r_${index++}`,
+					matrixRowId: '',
+					matrixFieldName: '',
+					system: `${c.system || ''}`,
+					code: `${c.code || ''}`,
+					display: `${c.display || ''}`,
+					targetType: 'choice',
+					targetValue: `choice:${choiceCode}`,
+					targetLabel: `Choice - ${choiceLabelMap[choiceCode] || choiceCode}`,
+					choiceCode: `${choiceCode}`
+				});
+			}
 		}
 		appendRowsFromAnnotation(getSingleDraftAnnotation());
 		return rows;
@@ -2112,11 +2282,10 @@
 		$empty.hide();
 		const showAdvanced = rows.length >= 10;
 		annotationTableState.advancedUiEnabled = showAdvanced;
-		const matrixCol = designerState.isMatrix ? '<th>Matrix Field</th>' : '';
 		$wrapper.html(`
 			<table id="rome-annotation-table" class="table table-sm table-striped align-middle">
 				<thead>
-					<tr>${matrixCol}<th>System</th><th>Code</th><th>Display</th><th>Target</th><th>Action</th></tr>
+					<tr><th>System</th><th>Code</th><th>Display</th><th>Target</th><th>Action</th></tr>
 				</thead>
 				<tbody></tbody>
 			</table>
@@ -2141,10 +2310,8 @@
 				${rowTargets.map(target => `<option value="${escapeHTML(target.value)}" ${target.value === row.targetValue ? 'selected' : ''}>${escapeHTML(target.label)}</option>`).join('')}
 			</select>`;
 			const targetSortKey = getTargetSortKey(row, choiceLabelMap);
-			const matrixCell = designerState.isMatrix ? `<td>${escapeHTML(row.matrixFieldName || row.matrixRowId)}</td>` : '';
 			$tbody.append(`
 				<tr data-rome-row-id="${row.rowId}">
-					${matrixCell}
 					<td>${escapeHTML(row.system || '?')}</td>
 					<td>${link}</td>
 					<td>${escapeHTML(row.display || '')}</td>
@@ -2163,11 +2330,15 @@
 				info: showAdvanced,
 				lengthChange: false,
 				pageLength: 10,
-				order: []
+				order: [[3, 'asc']]
+			});
+			$wrapper.find('#rome-annotation-table').off('draw.dt.romeSelect2').on('draw.dt.romeSelect2', function () {
+				applySelect2ToTargetSelects($(this).find('.rome-row-target'));
 			});
 		} else {
 			annotationTableState.dt = null;
 		}
+		applySelect2ToTargetSelects($wrapper.find('.rome-row-target'));
 		$wrapper.off('click.rome-table', '.rome-row-delete');
 		$wrapper.on('click.rome-table', '.rome-row-delete', function () {
 			deleteAnnotationRow(`${$(this).attr('data-rome-row-id') ?? ''}`);
@@ -2180,6 +2351,47 @@
 		});
 		log('Rendered annotation table rows:', rows.length, 'advancedUI:', showAdvanced);
 		log('Updated internal annotation table state:', annotationTableState);
+	}
+
+	/**
+	 * Returns the preferred Select2 dropdown parent for current dialog context.
+	 * @returns {JQuery<HTMLElement>|undefined}
+	 */
+	function getSelect2DropdownParent() {
+		const $dialog = designerState.$dlg?.closest('[role="dialog"]');
+		if ($dialog && $dialog.length > 0) return $dialog;
+		return designerState.$dlg;
+	}
+
+	/**
+	 * Applies select2 enhancement to one or more target select elements when available.
+	 * @param {JQuery<HTMLElement>} $selects
+	 * @returns {void}
+	 */
+	function applySelect2ToTargetSelects($selects) {
+		if (!$selects || $selects.length === 0) return;
+		if (typeof $.fn.select2 !== 'function') return;
+		const threshold = Number.parseInt(`${designerState.minItemsForSelect2 ?? 7}`, 10);
+		const minItems = Number.isFinite(threshold) && threshold > 0 ? threshold : 7;
+		const effectiveCount = getTargetOptionCountForThreshold();
+		const showSearch = effectiveCount > minItems;
+		$selects.each(function () {
+			const $el = $(this);
+			const syncMissingClass = () => {
+				const $container = $el.next('.select2-container');
+				if ($container.length === 0) return;
+				$container.toggleClass('target-missing', $el.hasClass('target-missing'));
+			};
+			if ($el.hasClass('select2-hidden-accessible')) {
+				$el.select2('destroy');
+			}
+			$el.select2({
+				width: 'resolve',
+				dropdownParent: getSelect2DropdownParent(),
+				minimumResultsForSearch: showSearch ? 0 : Infinity
+			});
+			syncMissingClass();
+		});
 	}
 
 	//#endregion    

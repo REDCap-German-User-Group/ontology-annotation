@@ -59,6 +59,7 @@
  * @property {string=} fieldType
  * @property {string=} enum
  * @property {boolean=} isMatrix
+ * @property {Number=} minItemsForSelect2
  * @property {JQuery<HTMLElement>=} $dlg
  * @property {JQuery<HTMLElement>=} $input
  */
@@ -125,6 +126,8 @@
  * @property {string} targetValue
  * @property {string} targetLabel
  * @property {string} choiceCode
+ * @property {boolean=} isShared
+ * @property {string[]=} matrixRowIds
  */
 
 /**
