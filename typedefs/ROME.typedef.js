@@ -33,6 +33,7 @@
  * @property {SourceInfo[]=} sources
  * @property {string=} searchEndpoint
  * @property {string=} pollEndpoint
+ * @property {Number=} minSearchLength
  */
 
 /**
@@ -113,7 +114,7 @@
 
 /**
  * @typedef {Object} AnnotationTableState
- * @property {any} dt
+ * @property {any} dt 
  * @property {boolean} advancedUiEnabled
  */
 
@@ -366,9 +367,17 @@
  *   of matrix groups and field name changes, field annotations that cannot be matched
  *   must be shown as unassigned; these will definitely be lost if not reassigned.
  * @property {WatchHandle=} fieldWatcher
- *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer
+ *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer.
  * @property {WatchHandle=} matrixWatcher
- *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer
+ *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer.
+ * @property {SelectedAnnotationHit=} selected
+ *   Current search selection used by the Add button flow.
+ * @property {any} dtInstance DataTables instance (TODO - type this properly)
+ * @property {boolean} dtAdvancedUiEnabled
+ * @property {JQuery<HTMLElement>=} $dlg
+ *   The field or matrix edit dialog
+ * @property {JQuery<HTMLElement>=} $editor
+ *   The ROME annotation editor surface
  */
 
 /**

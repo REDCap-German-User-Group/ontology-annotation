@@ -363,6 +363,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'sources' => $sources_list,
 			'searchEndpoint' => $this->framework->getUrl('ajax/search.php'),
 			'pollEndpoint' => $this->framework->getUrl('ajax/poll.php'),
+			'minSearchLength' => self::MIN_SEARCH_LENGTH,
 		];
 		// Add some language strings
 		$this->framework->tt_transferToJavascriptModuleObject([

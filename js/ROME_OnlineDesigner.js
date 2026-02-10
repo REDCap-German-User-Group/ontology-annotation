@@ -52,7 +52,10 @@
 	/** @type {JavascriptModuleObject|null} */
 	let JSMO = null;
 
-	/** @type {OnlineDesignerState} */
+
+
+
+	/** @type {OnlineDesignerState} */ // OBSOLETE
 	const designerState = {
 		minItemsForSelect2: 7
 	};
@@ -61,6 +64,7 @@
 	let ontologyParser;
 
 	/**
+	 * OBSOLETE
 	 * Mutable in-dialog annotation draft state for single-field editing.
 	 * @type {AnnotationDraftState}
 	 */
@@ -76,6 +80,7 @@
 	};
 
 	/**
+	 * OBSOLETE
 	 * Mutable in-dialog annotation draft state for matrix editing.
 	 * @type {MatrixDraftState}
 	 */
@@ -86,6 +91,7 @@
 	};
 
 	/**
+	 * OBSOLETE - see odState.selected
 	 * Current search selection used by the Add button flow.
 	 * @type {AnnotationSelectionState}
 	 */
@@ -94,6 +100,7 @@
 	};
 
 	/**
+	 * OBSOLETE see dtInstance, dtAdvancedUiEnabled in odState
 	 * DataTable integration state for the annotation grid.
 	 * @type {AnnotationTableState}
 	 */
@@ -102,9 +109,12 @@
 		advancedUiEnabled: false
 	};
 
+	// OBSOLETE ??
 	/** @type {number|null} */
 	let manualImportTimer = null;
 
+
+	/** Flag used to signal that the intercepted save operations should proceed */
 	const SAVE_SKIP_SENTINEL_KEY = '__romeSkipMissingChoicePrompt';
 
 	/**
@@ -123,23 +133,27 @@
 			tag: config.atName,
 			getMinAnnotation: getMinimalOntologyAnnotation
 		});
+
+		//#region User Interfaace Hooks (+ Main Entry Point)
+
 		ensureFieldSaveHook();
 		ensureMatrixSaveHook();
 
-		//#region Hijack Hooks
-
-		// Adds the edit field UI
+		// Adds the edit field UI - this is the main entry point for the 
+		// annotation interface
 		const orig_fitDialog = window['fitDialog'];
 		window['fitDialog'] = function (ob) {
 			orig_fitDialog(ob);
 			if (ob && ob['id'] && ['div_add_field', 'addMatrixPopup'].includes(ob.id)) {
-				designerState.$dlg = $(ob);
-				designerState.isMatrix = ob.id == 'addMatrixPopup';
+				setEditType(ob);
 				try {
-					updateEditFieldUI();
+					// This is the main entry point for the annotation editor UI
+					activateAnnotationsEditor();
 				}
 				catch (e) {
-					console.error(e);
+					// In case of error, we remove the editor and log to console
+					if (odState.$editor != null) odState.$editor.remove();
+					console.error('Error initializing ROME Online Designer UI:', e);
 				}
 			}
 		}
@@ -152,7 +166,7 @@
 			if (options.url?.includes('Design/edit_matrix.php')) {
 				// Matrix saving
 				const matrixGroupName = String($('#grid_name').val());
-				const exclude = isExcludedCheckboxChecked();
+				const exclude = isExcludedCheckboxChecked_OBSOLETE();
 				const originalSuccess = options.success;
 				options.success = function (data, textStatus, jqXHR) {
 					saveMatrixFormExclusion(matrixGroupName, exclude);
@@ -215,181 +229,208 @@
 	 * Initializes draft state from action tags and re-renders targets/table controls.
 	 * @returns {void}
 	 */
-	function updateEditFieldUI() {
-		if (designerState.$dlg.find('.rome-edit-field-ui-container').length == 0) {
-			addEditFieldUI();
+	function activateAnnotationsEditor() {
+		if (odState.$dlg.find('.rome-edit-field-ui-container').length == 0) {
+			log('Initializing UI ...', odState);
+			initializeAnnotationEditor();
+			initUserChangeWatcher();
+			log('UI initialized.', odState);
 		}
-		log('Updating Edit Field UI');
-		// Exclusion checkbox
-		let excluded = false;
-		if (designerState.isMatrix) {
-			const matrixGroupName = '' + designerState.$dlg.find('#grid_name').val();
-			excluded = config.matrixGroupsExcluded.includes(matrixGroupName);
-		}
-		else {
-			const fieldName = '' + designerState.$dlg.find('input[name="field_name"]').val();
-			excluded = config.fieldsExcluded.includes(fieldName);
-		}
-		setExcludedCheckboxState(excluded);
-		designerState.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
-		initializeAnnotationDraftState();
-		setSelectedAnnotation(null);
-		updateAnnotationTable();
+		setInitialExcludedCheckboxState();
+		resetSearchState();
+
+
+		// TODO - Check
+
+		// initializeAnnotationDraftState();
+		// setSelectedAnnotation(null);
+		// updateAnnotationTable();
+
+
+
 		// Disable search when there are errors and add error indicator
 		if (config.errors?.length ?? 0 > 0) {
-			designerState.$dlg.find('#rome-search-bar :input').prop('disabled', true);
+			odState.$editor.find('#rome-search-bar :input').prop('disabled', true);
 			showSearchErrorBadge(config.errors.join('\n'));
 		}
-		resetSearchState();
-		log('Search state has been reset.', searchState);
-		initUserChangeWatcher();
 	}
 
 	/**
 	 * Returns whether the "exclude from annotation" checkbox is currently enabled.
 	 * @returns {boolean}
 	 */
-	function isExcludedCheckboxChecked() {
+	function isExcludedCheckboxChecked_OBSOLETE() {
 		return designerState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked') == true;
 	}
 
 	/**
-	 * Updates exclusion checkbox state in UI and hidden submit field.
-	 * @param {boolean} state
-	 * @returns {void}
+	 * Determines the inital exclusion state and sets it in the UI
 	 */
-	function setExcludedCheckboxState(state) {
-		designerState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked', state);
-		$('input[name="rome-em-fieldedit-exclude"]').val(state ? '1' : '0');
+	function setInitialExcludedCheckboxState() {
+		let enabled = true;
+		if (odState.editType == 'matrix') {
+			const matrixGroupName = '' + odState.$dlg.find('#grid_name').val();
+			enabled = !config.matrixGroupsExcluded.includes(matrixGroupName);
+		}
+		else {
+			const fieldName = '' + odState.$dlg.find('input[name="field_name"]').val();
+			enabled = !config.fieldsExcluded.includes(fieldName);
+		}
+		updateExcludedCheckboxStateAndHiddenInput(enabled);
+	}
+
+	/**
+	 * Updates the enabled state and the state of the excluded checkbox and the hidden field.
+	 * @param {boolean} enabled
+	 */
+	function updateExcludedCheckboxStateAndHiddenInput(enabled) {
+		odState.enabled = enabled;
+		odState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked', !enabled);
+		$('input[name="rome-em-fieldedit-exclude"]').val(enabled ? '0' : '1');
 	}
 
 
 	/**
 	 * Inserts the ROME UI surface into the active REDCap dialog and wires handlers.
-	 * @returns {void}
 	 */
-	function addEditFieldUI() {
-		if (designerState.$dlg.find('.rome-edit-field-ui-container').length > 0) return;
-		let $ui;
-		if (designerState.isMatrix) {
-			log('Adding Edit Matrix UI');
-			$ui = $($('#rome-em-fieldedit-ui-template').html());
-		}
-		else {
-			log('Adding Edit Field UI');
-			$ui = $('<tr><td colspan="2"></td></tr>');
-			$ui.find('td').append($($('#rome-em-fieldedit-ui-template').html()));
-		}
+	function initializeAnnotationEditor() {
+		const editorHtml = $('#rome-em-fieldedit-ui-template').html().replaceAll('\n', '');
+		const $editor = $(editorHtml);
+		odState.$editor = $editor;
 
-		//#region Setup event handlers
+		// //#region Setup event handlers
 
-		// Track changes to the choices
-		const $enum = designerState.isMatrix
-			? designerState.$dlg.find('textarea[name="element_enum_matrix"]')
-			: designerState.$dlg.find('textarea[name="element_enum"]');
-		// Detect user input
-		$enum[0].addEventListener('change', () => {
-			trackEnumChange(String($enum.val()));
-		});
-		// Detect programmatic changes by redefining .value
-		const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
-		Object.defineProperty($enum.get(0), 'value', {
-			get() {
-				// @ts-ignore
-				return descriptor['get'].call(this);
-			},
-			set(newVal) {
-				// @ts-ignore
-				descriptor.set.call(this, newVal);
-				trackEnumChange(newVal);
-			}
-		});
-		// Keep track of changes
-		/**
-		 * Tracks choice/enumeration text changes and updates target dropdown state when relevant.
-		 * @param {string} val
-		 * @returns {void}
-		 */
-		function trackEnumChange(val) {
-			if (val !== designerState.enum) {
-				const fieldType = getFieldType();
-				if (['select', 'radio', 'checkbox'].includes(fieldType)) {
-					setEnum(val);
-				}
-			}
-		}
-		// Track changes of the field type and set enum
-		designerState.$dlg.find('select[name="field_type"], select#field_type_matrix, select#field_type').on('change', () => {
-			designerState.fieldType = getFieldType();
-			log('Field type changed:', designerState.fieldType);
-			if (designerState.fieldType == 'yesno' || designerState.fieldType == 'truefalse') {
-				const val = $('#div_element_' + designerState.fieldType + '_enum div').last().html().trim().replace('<br>', '\n');
-				setEnum(val);
-			}
-			else if (['select', 'radio', 'checkbox'].includes(designerState.fieldType)) {
-				trackEnumChange(String($enum.val()));
-			}
-			else {
-				setEnum('');
-			}
-		}).trigger('change');
-		// Init and track "Do not annotate this field/matrix"
-		$ui.find('.rome-em-fieldedit-exclude').each(function () {
-			const $this = $(this);
-			const id = 'rome-em-fieldedit-exclude-' + (designerState.isMatrix ? 'matrix' : 'field');
-			if ($this.is('input')) {
-				$this.attr('id', id);
-				$this.on('change', function () {
-					const checked = $(this).prop('checked');
-					if (!designerState.isMatrix) {
-						// Store exclusion
-						designerState.$dlg.find('[name="rome-em-fieldedit-exclude"]').val(checked ? 1 : 0);
-					}
-					log('Do not annotate is ' + (checked ? 'checked' : 'not checked'));
-					if (checked) performExclusionCheck();
-				});
-			}
-			else if ($this.is('label')) {
-				$this.attr('for', id);
-			}
-		});
+		// // Track changes to the choices
+		// const $enum = designerState.isMatrix
+		// 	? designerState.$dlg.find('textarea[name="element_enum_matrix"]')
+		// 	: designerState.$dlg.find('textarea[name="element_enum"]');
+		// // Detect user input
+		// $enum[0].addEventListener('change', () => {
+		// 	trackEnumChange(String($enum.val()));
+		// });
+		// // Detect programmatic changes by redefining .value
+		// const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+		// Object.defineProperty($enum.get(0), 'value', {
+		// 	get() {
+		// 		// @ts-ignore
+		// 		return descriptor['get'].call(this);
+		// 	},
+		// 	set(newVal) {
+		// 		// @ts-ignore
+		// 		descriptor.set.call(this, newVal);
+		// 		trackEnumChange(newVal);
+		// 	}
+		// });
+		// // Keep track of changes
+		// /**
+		//  * Tracks choice/enumeration text changes and updates target dropdown state when relevant.
+		//  * @param {string} val
+		//  * @returns {void}
+		//  */
+		// function trackEnumChange(val) {
+		// 	if (val !== designerState.enum) {
+		// 		const fieldType = getFieldType();
+		// 		if (['select', 'radio', 'checkbox'].includes(fieldType)) {
+		// 			setEnum(val);
+		// 		}
+		// 	}
+		// }
+		// // Track changes of the field type and set enum
+		// designerState.$dlg.find('select[name="field_type"], select#field_type_matrix, select#field_type').on('change', () => {
+		// 	designerState.fieldType = getFieldType();
+		// 	log('Field type changed:', designerState.fieldType);
+		// 	if (designerState.fieldType == 'yesno' || designerState.fieldType == 'truefalse') {
+		// 		const val = $('#div_element_' + designerState.fieldType + '_enum div').last().html().trim().replace('<br>', '\n');
+		// 		setEnum(val);
+		// 	}
+		// 	else if (['select', 'radio', 'checkbox'].includes(designerState.fieldType)) {
+		// 		trackEnumChange(String($enum.val()));
+		// 	}
+		// 	else {
+		// 		setEnum('');
+		// 	}
+		// }).trigger('change');
+		// // Init and track "Do not annotate this field/matrix"
+		// $ui.find('.rome-em-fieldedit-exclude').each(function () {
+		// 	const $this = $(this);
+		// 	const id = 'rome-em-fieldedit-exclude-' + (designerState.isMatrix ? 'matrix' : 'field');
+		// 	if ($this.is('input')) {
+		// 		$this.attr('id', id);
+		// 		$this.on('change', function () {
+		// 			const checked = $(this).prop('checked');
+		// 			if (!designerState.isMatrix) {
+		// 				// Store exclusion
+		// 				designerState.$dlg.find('[name="rome-em-fieldedit-exclude"]').val(checked ? 1 : 0);
+		// 			}
+		// 			log('Do not annotate is ' + (checked ? 'checked' : 'not checked'));
+		// 			if (checked) performExclusionCheck();
+		// 		});
+		// 	}
+		// 	else if ($this.is('label')) {
+		// 		$this.attr('for', id);
+		// 	}
+		// });
 
-		//#endregion
+		// //#endregion
 
-		if (designerState.isMatrix) {
-			// Matrix-specific adjustments
+
+
+
+
+
+
+
+
+
+
+
+
+		if (odState.editType == 'matrix') {
+			// Matrix-specific adjustments - none needed
 			// Insert at end of the dialog
-			designerState.$dlg.append($ui);
+			odState.$dlg.append($editor);
 		}
 		else {
 			// Single-field-specific adjustments
 			// Mirror visibility of the Action Tags / Field Annotation DIV
+			// TODO - extract the mutation observer setup into a hook and call 
+			// helper hide/show functions
 			const actiontagsDIV = document.getElementById('div_field_annotation')
 				?? document.createElement('div');
 			const observer = new MutationObserver(() => {
 				const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-				$ui.css('display', actiontagsVisible ? 'table-row' : 'none');
+				$editor.css('display', actiontagsVisible ? 'block' : 'none');
 			});
 			observer.observe(actiontagsDIV, { attributes: true, attributeFilter: ['style'] });
 			// Initial sync
 			const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-			$ui.css('display', actiontagsVisible ? 'table-row' : 'none');
+			$editor.css('display', actiontagsVisible ? 'block' : 'none');
+			// ------
+
+
 			// Add a hidden field to transfer exclusion
-			designerState.$dlg.find('#addFieldForm').prepend('<input type="hidden" name="rome-em-fieldedit-exclude" value="0">');
+			odState.$dlg.find('#addFieldForm').prepend(
+				'<input type="hidden" name="rome-em-fieldedit-exclude" value="0">'
+			);
+
 			// Initial sync from the action tag
-			updateAnnotationTable()
+			// updateAnnotationTable(); // TODO - Check
+
 			// Insert the UI as a new table row
-			designerState.$dlg.find('#quesTextDiv > table > tbody').append($ui);
+			const $tr = $('<tr><td colspan="2"></td></tr>');
+			$tr.find('td').append($editor);
+			odState.$dlg.find('#quesTextDiv > table > tbody').append($tr);
 		}
 
-		initializeSearchInput('input[name="rome-em-fieldedit-search"]');
-		initializeAddButton();
-		setupManualAnnotationHooks();
-		setupSaveValidationHooks();
-		ensureMatrixSaveHook();
-		if (designerState.isMatrix) {
-			setupMatrixLifecycleHandlers();
-		}
+		// TODO - Check
+		initializeSearchInput();
+		// initializeAddButton();
+		// setupManualAnnotationHooks();
+		// setupSaveValidationHooks();
+		// ensureMatrixSaveHook();
+		// if (designerState.isMatrix) {
+		// 	setupMatrixLifecycleHandlers();
+		// }
 	}
 
 
@@ -446,8 +487,22 @@
 		fieldWatcher: null,
 		matrixWatcher: null,
 		enabled: true, // TODO - set this based on the exclusion state
+		dtInstance: null,
+		dtAdvancedUiEnabled: false,
+		selected: null,
+		$dlg: null,
+		$editor: null,
 	}
 
+
+	/**
+	 * Sets the current edit type based on the dialog object.
+	 * @param {HTMLElement} dialogObj 
+	 */
+	function setEditType(dialogObj) {
+		odState.editType = dialogObj.id == 'addMatrixPopup' ? 'matrix' : 'field'
+		odState.$dlg = $(dialogObj);
+	}
 
 	/**
 	 * Initializes user change watchers for field name (matrix only), 
@@ -470,7 +525,7 @@
 			elements.push(document.getElementById('element_enum_matrix'));
 			elements.push(document.getElementById('section_header_matrix'));
 			filters.push(
-				'input[name^=addFieldMatrixRow-varname_]', 
+				'input[name^=addFieldMatrixRow-varname_]',
 				'textarea[name=addFieldMatrixRow-annotation]',
 				'textarea[name=element_enum_matrix]',
 			);
@@ -485,8 +540,7 @@
 				tableCellFilter: filters,
 				fireOnInput: false,
 				patchProgrammatic: true
-			});
-			log('Installed change watcher', odState);
+			}).pause();
 		}
 	}
 
@@ -521,7 +575,7 @@
 	function parseOntologiesFromActionTag(annotationText) {
 
 		// TODO - reuse existing; hardcode something for now
-		const annotations = 
+		const annotations =
 		{
 			dataElement: {
 				coding: [
@@ -2291,7 +2345,7 @@
 	 * @returns {void}
 	 */
 	function updateAnnotationTable() {
-		if (isExcludedCheckboxChecked()) return;
+		if (isExcludedCheckboxChecked_OBSOLETE()) return;
 		updateAnnotationTargetsDropdown();
 		const rows = buildAnnotationTableEntries();
 		const $wrapper = designerState.$dlg.find('.rome-edit-field-ui-list');
@@ -2462,18 +2516,17 @@
 	/**
 	 * Shows or hides the search-error badge next to the search bar.
 	 * @param {string|false} errorMessage
-	 * @returns {void}
 	 */
 	function showSearchErrorBadge(errorMessage) {
 		if (errorMessage) {
-			designerState.$dlg.find('#rome-search-errors')
+			getSearchErrorIndicator()
 				.css('display', 'block')
 				.attr('data-bs-tooltip', 'hover')
 				.attr('title', errorMessage)
 				.tooltip('enable');
 		}
 		else {
-			designerState.$dlg.find('#rome-search-errors')
+			getSearchErrorIndicator()
 				.css('display', 'none')
 				.tooltip('disable');
 		}
@@ -2482,10 +2535,9 @@
 	/**
 	 * Shows or hides the JSON error overlay that blocks search/table controls.
 	 * @param {string|false} errorMessage
-	 * @returns {void}
 	 */
 	function setJsonIssueOverlay(errorMessage) {
-		const $overlay = designerState.$dlg.find('.rome-json-error-overlay');
+		const $overlay = odState.$editor.find('.rome-json-error-overlay');
 		if ($overlay.length === 0) return;
 		if (errorMessage) {
 			$overlay.find('.rome-json-error-overlay-message').text(errorMessage);
@@ -2524,36 +2576,57 @@
 	 * @returns {void}
 	 */
 	function showSpinner(state) {
-		const $searchSpinner = designerState.$dlg.find('.rome-edit-field-ui-spinner');
-		$searchSpinner[state ? 'addClass' : 'removeClass']('busy');
-		designerState.$input[state ? 'addClass' : 'removeClass']('is-searching');
+		getSearchSpinner()[state ? 'addClass' : 'removeClass']('busy');
+		getSearchInput()[state ? 'addClass' : 'removeClass']('is-searching');
 	}
 
 	/**
 	 * Toggles a visual marker when the latest returned search result set is empty.
 	 * @param {boolean} state
-	 * @returns {void}
 	 */
 	function showNoResultsState(state) {
-		designerState.$input[state ? 'addClass' : 'removeClass']('is-no-results');
+		getSearchInput()[state ? 'addClass' : 'removeClass']('is-no-results');
+	}
+
+	/**
+	 * Gets the jQuery element for the search error indicator badge.
+	 * @returns {JQuery<HTMLElement>}
+	 */
+	function getSearchErrorIndicator() {
+		return odState.$editor.find('#rome-search-errors')
+	}
+
+	/**
+	 * Gets the jQuery element for the ontology lookup search input.
+	 * @returns {JQuery<HTMLElement>}
+	 */
+	function getSearchInput() {
+		return odState.$editor.find('input[name="rome-em-fieldedit-search"]');
+	}
+
+	/**
+	 * Gets the jQuery element for the ontology lookup search spinner.
+	 * @returns {JQuery<HTMLElement>}
+	 */
+	function getSearchSpinner() {
+		 return odState.$dlg.find('.rome-edit-field-ui-spinner');
 	}
 
 	/**
 	 * Initializes autocomplete search input for ontology lookup.
-	 * @param {string} selector
-	 * @returns {void}
 	 */
-	function initializeSearchInput(selector) {
+	function initializeSearchInput() {
 
-		designerState.$input = designerState.$dlg.find(selector);
-		// Re-init safely if this input already had an autocomplete instance.
-		if (designerState.$input.data('ui-autocomplete')) {
-			designerState.$input.autocomplete('destroy');
+		const $search = getSearchInput();
+
+		// Init safely if this input already had an autocomplete instance.
+		if ($search.data('ui-autocomplete')) {
+			$search.autocomplete('destroy');
 		}
-		designerState.$input.off('.romeAutocomplete');
+		$search.off('.ROME_autocomplete');
 
 		function raiseAutocompleteMenu() {
-			const ac = designerState.$input.data('ui-autocomplete');
+			const ac = $search.data('ui-autocomplete');
 			const $menu = ac?.menu?.element;
 			if (!$menu || $menu.length === 0) return;
 
@@ -2565,12 +2638,12 @@
 			$menu.css('z-index', String(zIndex));
 		}
 
-		designerState.$input.autocomplete({
-			minLength: 2,
+		$search.autocomplete({
+			minLength: config.minSearchLength ?? 2,
 			delay: 0, // we debounce manually
 			appendTo: 'body',
 			open: function () {
-				raiseAutocompleteMenu();
+				// raiseAutocompleteMenu(); // TODO - neccessary?
 			},
 			source: function (request, responseCb) {
 				const term = (request.term || '').trim();
@@ -2638,7 +2711,7 @@
 					.appendTo(ul);
 			};
 
-		designerState.$input.on('autocompleteselect.romeAutocomplete', function (e, ui) {
+		$search.on('autocompleteselect.ROME_autocomplete', function (e, ui) {
 			if (searchState.debounceTimer) {
 				clearTimeout(searchState.debounceTimer);
 				searchState.debounceTimer = null;
@@ -2652,13 +2725,13 @@
 				type: h.type || null
 			});
 		});
-		designerState.$input.on('keydown.romeAutocomplete', function (event) {
+		$search.on('keydown.ROME_autocomplete', function (event) {
 			if (event.key === 'Enter') {
 				// Let jQuery UI autocomplete handle Enter, but block REDCap's parent dialog handlers.
 				event.stopPropagation();
 			}
 		});
-		designerState.$input.on('input.romeAutocomplete', function () {
+		$search.on('input.ROME_autocomplete', function () {
 			if (selectionState.selected) {
 				setSelectedAnnotation(null);
 			}
@@ -2671,22 +2744,23 @@
 	 * @returns {void}
 	 */
 	function setSelectedAnnotation(annotation) {
-		selectionState.selected = annotation;
-		log('Selected annotation:', annotation);
-		refreshAddButtonState();
 		if (annotation) {
-			const $addButton = designerState.$dlg.find('#rome-add-button');
-			if ($addButton.length > 0 && !$addButton.prop('disabled')) {
-				window.setTimeout(() => $addButton.trigger('focus'), 0);
-			}
+			log( 'Annotation has been selected:', odState);
 		}
+		else if (odState.selected) {
+			log( 'Selected annotation has been cleared:', odState.selected);
+		}
+		odState.selected = annotation; 
+		refreshAddButtonState();
 	}
 
 	/**
 	 * Refreshes Add button state and details popover based on current selection state.
-	 * @returns {void}
 	 */
 	function refreshAddButtonState() {
+
+		return; // TODO reenable after check
+
 		const $button = designerState.$dlg.find('#rome-add-button');
 		const $indicator = designerState.$dlg.find('#rome-add-selection-info');
 		const hasSelection = !!selectionState.selected;
@@ -2711,6 +2785,15 @@
 				title: hasSelection ? 'Selected annotation' : 'No selection'
 			});
 		}
+
+		if (odState.selected) {
+
+		}
+			if ($addButton.length > 0 && !$addButton.prop('disabled')) {
+				window.setTimeout(() => $addButton.trigger('focus'), 0);
+			}
+
+
 	}
 
 	/**
@@ -3170,7 +3253,7 @@
 
 	function resetSearchState() {
 		stopSearch();
-		designerState.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
+		getSearchInput().val('');
 		searchState.term = '';
 		searchState.lastTerm = '';
 		searchState.lastTermCompleted = false;
