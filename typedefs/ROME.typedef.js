@@ -1,5 +1,8 @@
 // ROME type definitions
 
+/// <reference path="../js/WatchTargets.js" />
+
+
 // @ts-check
 
 /**
@@ -152,7 +155,7 @@
 
 /**
  * @typedef {Object} OntologyAnnotationJSON
- * @property {string} resourceType
+ * @property {string=} resourceType
  * @property {OntologyAnnotationMeta=} meta
  * @property {OntologyAnnotationDataElement} dataElement
  */
@@ -168,7 +171,7 @@
 
 /**
  * @typedef {Object} OntologyAnnotationDataElement
- * @property {string} type
+ * @property {string=} type
  * @property {Array<{system:string, code:string, display?:string}>=} coding
  * @property {Object<string, {coding:Array<{system:string, code:string, display?:string}>}>=} valueCodingMap
  * @property {{coding:Array<{system:string, code:string, display?:string}>}=} unit
@@ -346,4 +349,76 @@
  *
  * @property {(key: TranslationKey, item: any) => void} tt_add
  *   Adds or replaces an item (typically a string) in the JSMO language store under `key`.
+ */
+
+
+
+/**
+ * @typedef {Object} ROME_OnlineDesignerState
+ * @property {'field'|'matrix'} editType
+ * @property {ROME_AnnotationRow[]} rows
+ * @property {WatchHandle=} watcher
+ */
+
+/**
+ * @typedef {Object} ROME_AnnotationRow
+ * @property {Object=} annotation
+ * @property {string=} targetName
+ * @property {'field'|'unit'|'choice'} targetType
+ * 
+ */
+
+
+
+
+/**
+ * @typedef {Object<?string,string>} AnnotationContent
+ */
+
+
+/**
+ * @typedef {"input"|"change"|"programmatic"} WatchTableEditType
+ */
+
+/**
+ * @typedef {Object} WatchTableEditEvent
+ * @property {HTMLInputElement|HTMLTextAreaElement} el
+ * @property {string} value
+ * @property {WatchTableEditType} type
+ * @property {Event} [event] Present for DOM events ("input"/"change"), absent for programmatic interception.
+ */
+
+/**
+ * @typedef {Object} WatchTableRowsChangedEvent
+ * @property {MutationRecord[]} mutations
+ */
+
+/**
+ * @callback WatchTableOnEdit
+ * @param {WatchTableEditEvent} info
+ * @returns {void}
+ */
+
+/**
+ * @callback WatchTableOnRowsChanged
+ * @param {WatchTableRowsChangedEvent} info
+ * @returns {void}
+ */
+
+/**
+ * @typedef {Object} WatchTableOptions
+ * @property {WatchTableOnEdit} [onEdit]
+ * @property {WatchTableOnRowsChanged} [onRowsChanged]
+ * @property {boolean} [patchValueSetter=false]
+ *   If true, intercepts programmatic assignments like `el.value = "x"` for inputs/textareas inside this table.
+ *   Note: this patches prototypes globally.
+ * @property {boolean} [dispatchInputOnProgrammaticSet=true]
+ *   If true, the setter patch also dispatches a bubbling "input" event after a programmatic set is detected.
+ * @property {boolean} [useCapture=true]
+ *   Use capture phase for input/change listeners (more robust if something stops propagation).
+ */
+
+/**
+ * @callback WatchTableStop
+ * @returns {void}
  */

@@ -1,7 +1,7 @@
 // ROME plugin page UI
 
 /// <reference types="jquery" />
-/// <reference path="./ROME.typedef.js" />
+/// <reference path="../typedefs/ROME.typedef.js" />
 /// <reference path="./ConsoleDebugLogger.js" />
 
 // @ts-check

@@ -17,8 +17,9 @@
 /// <reference types="jquery" />
 /// <reference types="jqueryui" />
 /// <reference path="../../../codebase/Resources/js/base.js" />
-/// <reference path="./ROME.typedef.js" />
+/// <reference path="../typedefs/ROME.typedef.js" />
 /// <reference path="./ConsoleDebugLogger.js" />
+/// <reference path="./WatchTargets.js" />
 
 // @ts-check
 ; (function () {
@@ -241,6 +242,7 @@
 		}
 		resetSearchState();
 		log('Search state has been reset.', searchState);
+		initUserChangeWatcher();
 	}
 
 	/**
@@ -433,6 +435,99 @@
 	}
 
 	//#endregion
+
+	//#region Revised Annotation Handling
+
+
+	/** @type {ROME_OnlineDesignerState} */
+	const odState = {
+		editType: 'field',
+		rows: [],
+		watcher: null,
+	}
+
+
+	/**
+	 * Initializes user change watchers for field name (matrix only), field annotation, and choices
+	 */
+	function initUserChangeWatcher() {
+		const elements = [];
+		const filters = [];
+		const patchProgrammatic = false && odState.editType === 'field';
+		if (odState.editType === 'field') {
+			// Annotation
+			elements.push(document.getElementById('field_annotation'));
+			// Choices
+			elements.push(document.getElementById('element_enum'));
+		}
+		else if (odState.editType === 'matrix') {
+			// Table of matrix fields (including field names and annotations)
+			elements.push(document.querySelector('table.addFieldMatrixRowParent'));
+			// Choices
+			elements.push(document.getElementById('element_enum_matrix'));
+			filters.push(
+				'input[name^=addFieldMatrixRow-varname_]', 
+				'textarea[name=addFieldMatrixRow-annotation]'
+			);
+		}
+		odState.watcher = WatchTargets.watch(elements, {
+			onEvent: (info) => {
+				// TODO - add some useful work and remove the logging
+				log('WatchDog:', info);
+			},
+			tableCellFilter: filters,
+			fireOnInput: false,
+			patchProgrammatic: patchProgrammatic
+		});
+		log('Installed change watcher', odState);
+	}
+
+	/**
+	 * Extracts the annotation content from the respective textarea elements, indexed by field name.
+	 * @returns {Map<string,string>}
+	 */
+	function getAnnotationContent() {
+		const contentMap = new Map();
+		if (odState.editType === 'field') {
+			const content = String($('#field_annotation').val() ?? '');
+			contentMap.set('field', content); // for field edit, the fieldname is hardcoded to 'field'
+		}
+		else if (odState.editType === 'matrix') {
+			$('tr.addFieldMatrixRow').each(function () {
+				const $tr = $(this);
+				const fieldName = String($tr.find('td.addFieldMatrixRowVar input').val() ?? '').trim();
+				// Only bother when field name has been set
+				if (fieldName === '') return;
+				const content = String($tr.find('td.addFieldMatrixRowFieldAnnotation textarea').val() ?? '');
+				contentMap.set(fieldName, content);
+			});
+		}
+		return contentMap;
+	}
+
+	/**
+	 * Parses ontology annotations from the field annotation
+	 * @param {string} annotationText 
+	 * @returns {OntologyAnnotationJSON}
+	 */
+	function parseOntologiesFromActionTag(annotationText) {
+
+		// TODO - reuse existing; hardcode something for now
+		const annotations = 
+		{
+			dataElement: {
+				coding: [
+					{
+						system: 'Test System',
+						code: 'TEST',
+						display: 'Just for testing'
+					}
+				]
+			}
+		}
+		return annotations;
+	}
+
 
 	//#region Annotation Draft and Table Engine
 

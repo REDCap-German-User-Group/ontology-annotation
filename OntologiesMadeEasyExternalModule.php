@@ -373,6 +373,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$config = array_merge($config, $this->refresh_exclusions($form));
 		$ih = $this->getInjectionHelper();
 		$ih->js('js/ConsoleDebugLogger.js');
+		$ih->js('js/WatchTargets.js');
 		$ih->js('js/ROME_OnlineDesigner.js');
 		$ih->css('css/ROME_OnlineDesigner.css');
 		echo RCView::script(self::NS_PREFIX . self::EM_NAME . '.init(' . json_encode($config) . ", $jsmo_name);");
