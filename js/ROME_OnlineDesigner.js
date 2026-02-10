@@ -1225,6 +1225,24 @@
 	}
 
 	/**
+	 * Resolves matrix row ids for a given field variable name.
+	 * @param {string} fieldName
+	 * @returns {string[]}
+	 */
+	function getMatrixRowIdsByFieldName(fieldName) {
+		const target = `${fieldName || ''}`.trim();
+		if (!target) return [];
+		const rowIds = [];
+		for (const rowId of matrixDraftState.rowOrder) {
+			const row = matrixDraftState.rows[rowId];
+			if (!row) continue;
+			const name = `${row.varName || rowId}`.trim();
+			if (name === target) rowIds.push(rowId);
+		}
+		return rowIds;
+	}
+
+	/**
 	 * Adds one coding object to the specified target in draft state (deduplicated by system+code).
 	 * @param {string} target
 	 * @param {{system:string, code:string, display?:string}} coding
@@ -1255,6 +1273,19 @@
 					rowState.dirty = true;
 				}
 				// Keep matrix row annotation textareas in sync with UI edits.
+				syncAllMatrixDraftsToTextareas();
+				return;
+			}
+			if (targetType === 'field') {
+				const fieldName = parts.slice(1).join(':');
+				const rowIds = getMatrixRowIdsByFieldName(fieldName);
+				for (const rowId of rowIds) {
+					const rowState = matrixDraftState.rows[rowId];
+					if (!rowState?.current) continue;
+					addCodingToAnnotation(rowState.current, 'field', '', coding);
+					rowState.dirty = true;
+					log('Updated matrix row draft after add:', rowState);
+				}
 				syncAllMatrixDraftsToTextareas();
 				return;
 			}
@@ -1317,118 +1348,65 @@
 	}
 
 	/**
-	 * Removes one coding entry from draft state by row identifier.
-	 * @param {string} rowId
+	 * Removes one coding entry from draft state by table entry without UI refresh.
+	 * @param {AnnotationTableEntry|null|undefined} row
 	 * @returns {void}
 	 */
-	function deleteAnnotationRow(rowId) {
-		log('Delete requested for table row:', rowId);
-		const rows = flattenAnnotationRows();
-		const row = rows.find(r => r.rowId === rowId);
+	function removeAnnotationEntryFromDraft(row) {
 		if (!row) return;
+		const coding = row.annotation;
 		if (designerState.isMatrix) {
-			const rowIds = row.isShared && Array.isArray(row.matrixRowIds) && row.matrixRowIds.length > 0
-				? row.matrixRowIds
-				: [row.matrixRowId];
-			for (const mrid of rowIds) {
-				const rowState = matrixDraftState.rows[mrid];
+			let rowIds = [];
+			if (row.kind === 'field') {
+				rowIds = getMatrixRowIdsByFieldName(row.fieldName);
+			} else {
+				rowIds = matrixDraftState.rowOrder.slice();
+			}
+			for (const rowId of rowIds) {
+				const rowState = matrixDraftState.rows[rowId];
 				const annotation = rowState?.current;
 				if (!annotation) continue;
-				removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
+				removeCodingFromAnnotation(annotation, row.kind, row.choiceCode, coding.system, coding.code);
 				rowState.dirty = true;
 			}
-			// Keep matrix row annotation textareas in sync with UI edits.
 			syncAllMatrixDraftsToTextareas();
 		} else {
 			const annotation = getSingleDraftAnnotation();
 			if (!annotation) return;
-			removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
+			removeCodingFromAnnotation(annotation, row.kind, row.choiceCode, coding.system, coding.code);
 			annotationDraftState.dirty = true;
-			// Keep action-tags textarea synchronized with UI edits.
 			syncSingleDraftToTextarea(true);
 		}
+	}
+
+	/**
+	 * Removes one coding entry from draft state by table entry.
+	 * @param {AnnotationTableEntry|null|undefined} row
+	 * @returns {void}
+	 */
+	function deleteAnnotationRow(row) {
+		log('Delete requested for table row:', row);
+		removeAnnotationEntryFromDraft(row);
 		updateAnnotationTable();
 		log('Delete completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationDraftState);
 	}
 
 	/**
 	 * Reassigns one coding row to a new target location in draft state.
-	 * @param {string} rowId
+	 * @param {AnnotationTableEntry|null|undefined} row
 	 * @param {string} newTarget
 	 * @returns {void}
 	 */
-	function reassignAnnotationRow(rowId, newTarget) {
-		log('Reassign requested:', { rowId, newTarget });
-		const rows = flattenAnnotationRows();
-		const row = rows.find(r => r.rowId === rowId);
+	function reassignAnnotationRow(row, newTarget) {
+		log('Reassign requested:', { row, newTarget });
 		if (!row) return;
-		if (designerState.isMatrix) {
-			const parts = newTarget.split(':');
-			const targetType = parts[0];
-			const sourceRowIds = row.isShared && Array.isArray(row.matrixRowIds) && row.matrixRowIds.length > 0
-				? row.matrixRowIds
-				: [row.matrixRowId];
-			for (const mrid of sourceRowIds) {
-				const sourceRow = matrixDraftState.rows[mrid];
-				const annotation = sourceRow?.current;
-				if (!annotation) continue;
-				removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
-				sourceRow.dirty = true;
-			}
-
-			if (targetType === 'field') {
-				const targetRowId = parts[1] || '';
-				const targetRow = matrixDraftState.rows[targetRowId];
-				if (targetRow?.current) {
-					addCodingToAnnotation(targetRow.current, 'field', '', {
-						system: row.system,
-						code: row.code,
-						display: row.display
-					});
-					targetRow.dirty = true;
-				}
-			} else if (targetType === 'unit') {
-				for (const mrid of sourceRowIds) {
-					const sourceRow = matrixDraftState.rows[mrid];
-					if (!sourceRow?.current) continue;
-					addCodingToAnnotation(sourceRow.current, 'unit', '', {
-						system: row.system,
-						code: row.code,
-						display: row.display
-					});
-					sourceRow.dirty = true;
-				}
-			} else if (targetType === 'choice') {
-				const targetChoiceCode = parts.length === 2 ? parts[1] : parts.slice(2).join(':');
-				for (const mrid of sourceRowIds) {
-					const sourceRow = matrixDraftState.rows[mrid];
-					if (!sourceRow?.current) continue;
-					addCodingToAnnotation(sourceRow.current, 'choice', targetChoiceCode, {
-						system: row.system,
-						code: row.code,
-						display: row.display
-					});
-					sourceRow.dirty = true;
-				}
-			}
-			// Keep matrix row annotation textareas in sync with UI edits.
-			syncAllMatrixDraftsToTextareas();
-		} else {
-			const annotation = getSingleDraftAnnotation();
-			if (!annotation) return;
-			removeCodingFromAnnotation(annotation, row.targetType, row.choiceCode, row.system, row.code);
-			const parts = newTarget.split(':');
-			const targetType = parts[0];
-			const targetId = parts.slice(1).join(':');
-			addCodingToAnnotation(annotation, targetType, targetId, {
-				system: row.system,
-				code: row.code,
-				display: row.display
-			});
-			annotationDraftState.dirty = true;
-			// Keep action-tags textarea synchronized with UI edits.
-			syncSingleDraftToTextarea(true);
-		}
+		const coding = row.annotation;
+		removeAnnotationEntryFromDraft(row);
+		addCodingToTarget(newTarget, {
+			system: coding.system,
+			code: coding.code,
+			display: coding.display
+		});
 		updateAnnotationTable();
 		log('Reassign completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationDraftState);
 	}
@@ -1873,11 +1851,6 @@
 		if (options.some(opt => opt.value === previous)) {
 			$target.val(previous);
 		}
-		designerState.$dlg.find('#rome-unit-target-warning').remove();
-		$target.next('.rome-target-warning').remove();
-		if (shouldShowUnitWarning()) {
-			$target.after('<span class="rome-target-warning text-warning" title="Unit targets are unusual for this field type."> <i class="fa-solid fa-triangle-exclamation"></i></span>');
-		}
 		applySelect2ToTargetSelects($target);
 	}
 
@@ -1915,8 +1888,8 @@
 					return aLabel.localeCompare(bLabel);
 				});
 			for (const { rowId, row } of fields) {
-				const rowLabel = row.varName || rowId;
-				options.push({ value: `field:${rowId}`, label: `Field - ${rowLabel}` });
+				const rowLabel = `${row.varName || rowId}`.trim();
+				options.push({ value: `field:${rowLabel}`, label: `Field - ${rowLabel}` });
 			}
 			options.push({ value: 'unit', label: 'Unit' });
 			for (const choice of getChoiceOptions()) {
@@ -1970,176 +1943,243 @@
 	}
 
 	/**
+	 * Returns choice order metadata used for Target-column lexical sort keys.
+	 * @returns {{positions: Object<string, number>, width: number}}
+	 */
+	function getChoiceOrderMeta() {
+		const positions = {};
+		const choices = getChoiceOptions();
+		for (let i = 0; i < choices.length; i++) {
+			positions[choices[i].code] = i;
+		}
+		const width = String(Math.max(1, choices.length)).length;
+		return { positions, width };
+	}
+
+	/**
 	 * Returns rows that target missing choice codes.
-	 * @returns {AnnotationTableRow[]}
+	 * @returns {AnnotationTableEntry[]}
 	 */
 	function getMissingChoiceTargetRows() {
-		const choiceCodes = new Set(getChoiceOptions().map(c => c.code));
-		return flattenAnnotationRows().filter(r => r.targetType === 'choice' && !choiceCodes.has(r.choiceCode));
+		return buildAnnotationTableEntries().filter(r => r.kind === 'choice' && r.choicePosition < 0);
 	}
 
 	/**
 	 * Builds stable sort key for target column.
-	 * Sort order: field, choice(label), unit.
-	 * @param {AnnotationTableRow} row
-	 * @param {Object<string,string>} choiceLabelMap
+	 * @param {AnnotationTableEntry} row
 	 * @returns {string}
 	 */
-	function getTargetSortKey(row, choiceLabelMap) {
-		if (row.targetType === 'field') {
-			const fieldName = (row.matrixFieldName || 'field').toLowerCase();
-			return `0|${fieldName}`;
-		}
-		if (row.targetType === 'choice') {
-			const label = (choiceLabelMap[row.choiceCode] || row.choiceCode || '').toLowerCase();
-			return `1|${label}|${(row.choiceCode || '').toLowerCase()}`;
-		}
-		return '2|unit';
+	function getTargetSortKey(row) {
+		return row.sortBy || 'Z';
 	}
 
 	/**
 	 * Flattens current draft annotation(s) into table rows for DataTables.
-	 * @returns {AnnotationTableRow[]}
+	 * Treats field edit as matrix n=1 and aggregates unit/choice codings globally.
+	 * @returns {AnnotationTableEntry[]}
 	 */
-	function flattenAnnotationRows() {
-		/** @type {AnnotationTableRow[]} */
+	function buildAnnotationTableEntries() {
+		/** @type {AnnotationTableEntry[]} */
 		const rows = [];
-		let index = 0;
-		const choiceLabelMap = getChoiceLabelMap();
+		const choiceOrderMeta = getChoiceOrderMeta();
 		const makeCodingKey = (coding) =>
 			`${`${coding.system || ''}`.trim()}|${`${coding.code || ''}`.trim()}|${`${coding.display || ''}`.trim().toLowerCase()}`;
-		const appendRowsFromAnnotation = (annotation, matrixRowId = '', matrixFieldName = '') => {
+		const makeAnnotation = (coding) => ({
+			system: `${coding.system || ''}`,
+			code: `${coding.code || ''}`,
+			display: `${coding.display || ''}`
+		});
+		const makeSortBy = (kind, fieldName = '', choiceCode = '', choicePosition = -1) => {
+			if (kind === 'field') return `A_${`${fieldName || ''}`.toLowerCase()}`;
+			if (kind === 'unit') return 'B';
+			if (choicePosition >= 0) {
+				return `C_${String(choicePosition + 1).padStart(choiceOrderMeta.width, '0')}`;
+			}
+			return `D_${`${choiceCode || ''}`.toLowerCase()}`;
+		};
+		const appendFieldRows = (annotation, fieldName) => {
 			const normalized = normalizeAnnotation(annotation);
-			for (const c of normalized.dataElement.coding || []) {
+			for (const coding of normalized.dataElement.coding || []) {
 				rows.push({
-					rowId: `r_${index++}`,
-					matrixRowId,
-					matrixFieldName,
-					system: `${c.system || ''}`,
-					code: `${c.code || ''}`,
-					display: `${c.display || ''}`,
-					targetType: 'field',
-					targetValue: designerState.isMatrix ? `field:${matrixRowId}` : 'field',
-					targetLabel: designerState.isMatrix ? `Field - ${matrixFieldName || matrixRowId}` : 'Field',
-					choiceCode: ''
+					kind: 'field',
+					fieldName: `${fieldName || ''}`,
+					choiceCode: '',
+					choicePosition: -1,
+					sortBy: makeSortBy('field', fieldName),
+					annotation: makeAnnotation(coding)
 				});
 			}
 		};
+		/** @type {Map<string, {system:string, code:string, display:string}>} */
+		const unitMap = new Map();
+		/** @type {Map<string, Map<string, {system:string, code:string, display:string}>>} */
+		const choiceMaps = new Map();
 		if (designerState.isMatrix) {
-			const sharedUnitMap = new Map();
-			const sharedChoiceMaps = new Map();
 			for (const rowId of matrixDraftState.rowOrder) {
 				const row = matrixDraftState.rows[rowId];
-				if (!row) continue;
-				appendRowsFromAnnotation(row.current, rowId, row.varName);
-
+				if (!row?.current) continue;
+				const fieldName = `${row.varName || rowId}`.trim();
+				appendFieldRows(row.current, fieldName);
 				const normalized = normalizeAnnotation(row.current);
-				for (const c of normalized.dataElement.unit?.coding || []) {
-					const key = makeCodingKey(c);
-					if (!sharedUnitMap.has(key)) {
-						sharedUnitMap.set(key, {
-							coding: {
-								system: `${c.system || ''}`,
-								code: `${c.code || ''}`,
-								display: `${c.display || ''}`
-							},
-							matrixRowIds: new Set()
-						});
-					}
-					sharedUnitMap.get(key).matrixRowIds.add(rowId);
+				for (const coding of normalized.dataElement.unit?.coding || []) {
+					unitMap.set(makeCodingKey(coding), makeAnnotation(coding));
 				}
 				for (const [choiceCode, bucket] of Object.entries(normalized.dataElement.valueCodingMap || {})) {
-					if (!sharedChoiceMaps.has(choiceCode)) {
-						sharedChoiceMaps.set(choiceCode, new Map());
+					if (!choiceMaps.has(choiceCode)) {
+						choiceMaps.set(choiceCode, new Map());
 					}
-					const choiceMap = sharedChoiceMaps.get(choiceCode);
-					for (const c of bucket.coding || []) {
-						const key = makeCodingKey(c);
-						if (!choiceMap.has(key)) {
-							choiceMap.set(key, {
-								coding: {
-									system: `${c.system || ''}`,
-									code: `${c.code || ''}`,
-									display: `${c.display || ''}`
-								},
-								matrixRowIds: new Set()
-							});
-						}
-						choiceMap.get(key).matrixRowIds.add(rowId);
+					for (const coding of bucket.coding || []) {
+						choiceMaps.get(choiceCode).set(makeCodingKey(coding), makeAnnotation(coding));
 					}
 				}
 			}
-			for (const entry of sharedUnitMap.values()) {
-				const matrixRowIds = Array.from(entry.matrixRowIds);
-				rows.push({
-					rowId: `r_${index++}`,
-					matrixRowId: matrixRowIds[0] || '',
-					matrixFieldName: '',
-					system: entry.coding.system,
-					code: entry.coding.code,
-					display: entry.coding.display,
-					targetType: 'unit',
-					targetValue: 'unit',
-					targetLabel: 'Unit',
-					choiceCode: '',
-					isShared: true,
-					matrixRowIds
-				});
+		} else {
+			const normalized = normalizeAnnotation(getSingleDraftAnnotation());
+			const fieldName = `${getFieldNames()[0] || 'field'}`.trim();
+			appendFieldRows(normalized, fieldName);
+			for (const coding of normalized.dataElement.unit?.coding || []) {
+				unitMap.set(makeCodingKey(coding), makeAnnotation(coding));
 			}
-			for (const [choiceCode, choiceMap] of sharedChoiceMaps.entries()) {
-				for (const entry of choiceMap.values()) {
-					const matrixRowIds = Array.from(entry.matrixRowIds);
-					rows.push({
-						rowId: `r_${index++}`,
-						matrixRowId: matrixRowIds[0] || '',
-						matrixFieldName: '',
-						system: entry.coding.system,
-						code: entry.coding.code,
-						display: entry.coding.display,
-						targetType: 'choice',
-						targetValue: `choice:${choiceCode}`,
-						targetLabel: `Choice - ${choiceLabelMap[choiceCode] || choiceCode}`,
-						choiceCode,
-						isShared: true,
-						matrixRowIds
-					});
+			for (const [choiceCode, bucket] of Object.entries(normalized.dataElement.valueCodingMap || {})) {
+				if (!choiceMaps.has(choiceCode)) {
+					choiceMaps.set(choiceCode, new Map());
+				}
+				for (const coding of bucket.coding || []) {
+					choiceMaps.get(choiceCode).set(makeCodingKey(coding), makeAnnotation(coding));
 				}
 			}
-			return rows;
 		}
-		const normalized = normalizeAnnotation(getSingleDraftAnnotation());
-		for (const c of normalized.dataElement.unit?.coding || []) {
+		for (const annotation of unitMap.values()) {
 			rows.push({
-				rowId: `r_${index++}`,
-				matrixRowId: '',
-				matrixFieldName: '',
-				system: `${c.system || ''}`,
-				code: `${c.code || ''}`,
-				display: `${c.display || ''}`,
-				targetType: 'unit',
-				targetValue: 'unit',
-				targetLabel: 'Unit',
-				choiceCode: ''
+				kind: 'unit',
+				fieldName: '',
+				choiceCode: '',
+				choicePosition: -1,
+				sortBy: makeSortBy('unit'),
+				annotation
 			});
 		}
-		for (const [choiceCode, bucket] of Object.entries(normalized.dataElement.valueCodingMap || {})) {
-			for (const c of bucket.coding || []) {
+		for (const [choiceCode, codingMap] of choiceMaps.entries()) {
+			const pos = choiceOrderMeta.positions[choiceCode];
+			const choicePosition = typeof pos === 'number' ? pos : -1;
+			for (const annotation of codingMap.values()) {
 				rows.push({
-					rowId: `r_${index++}`,
-					matrixRowId: '',
-					matrixFieldName: '',
-					system: `${c.system || ''}`,
-					code: `${c.code || ''}`,
-					display: `${c.display || ''}`,
-					targetType: 'choice',
-					targetValue: `choice:${choiceCode}`,
-					targetLabel: `Choice - ${choiceLabelMap[choiceCode] || choiceCode}`,
-					choiceCode: `${choiceCode}`
+					kind: 'choice',
+					fieldName: '',
+					choiceCode,
+					choicePosition,
+					sortBy: makeSortBy('choice', '', choiceCode, choicePosition),
+					annotation
 				});
 			}
 		}
-		appendRowsFromAnnotation(getSingleDraftAnnotation());
 		return rows;
+	}
+
+	/**
+	 * Renders System column cell content.
+	 * @param {AnnotationTableEntry} row
+	 * @returns {string}
+	 */
+	function renderSystemColumn(row) {
+		return escapeHTML(row.annotation?.system || '?');
+	}
+
+	/**
+	 * Renders Code column cell content, with known-system external link when available.
+	 * @param {AnnotationTableEntry} row
+	 * @returns {string}
+	 */
+	function renderCodeColumn(row) {
+		const system = row.annotation?.system || '';
+		const code = row.annotation?.code || '';
+		if (config.knownLinks?.[system]) {
+			return `<a target="_blank" href="${escapeHTML(config.knownLinks[system] + code)}">${escapeHTML(code || '?')}</a>`;
+		}
+		return escapeHTML(code || '?');
+	}
+
+	/**
+	 * Renders Display column cell content.
+	 * @param {AnnotationTableEntry} row
+	 * @returns {string}
+	 */
+	function renderDisplayColumn(row) {
+		return escapeHTML(row.annotation?.display || '');
+	}
+
+	/**
+	 * Renders Target column select control for one row.
+	 * @param {AnnotationTableEntry} row
+	 * @param {{value:string,label:string}[]} targets
+	 * @param {Set<string>} currentChoiceCodes
+	 * @param {Object<string?,string>} choiceLabelMap
+	 * @returns {string}
+	 */
+	function renderTargetColumn(row, targets, currentChoiceCodes, choiceLabelMap) {
+		const targetValue = row.kind === 'field'
+			? (designerState.isMatrix ? `field:${row.fieldName}` : 'field')
+			: (row.kind === 'unit' ? 'unit' : `choice:${row.choiceCode}`);
+		const targetLabel = row.kind === 'field'
+			? `Field - ${row.fieldName}`
+			: (row.kind === 'unit' ? 'Unit' : `Choice - ${choiceLabelMap[row.choiceCode] || row.choiceCode}`);
+		const isMissingTarget = row.kind === 'choice' && !currentChoiceCodes.has(row.choiceCode);
+		const rowTargets = targets.slice();
+		if (!rowTargets.some(t => t.value === targetValue)) {
+			rowTargets.unshift({
+				value: targetValue,
+				label: `Missing target: ${targetLabel}`
+			});
+		}
+		return `<select class="form-select form-select-xs rome-row-target ${isMissingTarget ? 'target-missing' : ''}">
+			${rowTargets.map(target => `<option value="${escapeHTML(target.value)}" ${target.value === targetValue ? 'selected' : ''}>${escapeHTML(target.label)}</option>`).join('')}
+		</select>`;
+	}
+
+	/**
+	 * Renders Action column controls for one row.
+	 * @param {AnnotationTableEntry} row
+	 * @param {boolean} showUnitWarning
+	 * @returns {string}
+	 */
+	function renderActionColumn(row, showUnitWarning) {
+		const warningIcon = (showUnitWarning && row.kind === 'unit')
+			? '<span class="rome-target-warning text-warning rome-unit-row-warning ms-2" title="Unit targets are unusual for this field type."><i class="fa-solid fa-triangle-exclamation"></i></span>'
+			: '';
+		return `<button type="button" class="btn btn-xs btn-link text-danger p-0 rome-row-delete" title="Delete annotation"><i class="fa fa-trash"></i></button>${warningIcon}`;
+	}
+
+	/**
+	 * Initializes tooltips for unit warning icons inside annotation table.
+	 * @param {JQuery<HTMLElement>} $container
+	 * @returns {void}
+	 */
+	function initUnitWarningTooltips($container) {
+		if (typeof bootstrap === 'undefined' || !bootstrap?.Tooltip) return;
+		$container.find('.rome-unit-row-warning').each(function () {
+			new bootstrap.Tooltip(this, {
+				trigger: 'hover',
+				container: designerState.$dlg.get(0)
+			});
+		});
+	}
+
+	/**
+	 * Resolves row data from a table control using DataTables row data first.
+	 * @param {HTMLElement} control
+	 * @returns {AnnotationTableEntry|null}
+	 */
+	function resolveRowDataFromTableControl(control) {
+		const $tr = $(control).closest('tr');
+		if (annotationTableState.dt && $tr.length > 0) {
+			const dtRow = annotationTableState.dt.row($tr);
+			const rowData = dtRow?.data();
+			if (rowData) return rowData;
+		}
+		const controlEntry = $(control).data('rome-entry');
+		if (controlEntry) return controlEntry;
+		const rowEntry = $tr.data('rome-entry');
+		return rowEntry || null;
 	}
 
 	/**
@@ -2149,14 +2189,14 @@
 	function updateAnnotationTable() {
 		if (isExcludedCheckboxChecked()) return;
 		updateAnnotationTargetsDropdown();
-		const rows = flattenAnnotationRows();
+		const rows = buildAnnotationTableEntries();
 		const $wrapper = designerState.$dlg.find('.rome-edit-field-ui-list');
 		const $empty = designerState.$dlg.find('.rome-edit-field-ui-list-empty');
+		if (annotationTableState.dt) {
+			annotationTableState.dt.destroy();
+			annotationTableState.dt = null;
+		}
 		if (rows.length === 0) {
-			if (annotationTableState.dt) {
-				annotationTableState.dt.destroy();
-				annotationTableState.dt = null;
-			}
 			$wrapper.hide();
 			$empty.show();
 			return;
@@ -2172,64 +2212,93 @@
 				<tbody></tbody>
 			</table>
 		`).show();
-		const $tbody = $wrapper.find('tbody');
+		const $table = $wrapper.find('#rome-annotation-table');
 		const targets = buildTargetOptions();
 		const choiceLabelMap = getChoiceLabelMap();
 		const currentChoiceCodes = new Set(Object.keys(choiceLabelMap));
-		for (const row of rows) {
-			const link = config.knownLinks?.[row.system]
-				? `<a target="_blank" href="${escapeHTML(config.knownLinks[row.system] + row.code)}">${escapeHTML(row.code || '?')}</a>`
-				: escapeHTML(row.code || '?');
-			const isMissingTarget = row.targetType === 'choice' && !currentChoiceCodes.has(row.choiceCode);
-			const rowTargets = targets.slice();
-			if (!rowTargets.some(t => t.value === row.targetValue)) {
-				rowTargets.unshift({
-					value: row.targetValue,
-					label: `Missing target: ${row.targetLabel}`
-				});
-			}
-			const targetSelect = `<select class="form-select form-select-xs rome-row-target ${isMissingTarget ? 'target-missing' : ''}" data-rome-row-id="${row.rowId}">
-				${rowTargets.map(target => `<option value="${escapeHTML(target.value)}" ${target.value === row.targetValue ? 'selected' : ''}>${escapeHTML(target.label)}</option>`).join('')}
-			</select>`;
-			const targetSortKey = getTargetSortKey(row, choiceLabelMap);
-			$tbody.append(`
-				<tr data-rome-row-id="${row.rowId}">
-					<td>${escapeHTML(row.system || '?')}</td>
-					<td>${link}</td>
-					<td>${escapeHTML(row.display || '')}</td>
-					<td data-order="${escapeHTML(targetSortKey)}">${targetSelect}</td>
-					<td><button type="button" class="btn btn-xs btn-link text-danger p-0 rome-row-delete" data-rome-row-id="${row.rowId}" title="Delete annotation"><i class="fa fa-trash"></i></button></td>
-				</tr>
-			`);
-		}
-		if (annotationTableState.dt) {
-			annotationTableState.dt.destroy();
-		}
+		const showUnitWarning = shouldShowUnitWarning();
 		if ($.fn.DataTable) {
-			annotationTableState.dt = $wrapper.find('#rome-annotation-table').DataTable({
+			annotationTableState.dt = $table.DataTable({
+				data: rows,
+				columns: [
+					{
+						data: null,
+						render: (_data, _type, row) => renderSystemColumn(row)
+					},
+					{
+						data: null,
+						render: (_data, _type, row) => renderCodeColumn(row)
+					},
+					{
+						data: null,
+						render: (_data, _type, row) => renderDisplayColumn(row)
+					},
+					{
+						data: null,
+						render: (_data, type, row) => {
+							if (type === 'sort' || type === 'type') {
+								return getTargetSortKey(row);
+							}
+							return renderTargetColumn(row, targets, currentChoiceCodes, choiceLabelMap);
+						}
+					},
+					{
+						data: null,
+						orderable: false,
+						searchable: false,
+						render: (_data, _type, row) => renderActionColumn(row, showUnitWarning)
+					}
+				],
 				paging: showAdvanced,
 				searching: showAdvanced,
 				info: showAdvanced,
 				lengthChange: false,
 				pageLength: 10,
-				order: [[3, 'asc']]
+				order: [[3, 'asc']],
+				createdRow: (rowEl, rowData) => {
+					$(rowEl).data('rome-entry', rowData);
+				}
 			});
-			$wrapper.find('#rome-annotation-table').off('draw.dt.romeSelect2').on('draw.dt.romeSelect2', function () {
+			$table.off('draw.dt.romeTableEnhancements').on('draw.dt.romeTableEnhancements', function () {
 				applySelect2ToTargetSelects($(this).find('.rome-row-target'));
+				$(this).find('.rome-row-target, .rome-row-delete').each(function () {
+					const entry = $(this).closest('tr').data('rome-entry');
+					if (entry) $(this).data('rome-entry', entry);
+				});
+				initUnitWarningTooltips($wrapper);
 			});
 		} else {
 			annotationTableState.dt = null;
+			const $tbody = $table.find('tbody');
+			for (const row of rows) {
+				const $tr = $(`
+					<tr>
+						<td>${renderSystemColumn(row)}</td>
+						<td>${renderCodeColumn(row)}</td>
+						<td>${renderDisplayColumn(row)}</td>
+						<td data-order="${escapeHTML(getTargetSortKey(row))}">${renderTargetColumn(row, targets, currentChoiceCodes, choiceLabelMap)}</td>
+						<td>${renderActionColumn(row, showUnitWarning)}</td>
+					</tr>
+				`);
+				$tr.data('rome-entry', row);
+				$tr.find('.rome-row-target, .rome-row-delete').data('rome-entry', row);
+				$tbody.append($tr);
+			}
 		}
 		applySelect2ToTargetSelects($wrapper.find('.rome-row-target'));
+		initUnitWarningTooltips($wrapper);
 		$wrapper.off('click.rome-table', '.rome-row-delete');
 		$wrapper.on('click.rome-table', '.rome-row-delete', function () {
-			deleteAnnotationRow(`${$(this).attr('data-rome-row-id') ?? ''}`);
+			const row = resolveRowDataFromTableControl(this);
+			if (!row) return;
+			deleteAnnotationRow(row);
 		});
 		$wrapper.off('change.rome-table', '.rome-row-target');
 		$wrapper.on('change.rome-table', '.rome-row-target', function () {
-			const rowId = `${$(this).attr('data-rome-row-id') ?? ''}`;
 			const value = `${$(this).val() ?? ''}`;
-			reassignAnnotationRow(rowId, value);
+			const row = resolveRowDataFromTableControl(this);
+			if (!row) return;
+			reassignAnnotationRow(row, value);
 		});
 		log('Rendered annotation table rows:', rows.length, 'advancedUI:', showAdvanced);
 		log('Updated internal annotation table state:', annotationTableState);

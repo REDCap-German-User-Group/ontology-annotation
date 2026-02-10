@@ -115,19 +115,13 @@
  */
 
 /**
- * @typedef {Object} AnnotationTableRow
- * @property {string} rowId
- * @property {string} matrixRowId
- * @property {string} matrixFieldName
- * @property {string} system
- * @property {string} code
- * @property {string} display
- * @property {'field'|'unit'|'choice'} targetType
- * @property {string} targetValue
- * @property {string} targetLabel
+ * @typedef {Object} AnnotationTableEntry
+ * @property {'field'|'unit'|'choice'} kind
+ * @property {string} fieldName
  * @property {string} choiceCode
- * @property {boolean=} isShared
- * @property {string[]=} matrixRowIds
+ * @property {number} choicePosition
+ * @property {string} sortBy
+ * @property {{system:string, code:string, display:string}} annotation
  */
 
 /**
