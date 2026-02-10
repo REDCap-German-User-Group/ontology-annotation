@@ -356,8 +356,19 @@
 /**
  * @typedef {Object} ROME_OnlineDesignerState
  * @property {'field'|'matrix'} editType
+ *   Tracks whether we're currently editing a field annotation or a matrix annotation
  * @property {ROME_AnnotationRow[]} rows
- * @property {WatchHandle=} watcher
+ *   Keeps track of the current state of annotation rows
+ * @property {boolean} enabled
+ *   Whether annotation facilities should be enabled for this field/matrix. If not, the UI
+ *   is largely disabled. When set to true, all action tags are removed immediatly, but a
+ *   backup copy will be retained in case the user flips the switch before saving (in case
+ *   of matrix groups and field name changes, field annotations that cannot be matched
+ *   must be shown as unassigned; these will definitely be lost if not reassigned.
+ * @property {WatchHandle=} fieldWatcher
+ *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer
+ * @property {WatchHandle=} matrixWatcher
+ *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer
  */
 
 /**
@@ -376,49 +387,3 @@
  */
 
 
-/**
- * @typedef {"input"|"change"|"programmatic"} WatchTableEditType
- */
-
-/**
- * @typedef {Object} WatchTableEditEvent
- * @property {HTMLInputElement|HTMLTextAreaElement} el
- * @property {string} value
- * @property {WatchTableEditType} type
- * @property {Event} [event] Present for DOM events ("input"/"change"), absent for programmatic interception.
- */
-
-/**
- * @typedef {Object} WatchTableRowsChangedEvent
- * @property {MutationRecord[]} mutations
- */
-
-/**
- * @callback WatchTableOnEdit
- * @param {WatchTableEditEvent} info
- * @returns {void}
- */
-
-/**
- * @callback WatchTableOnRowsChanged
- * @param {WatchTableRowsChangedEvent} info
- * @returns {void}
- */
-
-/**
- * @typedef {Object} WatchTableOptions
- * @property {WatchTableOnEdit} [onEdit]
- * @property {WatchTableOnRowsChanged} [onRowsChanged]
- * @property {boolean} [patchValueSetter=false]
- *   If true, intercepts programmatic assignments like `el.value = "x"` for inputs/textareas inside this table.
- *   Note: this patches prototypes globally.
- * @property {boolean} [dispatchInputOnProgrammaticSet=true]
- *   If true, the setter patch also dispatches a bubbling "input" event after a programmatic set is detected.
- * @property {boolean} [useCapture=true]
- *   Use capture phase for input/change listeners (more robust if something stops propagation).
- */
-
-/**
- * @callback WatchTableStop
- * @returns {void}
- */

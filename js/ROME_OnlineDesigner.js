@@ -441,45 +441,53 @@
 
 	/** @type {ROME_OnlineDesignerState} */
 	const odState = {
-		editType: 'field',
+		editType: 'matrix', // TODO - set this based on the dialog type
 		rows: [],
-		watcher: null,
+		fieldWatcher: null,
+		matrixWatcher: null,
+		enabled: true, // TODO - set this based on the exclusion state
 	}
 
 
 	/**
-	 * Initializes user change watchers for field name (matrix only), field annotation, and choices
+	 * Initializes user change watchers for field name (matrix only), 
+	 * field annotation, and choices. Watchers are attached once only.
 	 */
 	function initUserChangeWatcher() {
 		const elements = [];
 		const filters = [];
-		const patchProgrammatic = false && odState.editType === 'field';
-		if (odState.editType === 'field') {
+		const watcher = odState.editType === 'field' ? 'fieldWatcher' : 'matrixWatcher';
+		if (odState.editType === 'field' && odState.fieldWatcher == null) {
 			// Annotation
 			elements.push(document.getElementById('field_annotation'));
 			// Choices
 			elements.push(document.getElementById('element_enum'));
 		}
-		else if (odState.editType === 'matrix') {
+		else if (odState.editType === 'matrix' && odState.matrixWatcher == null) {
 			// Table of matrix fields (including field names and annotations)
 			elements.push(document.querySelector('table.addFieldMatrixRowParent'));
 			// Choices
 			elements.push(document.getElementById('element_enum_matrix'));
+			elements.push(document.getElementById('section_header_matrix'));
 			filters.push(
 				'input[name^=addFieldMatrixRow-varname_]', 
-				'textarea[name=addFieldMatrixRow-annotation]'
+				'textarea[name=addFieldMatrixRow-annotation]',
+				'textarea[name=element_enum_matrix]',
 			);
 		}
-		odState.watcher = WatchTargets.watch(elements, {
-			onEvent: (info) => {
-				// TODO - add some useful work and remove the logging
-				log('WatchDog:', info);
-			},
-			tableCellFilter: filters,
-			fireOnInput: false,
-			patchProgrammatic: patchProgrammatic
-		});
-		log('Installed change watcher', odState);
+		if (elements.length > 0) {
+			// @ts-ignore
+			odState[watcher] = WatchTargets.watch(elements, {
+				onEvent: (info) => {
+					// TODO - add some useful work and remove the logging
+					log('WatchDog:', info);
+				},
+				tableCellFilter: filters,
+				fireOnInput: false,
+				patchProgrammatic: true
+			});
+			log('Installed change watcher', odState);
+		}
 	}
 
 	/**
@@ -528,6 +536,7 @@
 		return annotations;
 	}
 
+	//#endregion
 
 	//#region Annotation Draft and Table Engine
 
