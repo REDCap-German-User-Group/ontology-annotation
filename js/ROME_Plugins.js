@@ -68,19 +68,29 @@
 		.then(function(response) {
 			ds.data = JSON.parse(response);
 			log('Received discover info: ', ds.data);
+			if (!Array.isArray(ds.data.fields)) ds.data.fields = [];
+			if (!Array.isArray(ds.data.projects)) ds.data.projects = [];
 			const options = ds.data.fields.map((field, idx) => ({
 				'id': idx,
 				'title': `${field.display} [${field.system}: ${field.code}], n=${field.projects.length}`
 			}));
-			const settings = {
-				'options': options,
-				'valueField': 'id',
-				'onChange': updateDiscoveredProjectsTable,
-				'labelField': 'title',
-				'searchField': 'title'
-			};
-			// @ts-ignore
-			ds.TS = new window.TomSelect('#rome-discover-select', settings);
+			if (ds.data.fields.length == 0) {
+				$('#rome-matching-projects-message').hide();
+				$('.rome-discover-select-waiter').text('No ontology annotations found in any projects.').addClass('rome-no-annotations red mb-2');
+				$('#rome-discover-select').prop('disabled', true);
+				updateDiscoveredProjectsTable();
+			}
+			else {
+				const settings = {
+					'options': options,
+					'valueField': 'id',
+					'onChange': updateDiscoveredProjectsTable,
+					'labelField': 'title',
+					'searchField': 'title'
+				};
+				// @ts-ignore
+				ds.TS = new window.TomSelect('#rome-discover-select', settings);
+			}
 			if (ds.data) {
 				$('.rome-discover-project-count').text(Object.keys(ds.data.projects).length);
 			}

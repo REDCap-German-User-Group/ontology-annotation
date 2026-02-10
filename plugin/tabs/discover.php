@@ -27,11 +27,11 @@ $ih->js("libs/tom-select_2.4.3/tom-select.complete.min.js");
 		annotated projects:</label>
 	<div class="rome-discover-select-container">
 		<div class="rome-discover-select-waiter">
-			<i class="fa-solid fa-spinner fa-spin-pulse fa-2x"></i> Loading ...
+			<i class="fa-solid fa-spinner fa-spin-pulse fa-2x me-2"></i>Loading ontologies &hellip;
 		</div>
 		<select id="rome-discover-select" autofocus="autofocus" multiple placeholder="&hellip;" style="display: none;"></select>
 	</div>
-	<p>
+	<p id="rome-matching-projects-message">
 		Matching projects will be displayed below.
 	</p>	
 	<div id="resulttable"></div>

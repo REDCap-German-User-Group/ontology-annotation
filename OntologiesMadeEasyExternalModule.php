@@ -715,7 +715,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		SQL;
 		$q = $this->query($sql, [$this->PREFIX]);
 		$result = $q->fetch_assoc();
-		return $result["info"];
+		return $result["info"]; // JSON string
 	}
 
 	#endregion
