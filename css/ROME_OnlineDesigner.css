@@ -158,33 +158,33 @@
 }
 
 .rome-search {
-  border: 2px solid var(--bs-border-color);
+	border: 2px solid var(--bs-border-color);
 }
 
 /* Busy state: animated border */
-.rome-search.is-searching{
-  border: 2px solid transparent;          /* creates a real border-box to paint into */
-  background:
-    linear-gradient(var(--bs-body-bg), var(--bs-body-bg)) padding-box,
-    linear-gradient(90deg,
-      var(--bs-border-color),
-      var(--bs-primary),
-      var(--bs-border-color)
-    ) border-box;
+.rome-search.is-searching {
+	border: 2px solid transparent;
+	/* creates a real border-box to paint into */
+	background:
+		linear-gradient(var(--bs-body-bg), var(--bs-body-bg)) padding-box,
+		linear-gradient(90deg,
+			var(--bs-border-color),
+			var(--bs-primary),
+			var(--bs-border-color)) border-box;
 
-  /* IMPORTANT: make the border gradient wider so moving it is visible */
-  background-size: 100% 100%, 200% 100%;
-  background-position: 0 0, 0 0;
+	/* IMPORTANT: make the border gradient wider so moving it is visible */
+	background-size: 100% 100%, 200% 100%;
+	background-position: 0 0, 0 0;
 
-  animation: bs-search-border-scan 2.2s linear infinite;
+	animation: bs-search-border-scan 2.2s linear infinite;
 }
 
 /* Keep Bootstrap focus ring */
-.rome-search.is-searching:focus{
-    color: var(--bs-body-color);
-    background-color: var(--bs-body-bg);
-    outline: 0;
-    box-shadow: 0 0 0 .25rem rgba(13,110,253,.25);
+.rome-search.is-searching:focus {
+	color: var(--bs-body-color);
+	background-color: var(--bs-body-bg);
+	outline: 0;
+	box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .25);
 }
 
 .rome-search.is-no-results {
@@ -192,14 +192,16 @@
 	background-color: rgba(220, 53, 69, 0.06);
 }
 
-@keyframes bs-search-border-scan{
-  to { background-position: 0 0, 200% 0; }
+@keyframes bs-search-border-scan {
+	to {
+		background-position: 0 0, 200% 0;
+	}
 }
 
 
 .rome-ac-hl {
 	font-weight: 700;
-	color:rgb(80, 103, 235)
+	color: rgb(80, 103, 235)
 }
 
 .rome-target-warning {
@@ -209,6 +211,7 @@
 .target-missing {
 	outline: 2px solid #dc3545;
 }
+
 .select2.target-missing {
 	border-radius: 5px;
 }
@@ -216,15 +219,19 @@
 #rome-annotation-table .select2-container .select2-selection--single {
 	height: 24px;
 }
+
 #rome-annotation-table .select2-container .select2-selection--single .select2-selection__rendered {
 	line-height: 23px;
 }
+
 #rome-annotation-table .select2-container--default .select2-selection--single .select2-selection__arrow {
 	top: -1px;
 }
+
 #div_add_field #rome-annotation-table {
 	min-width: 800px;
 }
+
 #addMatrixPopup #rome-annotation-table {
 	width: 100%;
 }
@@ -251,3 +258,21 @@
 	padding-right: 20px;
 
 }
+
+
+.rome-annotation-popover .popover-header {
+	font-size: 13px;
+	background-color: #319aff;
+	color: white;
+	padding: 4px 8px;
+}
+
+.rome-annotation-popover .popover-body {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+.rome-annotation-popover .popover-body div:has(a) {
+    margin-top: 4px;
+}
+

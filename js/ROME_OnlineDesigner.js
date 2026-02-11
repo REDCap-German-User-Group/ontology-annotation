@@ -736,7 +736,7 @@
 	 */
 	function getMatrixRows() {
 		const rows = [];
-		designerState.$dlg.find('.addFieldMatrixRowParent .addFieldMatrixRow').each(function () {
+		odState.$dlg.find('.addFieldMatrixRowParent .addFieldMatrixRow').each(function () {
 			rows.push($(this));
 		});
 		return rows;
@@ -1080,7 +1080,7 @@
 	 * @returns {void}
 	 */
 	function showMissingChoiceSaveDialog(count, onProceed = null) {
-		designerState.$dlg.find('.rome-missing-choice-save-dialog').remove();
+		odState.$dlg.find('.rome-missing-choice-save-dialog').remove();
 		const $dlg = $('<div></div>')
 			.addClass('rome-missing-choice-save-dialog')
 			.html(
@@ -1335,8 +1335,8 @@
 	 * @returns {void}
 	 */
 	function initializeAddButton() {
-		const $button = designerState.$dlg.find('#rome-add-button');
-		const $indicator = designerState.$dlg.find('#rome-add-selection-info');
+		const $button = getAddButton();
+		const $indicator = getInfoIcon();
 		$button.off('click.rome-add').on('click.rome-add', function () {
 			addSelectedAnnotationToDraft();
 		});
@@ -2605,6 +2605,22 @@
 	}
 
 	/**
+	 * Gets the jQuery element for the ontology lookup add button.
+	 * @returns {JQuery<HTMLElement>}
+	 */
+	function getAddButton() {
+		return odState.$editor.find('#rome-add-button');
+	}
+
+	/**
+	 * Gets the jQuery element for the ontology lookup info icon.
+	 * @returns {JQuery<HTMLElement>}
+	 */
+	function getInfoIcon() {
+		return odState.$editor.find('#rome-add-selection-info');
+	}
+
+	/**
 	 * Gets the jQuery element for the ontology lookup search spinner.
 	 * @returns {JQuery<HTMLElement>}
 	 */
@@ -2631,7 +2647,7 @@
 			if (!$menu || $menu.length === 0) return;
 
 			const baseZ = Number.parseInt(
-				designerState.$dlg.closest('[role="dialog"]').css('z-index') ?? '199',
+				odState.$dlg.closest('[role="dialog"]').css('z-index') ?? '199',
 				10
 			);
 			const zIndex = Number.isFinite(baseZ) ? baseZ + 2 : 201;
@@ -2643,7 +2659,7 @@
 			delay: 0, // we debounce manually
 			appendTo: 'body',
 			open: function () {
-				// raiseAutocompleteMenu(); // TODO - neccessary?
+				raiseAutocompleteMenu();
 			},
 			source: function (request, responseCb) {
 				const term = (request.term || '').trim();
@@ -2725,10 +2741,12 @@
 				type: h.type || null
 			});
 		});
-		$search.on('keydown.ROME_autocomplete', function (event) {
+		$search.on('keydown keyup', function (event) {
 			if (event.key === 'Enter') {
 				// Let jQuery UI autocomplete handle Enter, but block REDCap's parent dialog handlers.
 				event.stopPropagation();
+				event.stopImmediatePropagation();
+				return false;
 			}
 		});
 		$search.on('input.ROME_autocomplete', function () {
@@ -2759,17 +2777,17 @@
 	 */
 	function refreshAddButtonState() {
 
-		return; // TODO reenable after check
-
-		const $button = designerState.$dlg.find('#rome-add-button');
-		const $indicator = designerState.$dlg.find('#rome-add-selection-info');
-		const hasSelection = !!selectionState.selected;
-		log('Refreshing Add button state. hasSelection=', hasSelection);
+		const $button = getAddButton();
+		const $indicator = getInfoIcon();
+		const hasSelection = odState.selected !== null;
+		log(hasSelection ? 'Enabling Add button' : 'Disabling Add button');
 		$button.prop('disabled', !hasSelection);
 		$indicator.css('display', hasSelection ? 'inline-block' : 'none');
-		if ($indicator.length === 0) return;
-		const html = hasSelection ? getSelectedAnnotationPopoverHtml(selectionState.selected) : 'No annotation selected.';
-		$indicator.attr('data-bs-content', html).attr('data-content', html).attr('title', hasSelection ? 'Selected annotation' : 'No selection');
+		if ($indicator.length === 0 || !hasSelection) return;
+
+		const html = getSelectedAnnotationPopoverHtml(odState.selected);
+		const title = 'Annotation to be added';
+		$indicator.attr('data-bs-content', html).attr('data-content', html).attr('title', title);
 		if (typeof $indicator.popover === 'function') {
 			try {
 				$indicator.popover('dispose');
@@ -2778,22 +2796,17 @@
 			}
 			$indicator.popover({
 				trigger: 'click hover focus',
+				customClass: 'rome-annotation-popover',
 				html: true,
 				sanitize: false,
-				container: designerState.$dlg.get(0),
+				container: odState.$dlg.get(0),
 				content: html,
-				title: hasSelection ? 'Selected annotation' : 'No selection'
+				title: title,
+				placement: 'top'
 			});
 		}
-
-		if (odState.selected) {
-
-		}
-			if ($addButton.length > 0 && !$addButton.prop('disabled')) {
-				window.setTimeout(() => $addButton.trigger('focus'), 0);
-			}
-
-
+		// Set focus to the Add button
+		setTimeout(() => $button.trigger('focus'), 0);
 	}
 
 	/**
@@ -2874,7 +2887,7 @@
 	function refreshDropdown(term) {
 		searchState.refreshing = true;
 		try {
-			designerState.$input.autocomplete('search', term);
+			getSearchInput().autocomplete('search', term);
 		} finally {
 			searchState.refreshing = false;
 		}
@@ -2980,7 +2993,7 @@
 					completed,
 					items: searchState.items
 				});
-				showNoResultsState(searchState.items.length === 0);
+				showNoResultsState(searchState.items.length === 0 && searchState.lastTermCompleted);
 
 				if (typeof responseCb === 'function') {
 					responseCb(searchState.items);
