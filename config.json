@@ -192,7 +192,8 @@
 	"links": {
 		"project": [
 			{
-				"name": "<b>ROME</b>: Ontology Annotations Made Easy",
+				"name": "project_link",
+				"tt_name": true,
 				"icon": "fa-solid fa-tags",
 				"url": "plugin/index.php",
 				"show-header-and-footer": true
