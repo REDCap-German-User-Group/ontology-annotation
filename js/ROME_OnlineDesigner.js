@@ -135,8 +135,10 @@
 
 		//#region User Interfaace Hooks (+ Main Entry Point)
 
-		ensureFieldSaveHook();
-		ensureMatrixSaveHook();
+		$(function() {
+			ensureFieldSaveHook();
+			ensureMatrixSaveHook();
+		});
 
 		// Adds the edit field UI - this is the main entry point for the 
 		// annotation interface
@@ -252,7 +254,8 @@
 	 * @returns {boolean}
 	 */
 	function isExcludedCheckboxChecked() {
-		return odState.$dlg.find('input.rome-em-exclude').prop('checked') == true;
+		const checked = odState.$dlg.find('input.rome-em-exclude').prop('checked');
+		return checked;
 	}
 
 	/**
@@ -281,6 +284,14 @@
 		$('input[name="rome-em-exclude"]').val(enabled ? '0' : '1');
 	}
 
+	/**
+	 * Updates the excluded hidden field before saving.
+	 */
+	function updateExcludedCheckboxHiddenInput() {
+		const exclude = odState.$dlg.find('input.rome-em-exclude').prop('checked');
+		$('input[name="rome-em-exclude"]').val(exclude ? '1' : '0');
+	}
+
 
 	/**
 	 * Inserts the ROME UI surface into the active REDCap dialog and wires handlers.
@@ -296,10 +307,12 @@
 		odState.$searchSpinner = $editor.find('.rome-edit-field-ui-spinner');
 
 		if (odState.editType == 'matrix') {
+			$editor.find('.rome-em-exclude-field').remove();
 			// Insert at end of the dialog
 			odState.$dlg.append($editor);
 		}
 		else {
+			$editor.find('.rome-em-exclude-matrix').remove();
 			// Single-field-specific adjustments
 			// Mirror visibility of the Action Tags / Field Annotation DIV
 			// TODO - extract the mutation observer setup into a hook and call 
@@ -981,6 +994,9 @@
 	 * @returns {boolean}
 	 */
 	function validateBeforeSave(onProceedAfterMissingChoiceWarning = null, skipMissingChoicePrompt = false) {
+
+		return true;
+
 		if (designerState.isMatrix) {
 			syncAllMatrixDraftsToTextareas();
 			const invalidRows = [];
@@ -1208,16 +1224,6 @@
 	}
 
 	/**
-	 * Wires save validation for both single-field and matrix edit paths.
-	 * @returns {void}
-	 */
-	function setupSaveValidationHooks() {
-		if (!designerState.isMatrix) {
-			ensureFieldSaveHook();
-		}
-	}
-
-	/**
 	 * Ensures REDCap single-field save entrypoint is wrapped with validation logic.
 	 * @returns {void}
 	 */
@@ -1239,6 +1245,7 @@
 					window['addEditFieldSave'].apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
 				}, 0);
 			}, skipMissingChoicePrompt)) return false;
+			updateExcludedCheckboxHiddenInput();
 			return existing.apply(self, args);
 		};
 		// @ts-ignore

@@ -62,7 +62,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Only run in project context and on specific pages
 		if ($project_id == null) return;
 		$page = defined('PAGE') ? PAGE : null;
-		if (!in_array($page, ['Design/edit_field.php'])) return;
 
 		// Online Designer - Edit Field
 		if ($page == 'Design/edit_field.php') {
