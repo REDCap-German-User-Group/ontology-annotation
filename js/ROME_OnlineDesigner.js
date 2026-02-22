@@ -237,9 +237,9 @@
 		addMatrixRowIds();
 		setInitialExcludedCheckboxState();
 		resetSearchState();
+		buildTargetOptions();
+		updateAnnotationTargetsDropdown();
 
-		const targets = buildTargetOptions();
-		const choiceLabelMap = getChoiceLabelMap();
 
 
 		initAnnotationState();
@@ -490,6 +490,7 @@
 	}
 
 
+
 	//#endregion
 
 	//#region Dialog Exclusion State
@@ -538,7 +539,8 @@
 
 	/** @type {ROME_OnlineDesignerState} */
 	const odState = {
-		editType: 'matrix', // TODO - set this based on the dialog type
+		editType: 'matrix',
+		fieldType: 'matrix',
 		parseResults: {},
 		rows: [],
 		fieldWatcher: null,
@@ -557,6 +559,7 @@
 		helpContent: null,
 		minItemsForSelect2: 7,
 		targetOptions: [],
+		choiceLabelMap: {},
 	}
 
 
@@ -566,6 +569,7 @@
 	 */
 	function setEditType(dialogObj) {
 		odState.editType = dialogObj.id == 'addMatrixPopup' ? 'matrix' : 'field'
+		odState.fieldType = odState.editType === 'field' ? String($('#field_type').val() ?? '') : 'matrix';
 		odState.$dlg = $(dialogObj);
 	}
 
@@ -582,6 +586,8 @@
 			elements.push(document.getElementById('field_annotation'));
 			// Choices
 			elements.push(document.getElementById('element_enum'));
+			// Field type
+			elements.push(document.getElementById('field_type'));
 		}
 		else if (odState.editType === 'matrix' && odState.matrixWatcher == null) {
 			// Table of matrix fields (including field names and annotations)
@@ -607,16 +613,26 @@
 						}
 						else if ($el.is('.field_annotation_matrix, #field_annotation')) {
 							// Annotations changed
-							log('Annotations changed');
+							log('Annotation changed');
+							initAnnotationState();
+							refreshAnnotationRows();
 						}
 						else if ($el.is('#element_enum_matrix, #element_enum')) {
 							// Enum changed
-							log('Enum changed');
+							buildTargetOptions();
+							updateAnnotationTargetsDropdown();
+							refreshAnnotationRows();
+						}
+						else if ($el.is('#field_type')) {
+							// Field type changed
+							buildTargetOptions();
+							odState.fieldType = String($el.val() ?? '');
 						}
 					}
 					else if (info.kind === 'rows') {
 						// Rows added or removed
 						addMatrixRowIds();
+						refreshAnnotationRows();
 					}
 				},
 				tableCellFilter: filters,
@@ -792,7 +808,7 @@
 		}
 
 
-
+		log('Refreshed annotation rows', odState.rows);
 
 	}
 
@@ -2102,11 +2118,10 @@
 	 * @returns {void}
 	 */
 	function updateAnnotationTargetsDropdown() {
-		const $target = designerState.$dlg.find('#rome-field-choice');
+		const $target = odState.$dlg.find('#rome-field-choice');
 		const previous = `${$target.val() ?? ''}`;
-		const options = buildTargetOptions();
-		$target.html(options.map(opt => `<option value="${escapeHTML(opt.value)}">${escapeHTML(opt.label)}</option>`).join(''));
-		if (options.some(opt => opt.value === previous)) {
+		$target.html(odState.targetOptions.map(opt => `<option value="${escapeHTML(opt.value)}">${escapeHTML(opt.display)}</option>`).join(''));
+		if (odState.targetOptions.some(opt => opt.value === previous)) {
 			$target.val(previous);
 		}
 		applySelect2ToTargetSelects($target);
@@ -2136,6 +2151,7 @@
 	function buildTargetOptions() {
 		/** @type {ROME_TargetOption[]} */
 		const options = [];
+		const choiceLabelMap = {};
 		if (odState.editType === 'matrix') {
 			// Fields
 			odState.$dlg.find('input.field_name_matrix').each(function() {
@@ -2160,6 +2176,7 @@
 					display: `[${choice.code}]: ${choice.label}`,
 					targetType: 'choice'
 				});
+				choiceLabelMap[choice.code] = choice.label;
 			}
 		}
 		else {
@@ -2167,6 +2184,7 @@
 			options.push({ rowId: '', value: 'field:', display: 'Field', targetType: 'field' });
 			// Unit
 			options.push({ rowId: '', value: 'unit', display: 'Unit', targetType: 'unit' });
+			// Choices
 			for (const choice of getChoiceOptions()) {
 				options.push({ 
 					rowId: '',
@@ -2174,28 +2192,34 @@
 					display: `[${choice.code}]: ${choice.label}`,
 					targetType: 'choice'
 				});
+				choiceLabelMap[choice.code] = choice.label;
 			}
 		}
 		odState.targetOptions = options;
+		odState.choiceLabelMap = choiceLabelMap;
 	}
 
-	/**
-	 * Returns canonical target option count used for Select2 search-threshold decisions.
-	 * Ignores row-local "missing target" fallback options.
-	 * @returns {number}
-	 */
-	function getTargetOptionCountForThreshold() {
-		return buildTargetOptions().length;
-	}
 
 	/**
 	 * Returns parsed choice code/label options from current enum text.
 	 * @returns {{code:string, label:string}[]}
 	 */
 	function getChoiceOptions() {
-		const enumText = String(odState.editType === 'field'
-			? $('#field_enum').val() ?? ''
-			: $('#element_enum_matrix').val() ?? '');
+		let enumText = '';
+		if (odState.editType === 'field') {
+			if (odState.fieldType === 'truefalse') {
+				enumText = config.fixedEnums.truefalse;
+			}
+			else if (odState.fieldType === 'yesno') {
+				enumText = config.fixedEnums.yesno;
+			}
+			else {
+				enumText = String($('#field_enum').val() ?? '');
+			}
+		}
+		else {
+			enumText = String($('#element_enum_matrix').val() ?? '');
+		}
 		const out = [];
 		for (const line of enumText.split('\n')) {
 			if (!line.trim()) continue;
@@ -2209,9 +2233,8 @@
 
 	/**
 	 * Builds a map from choice code to choice label for the current enum.
-	 * @returns {Object<string?,string>}
 	 */
-	function getChoiceLabelMap() {
+	function buildChoiceLabelMap() {
 		const map = {};
 		for (const choice of getChoiceOptions()) {
 			map[choice.code] = choice.label;
@@ -2601,7 +2624,7 @@
 		if (typeof $.fn.select2 !== 'function') return;
 		const threshold = Number.parseInt(`${odState.minItemsForSelect2 ?? 7}`, 10);
 		const minItems = Number.isFinite(threshold) && threshold > 0 ? threshold : 7;
-		const effectiveCount = getTargetOptionCountForThreshold();
+		const effectiveCount = odState.targetOptions.length;
 		const showSearch = effectiveCount > minItems;
 		$selects.each(function () {
 			const $el = $(this);

@@ -34,6 +34,7 @@
  * @property {string=} searchEndpoint
  * @property {string=} pollEndpoint
  * @property {Number=} minSearchLength
+ * @property {Object<?string,string>} fixedEnums
  */
 
 /**
@@ -361,6 +362,7 @@
  * @property {'field'|'matrix'} editType
  *   Tracks whether we're currently editing a field annotation or a matrix annotation
  * @property {Object<string, OntologyAnnotationParseResult>} parseResults
+ * @property {string} fieldType
  * @property {ROME_AnnotationRow[]} rows
  *   Keeps track of the current state of annotation rows
  * @property {boolean} enabled
@@ -389,6 +391,7 @@
  * @property {string=} helpContent
  * @property {Number} minItemsForSelect2
  * @property {ROME_TargetOption[]} targetOptions
+ * @property {Object<?string,string>} choiceLabelMap
  */
 
 /**

@@ -365,6 +365,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'searchEndpoint' => $this->framework->getUrl('ajax/search.php'),
 			'pollEndpoint' => $this->framework->getUrl('ajax/poll.php'),
 			'minSearchLength' => self::MIN_SEARCH_LENGTH,
+			'fixedEnums' => $this->getFixedEnums(),
+
 		];
 		// Add some language strings
 		$this->framework->tt_transferToJavascriptModuleObject([
@@ -380,6 +382,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$ih->js('js/ROME_OnlineDesigner.js');
 		$ih->css('css/ROME_OnlineDesigner.css');
 		echo RCView::script(self::NS_PREFIX . self::EM_NAME . '.init(' . json_encode($config) . ", $jsmo_name);");
+	}
+
+	private function getFixedEnums() {
+		return [
+			'truefalse' => "1, ".\RCView::getLangStringByKey('design_186')."\n0, ".\RCView::getLangStringByKey('design_187'),
+			'yesno' => "1, ".\RCView::getLangStringByKey('design_100')."\n0, ".\RCView::getLangStringByKey('design_99'),
+		];
 	}
 
 	private function add_templates($view)

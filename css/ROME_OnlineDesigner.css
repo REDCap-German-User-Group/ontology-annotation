@@ -287,3 +287,11 @@
 #rome-annotation-table {
 	min-width: 730px;
 }
+
+
+.select2-dropdown {
+	min-width: 200px;
+}
+.select2-selection__rendered {
+	margin-top: -2px;
+}
