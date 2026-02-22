@@ -49,11 +49,11 @@
 	display: flex;
 }
 
-#div_add_field .rome-em-fieldedit-exclude-matrix {
+#div_add_field .rome-em-exclude-matrix {
 	display: none;
 }
 
-#addMatrixPopup .rome-em-fieldedit-exclude-field {
+#addMatrixPopup .rome-em-exclude-field {
 	display: none;
 }
 
@@ -65,7 +65,7 @@
 	margin-bottom: 10px;
 }
 
-.rome-edit-field-ui-container:has(input.rome-em-fieldedit-exclude:checked) .rome-edit-field-ui-body {
+.rome-edit-field-ui-container:has(input.rome-em-exclude:checked) .rome-edit-field-ui-body {
 	display: none;
 }
 

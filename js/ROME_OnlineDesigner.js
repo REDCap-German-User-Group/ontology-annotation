@@ -147,7 +147,9 @@
 				setEditType(ob);
 				try {
 					// This is the main entry point for the annotation editor UI
-					activateAnnotationsEditor();
+					setTimeout(() => {
+						activateAnnotationsEditor();
+					}, 0);
 				}
 				catch (e) {
 					// In case of error, we remove the editor and log to console
@@ -165,7 +167,7 @@
 			if (options.url?.includes('Design/edit_matrix.php')) {
 				// Matrix saving
 				const matrixGroupName = String($('#grid_name').val());
-				const exclude = isExcludedCheckboxChecked_OBSOLETE();
+				const exclude = isExcludedCheckboxChecked();
 				const originalSuccess = options.success;
 				options.success = function (data, textStatus, jqXHR) {
 					saveMatrixFormExclusion(matrixGroupName, exclude);
@@ -230,27 +232,13 @@
 	 */
 	function activateAnnotationsEditor() {
 		if (odState.$dlg.find('.rome-edit-field-ui-container').length == 0) {
-			log('Initializing UI ...', odState);
 			initAnnotationEditor();
 			log('UI initialized.', odState);
 		}
-		addMatrixRowIds();
 		setInitialExcludedCheckboxState();
 		resetSearchState();
 		buildTargetOptions();
-		updateAnnotationTargetsDropdown();
-
-
-
 		initAnnotationState();
-
-
-		// TODO - Check
-
-		// setSelectedAnnotation(null);
-		// updateAnnotationTable();
-
-
 
 		// Disable search when there are errors and add error indicator
 		if (config.errors?.length ?? 0 > 0) {
@@ -263,8 +251,8 @@
 	 * Returns whether the "exclude from annotation" checkbox is currently enabled.
 	 * @returns {boolean}
 	 */
-	function isExcludedCheckboxChecked_OBSOLETE() {
-		return designerState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked') == true;
+	function isExcludedCheckboxChecked() {
+		return odState.$dlg.find('input.rome-em-exclude').prop('checked') == true;
 	}
 
 	/**
@@ -289,8 +277,8 @@
 	 */
 	function updateExcludedCheckboxStateAndHiddenInput(enabled) {
 		odState.enabled = enabled;
-		odState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked', !enabled);
-		$('input[name="rome-em-fieldedit-exclude"]').val(enabled ? '0' : '1');
+		odState.$dlg.find('input.rome-em-exclude').prop('checked', !enabled);
+		$('input[name="rome-em-exclude"]').val(enabled ? '0' : '1');
 	}
 
 
@@ -328,7 +316,7 @@
 			$editor.css('display', actiontagsVisible ? 'block' : 'none');
 			// Add a hidden field to transfer exclusion
 			odState.$dlg.find('#addFieldForm').prepend(
-				'<input type="hidden" name="rome-em-fieldedit-exclude" value="0">'
+				'<input type="hidden" name="rome-em-exclude" value="0">'
 			);
 
 			// Initial sync from the action tag
@@ -344,102 +332,8 @@
 		initializeAddButton();
 		initUserChangeWatcher();
 		initDatatable();
-
-
-
-		
-		// TODO - Check
-
-		// setupManualAnnotationHooks();
-		// setupSaveValidationHooks();
-		// ensureMatrixSaveHook();
-		// if (designerState.isMatrix) {
-		// 	setupMatrixLifecycleHandlers();
-		// }
-
-		// //#region Setup event handlers
-
-		// // Track changes to the choices
-		// const $enum = designerState.isMatrix
-		// 	? designerState.$dlg.find('textarea[name="element_enum_matrix"]')
-		// 	: designerState.$dlg.find('textarea[name="element_enum"]');
-		// // Detect user input
-		// $enum[0].addEventListener('change', () => {
-		// 	trackEnumChange(String($enum.val()));
-		// });
-		// // Detect programmatic changes by redefining .value
-		// const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
-		// Object.defineProperty($enum.get(0), 'value', {
-		// 	get() {
-		// 		// @ts-ignore
-		// 		return descriptor['get'].call(this);
-		// 	},
-		// 	set(newVal) {
-		// 		// @ts-ignore
-		// 		descriptor.set.call(this, newVal);
-		// 		trackEnumChange(newVal);
-		// 	}
-		// });
-		// // Keep track of changes
-		// /**
-		//  * Tracks choice/enumeration text changes and updates target dropdown state when relevant.
-		//  * @param {string} val
-		//  * @returns {void}
-		//  */
-		// function trackEnumChange(val) {
-		// 	if (val !== designerState.enum) {
-		// 		const fieldType = getFieldType();
-		// 		if (['select', 'radio', 'checkbox'].includes(fieldType)) {
-		// 			setEnum(val);
-		// 		}
-		// 	}
-		// }
-		// // Track changes of the field type and set enum
-		// designerState.$dlg.find('select[name="field_type"], select#field_type_matrix, select#field_type').on('change', () => {
-		// 	designerState.fieldType = getFieldType();
-		// 	log('Field type changed:', designerState.fieldType);
-		// 	if (designerState.fieldType == 'yesno' || designerState.fieldType == 'truefalse') {
-		// 		const val = $('#div_element_' + designerState.fieldType + '_enum div').last().html().trim().replace('<br>', '\n');
-		// 		setEnum(val);
-		// 	}
-		// 	else if (['select', 'radio', 'checkbox'].includes(designerState.fieldType)) {
-		// 		trackEnumChange(String($enum.val()));
-		// 	}
-		// 	else {
-		// 		setEnum('');
-		// 	}
-		// }).trigger('change');
-		// // Init and track "Do not annotate this field/matrix"
-		// $ui.find('.rome-em-fieldedit-exclude').each(function () {
-		// 	const $this = $(this);
-		// 	const id = 'rome-em-fieldedit-exclude-' + (designerState.isMatrix ? 'matrix' : 'field');
-		// 	if ($this.is('input')) {
-		// 		$this.attr('id', id);
-		// 		$this.on('change', function () {
-		// 			const checked = $(this).prop('checked');
-		// 			if (!designerState.isMatrix) {
-		// 				// Store exclusion
-		// 				designerState.$dlg.find('[name="rome-em-fieldedit-exclude"]').val(checked ? 1 : 0);
-		// 			}
-		// 			log('Do not annotate is ' + (checked ? 'checked' : 'not checked'));
-		// 			if (checked) performExclusionCheck();
-		// 		});
-		// 	}
-		// 	else if ($this.is('label')) {
-		// 		$this.attr('for', id);
-		// 	}
-		// });
-
-		// //#endregion
-
 	}
 
-	function addMatrixRowIds() {
-		odState.$dlg.find('input.field_name_matrix').each(function() {
-			const $tr = $(this).closest('tr');
-			ensureMatrixRowId($tr);
-		});
-	}
 
 	function initDatatable() {
 		const $table = odState.$dlg.find('#rome-annotation-table');
@@ -609,11 +503,10 @@
 						const $el = $(info.el);
 						if ($el.is('.field_name_matrix')) {
 							// Field name changed
-							log('Field name changed');
+							buildTargetOptions();
 						}
 						else if ($el.is('.field_annotation_matrix, #field_annotation')) {
 							// Annotations changed
-							log('Annotation changed');
 							initAnnotationState();
 							refreshAnnotationRows();
 						}
@@ -631,7 +524,6 @@
 					}
 					else if (info.kind === 'rows') {
 						// Rows added or removed
-						addMatrixRowIds();
 						refreshAnnotationRows();
 					}
 				},
@@ -665,28 +557,6 @@
 		return contentMap;
 	}
 
-	/**
-	 * Parses ontology annotations from the field annotation
-	 * @param {string} annotationText 
-	 * @returns {OntologyAnnotationJSON}
-	 */
-	function parseOntologiesFromActionTag(annotationText) {
-
-		// TODO - reuse existing; hardcode something for now
-		const annotations =
-		{
-			dataElement: {
-				coding: [
-					{
-						system: 'Test System',
-						code: 'TEST',
-						display: 'Just for testing'
-					}
-				]
-			}
-		}
-		return annotations;
-	}
 
 	//#endregion
 
@@ -772,11 +642,12 @@
 	 * @returns {void}
 	 */
 	function initAnnotationState() {
+		odState.parseResults = {};
 		if (odState.editType === 'matrix') {
-			initializeAnnotationStateFromMatrix();
+			initAnnotationStateFromMatrix();
 		}
 		else {
-			initializeAnnotationStateFromSingleField();
+			initAnnotationStateFromSingleField();
 		}
 	}
 
@@ -784,59 +655,76 @@
 	 * Initializes annotation draft state from the field annotation 
 	 * @returns {void}
 	 */
-	function initializeAnnotationStateFromSingleField() {
+	function initAnnotationStateFromSingleField() {
 		const result = getOntologyAnnotation();
 		if (result.error) {
 			odState.parseResults = {};
 			setJsonIssueOverlay(result.errorMessage);
 		}
 		else {
-			odState.parseResults[result.fieldName] = result;
+			odState.parseResults[result.rowId] = result;
 			setJsonIssueOverlay(false);
 		}
 		refreshAnnotationRows();
-	}
-
-	function refreshAnnotationRows() {
-		const fieldNames = Object.keys(odState.parseResults);
-		if (fieldNames.length === 0) {
-			odState.rows = [];
-		}
-		else {
-
-
-		}
-
-
-		log('Refreshed annotation rows', odState.rows);
-
 	}
 
 	/**
 	 * Initializes matrix draft state by reading each matrix row annotation textarea.
 	 * @returns {void}
 	 */
-	function initializeAnnotationStateFromMatrix() {
-		matrixDraftState.rows = {};
-		matrixDraftState.rowOrder = [];
+	function initAnnotationStateFromMatrix() {
 		getMatrixRows().forEach(($row) => {
 			const rowId = ensureMatrixRowId($row);
-			const varName = getMatrixRowVarName($row);
-			const parse = parseRowAnnotation($row);
-			matrixDraftState.rows[rowId] = {
-				rowId,
-				varName,
-				parseStatus: parse.error ? 'invalid' : 'valid',
-				parseErrorMessage: parse.error ? parse.errorMessage : '',
-				base: normalizeAnnotation(cloneAnnotation(parse.json)),
-				current: normalizeAnnotation(cloneAnnotation(parse.json)),
-				dirty: false
-			};
-			matrixDraftState.rowOrder.push(rowId);
+			const fieldName = `${$row.find('.field_name_matrix:first').val() ?? ''}`.trim();
+			const result = getOntologyAnnotation(rowId);
+			odState.parseResults[rowId] = result;
 		});
-		refreshJsonOverlayFromMatrixState();
-		log('Initialized matrix draft state:', matrixDraftState);
+		for (const rowId in odState.parseResults) {
+			const result = odState.parseResults[rowId];
+			if (result.error) {
+				odState.parseResults = {};
+				setJsonIssueOverlay(result.errorMessage);
+				break;
+			}
+		}
+		refreshAnnotationRows();
 	}
+
+
+	function refreshAnnotationRows() {
+		const fieldNames = Object.keys(odState.parseResults);
+		/** @type {ROME_AnnotationRow[]} */
+		const rows = [];
+		for (const fieldName of fieldNames) {
+			const annotations = normalizeAnnotation(
+				odState.parseResults[fieldName].json
+			).dataElement;
+			for (const coding of annotations?.coding ?? []) {
+				rows.push({
+					targetType: 'field',
+					targetName: fieldName,
+					annotation: coding,
+				});
+			}
+			for (const coding of annotations.unit?.coding ?? []) {
+				rows.push({
+					targetType: 'unit',
+					targetName: null,
+					annotation: coding,
+				});
+			}
+			for (const code in annotations?.valueCodingMap ?? {}) {
+				rows.push({
+					targetType: 'choice',
+					targetName: code,
+					annotation: annotations.valueCodingMap[code],
+				});
+			}
+		}
+		odState.rows = rows;
+		odState.dtInstance.clear().rows.add(rows).draw();
+	}
+
 
 
 
@@ -1738,14 +1626,14 @@
 		return {
 			/**
 			 * Parse the LAST valid tag JSON object from the given text.
-			 * @param {string} fieldName
+			 * @param {string} rowId
 			 * @param {string} text
 			 * @returns {OntologyAnnotationParseResult}
 			 */
-			parse(fieldName, text) {
+			parse(rowId, text) {
 				/** @type {OntologyAnnotationParseResult} */
 				const result = {
-					fieldName: fieldName,
+					rowId: rowId,
 					// IMPORTANT: Do NOT run schema validation on the minimal annotation
 					json: getMinAnnotation(),
 					usedFallback: true,
@@ -2019,20 +1907,13 @@
 
 	/**
 	 * Gets the contents of an element and extracts the ontology JSON.
-	 * @param {string} [fieldName] - When editing matrix groups, the field name to get the annotations from.
+	 * @param {string} [rowId] - When editing matrix groups, the row id to get the annotations from.
 	 * @returns {OntologyAnnotationParseResult}
 	 */
-	function getOntologyAnnotation(fieldName = '') {
+	function getOntologyAnnotation(rowId = '') {
 		let $el;
-		if (designerState.isMatrix) {
-			if (fieldName) {
-				$el = designerState.$dlg.find(`input[name="addFieldMatrixRow-varname_${fieldName}"]`)
-					.closest('.addFieldMatrixRow')
-					.find('textarea[name="addFieldMatrixRow-annotation"]')
-					.first();
-			} else {
-				$el = designerState.$dlg.find('textarea[name="addFieldMatrixRow-annotation"]').first();
-			}
+		if (odState.editType === 'matrix') {
+			$el = odState.$dlg.find(`tr[data-rome-row-id="${rowId}"] .field_annotation_matrix`);
 		} else {
 			$el = $('#field_annotation');
 		}
@@ -2042,7 +1923,7 @@
 		} else {
 			content = $el.text();
 		}
-		const result = ontologyParser.parse(fieldName, content);
+		const result = ontologyParser.parse(rowId, content);
 		log('Parsed annotation text:', result);
 		return result;
 	}
@@ -2120,7 +2001,11 @@
 	function updateAnnotationTargetsDropdown() {
 		const $target = odState.$dlg.find('#rome-field-choice');
 		const previous = `${$target.val() ?? ''}`;
-		$target.html(odState.targetOptions.map(opt => `<option value="${escapeHTML(opt.value)}">${escapeHTML(opt.display)}</option>`).join(''));
+		$target.html(odState.targetOptions.map(opt => {
+			const val = escapeHTML(`${opt.targetType}:${opt.rowId}`);
+			const label = escapeHTML(opt.display);
+			return `<option value="${val}">${label}</option>`;
+		}).join(''));
 		if (odState.targetOptions.some(opt => opt.value === previous)) {
 			$target.val(previous);
 		}
@@ -2157,8 +2042,7 @@
 			odState.$dlg.find('input.field_name_matrix').each(function() {
 				const fieldName = ($(this).val() ?? '').toString().trim();
 				if (fieldName === '') return;
-				const rowId = $(this).closest('tr').attr('data-rome-row-id');
-				if (rowId === undefined) return;
+				const rowId = ensureMatrixRowId($(this).closest('tr'));
 				options.push({
 					rowId: rowId,
 					value: `field:${fieldName}`,
@@ -2197,6 +2081,8 @@
 		}
 		odState.targetOptions = options;
 		odState.choiceLabelMap = choiceLabelMap;
+		log('Build target options:', options, choiceLabelMap)
+		updateAnnotationTargetsDropdown();
 	}
 
 
@@ -2214,7 +2100,7 @@
 				enumText = config.fixedEnums.yesno;
 			}
 			else {
-				enumText = String($('#field_enum').val() ?? '');
+				enumText = String($('#element_enum').val() ?? '');
 			}
 		}
 		else {
@@ -2229,17 +2115,6 @@
 			out.push({ code, label: `${labelRaw || code}`.trim() || code });
 		}
 		return out;
-	}
-
-	/**
-	 * Builds a map from choice code to choice label for the current enum.
-	 */
-	function buildChoiceLabelMap() {
-		const map = {};
-		for (const choice of getChoiceOptions()) {
-			map[choice.code] = choice.label;
-		}
-		return map;
 	}
 
 	/**
@@ -2487,7 +2362,7 @@
 	 * @returns {void}
 	 */
 	function updateAnnotationTable() {
-		if (isExcludedCheckboxChecked_OBSOLETE()) return;
+		if (isExcludedCheckboxChecked()) return;
 		updateAnnotationTargetsDropdown();
 		const rows = buildAnnotationTableEntries();
 		const $wrapper = designerState.$dlg.find('.rome-edit-field-ui-list');
@@ -2877,7 +2752,6 @@
 	 */
 	function refreshAddButtonState() {
 		const hasSelection = odState.selected !== null;
-		log(hasSelection ? 'Enabling Add button' : 'Disabling Add button');
 		odState.$add.prop('disabled', !hasSelection);
 		odState.$info.css('display', hasSelection ? 'inline-block' : 'none');
 		if (hasSelection) {
@@ -3348,6 +3222,7 @@
 		searchState.lastTerm = '';
 		searchState.lastTermCompleted = false;
 		searchState.debounceTimer = null;
+		setSelectedAnnotation(null);
 	}
 
 

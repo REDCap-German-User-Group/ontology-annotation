@@ -34,7 +34,7 @@
  * @property {string=} searchEndpoint
  * @property {string=} pollEndpoint
  * @property {Number=} minSearchLength
- * @property {Object<?string,string>} fixedEnums
+ * @property {Object<?string,string>=} fixedEnums
  */
 
 /**
@@ -223,7 +223,7 @@
 
 /**
  * @typedef {Object} OntologyAnnotationParseResult
- * @property {string} fieldName
+ * @property {string} rowId
  * @property {OntologyAnnotationJSON} json
  * @property {number} numTags
  * @property {boolean} usedFallback
@@ -377,7 +377,7 @@
  *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer.
  * @property {SelectedAnnotationHit=} selected
  *   Current search selection used by the Add button flow.
- * @property {any} dtInstance DataTables instance (TODO - type this properly)
+ * @property {Object} dtInstance DataTables instance (TODO - type this properly)
  * @property {boolean} dtAdvancedUiEnabled
  * @property {JQuery<HTMLElement>=} $dlg
  *   The field or matrix edit dialog

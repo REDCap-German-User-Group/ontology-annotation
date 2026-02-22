@@ -68,7 +68,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if ($page == 'Design/edit_field.php') {
 			$this->initProject($project_id);
 			$field_name = $_POST['field_name'];
-			$exclude = ($_POST['rome-em-fieldedit-exclude'] ?? '0') == '1';
+			$exclude = ($_POST['rome-em-exclude'] ?? '0') == '1';
 			$this->set_field_exclusion([$field_name], $exclude);
 		}
 	}
@@ -404,15 +404,18 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				<div class="rome-edit-field-ui-container">
 					<div class="rome-edit-field-ui-header">
 						<h1><?= $this->tt('fieldedit_01') ?></h1>
-						<input type="checkbox" class="form-check-input ms-3 rome-em-fieldedit-exclude">
-						<label class="form-check-label ms-1 rome-em-fieldedit-exclude">
-							<span class="rome-em-fieldedit-exclude-field">
+						<div class="rome-em-exclude-field">
+							<label class="form-check-label ms-1 rome-em-field-exclude">
+								<input type="checkbox" class="form-check-input ms-3 rome-em-exclude">
 								<?= $this->tt('fieldedit_11') ?>
-							</span>
-							<span class="rome-em-fieldedit-exclude-matrix">
+							</label>
+						</div>
+						<div class="rome-em-exclude-matrix">
+							<label  class="form-check-label ms-1 rome-em-matrix-exclude">
+								<input type="checkbox" class="form-check-input ms-3 rome-em-exclude">
 								<?= $this->tt('fieldedit_12') ?>
-							</span>
-						</label>
+							</label>
+						</div>
 					</div>
 					<div class="rome-edit-field-ui-body">
 						<div class="rome-edit-field-ui-content-wrapper">
