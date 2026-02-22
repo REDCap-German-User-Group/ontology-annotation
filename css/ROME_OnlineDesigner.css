@@ -276,3 +276,10 @@
     margin-top: 4px;
 }
 
+.rome-edit-field-ui-list {
+	margin-top: 10px;
+}
+
+.rome-edit-field-ui-list .dataTables_empty {
+	font-style: italic;
+}

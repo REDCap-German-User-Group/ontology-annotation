@@ -39,7 +39,7 @@
 	// @ts-ignore
 	const EM = window[NS_PREFIX + EM_NAME] ?? {
 		init: initialize,
-		showFieldHelp: showFieldHelp
+		showFieldHelp: showHelp
 	};
 	// @ts-ignore
 	window[NS_PREFIX + EM_NAME] = EM;
@@ -57,18 +57,17 @@
 
 	/** @type {OnlineDesignerState} */ // OBSOLETE
 	const designerState = {
-		minItemsForSelect2: 7
 	};
 
 	/** @type {OntologyAnnotationParser} */
 	let ontologyParser;
 
 	/**
-	 * OBSOLETE
 	 * Mutable in-dialog annotation draft state for single-field editing.
-	 * @type {AnnotationDraftState}
+	 * @type {AnnotationState}
 	 */
-	const annotationDraftState = {
+	const annotationState = {
+
 		base: null,
 		current: null,
 		lastParseResult: null,
@@ -205,18 +204,18 @@
 	/**
 	 * Shows a help dialog in response to the "Learn about using Ontology Annotations"
 	 */
-	function showFieldHelp() {
-		if (!designerState.fieldHelpContent) {
+	function showHelp() {
+		if (!odState.helpContent) {
 			JSMO.ajax('get-fieldhelp').then(response => {
-				designerState.fieldHelpContent = response;
-				showFieldHelp();
+				odState.helpContent = response;
+				showHelp();
 			}).catch(err => {
 				error(err);
 			});
 		}
 		else {
-			log('Showing field help');
-			simpleDialog(designerState.fieldHelpContent, config.moduleDisplayName);
+			log('Showing help dialog');
+			simpleDialog(odState.helpContent, config.moduleDisplayName);
 		}
 	}
 
@@ -233,16 +232,15 @@
 		if (odState.$dlg.find('.rome-edit-field-ui-container').length == 0) {
 			log('Initializing UI ...', odState);
 			initializeAnnotationEditor();
-			initUserChangeWatcher();
 			log('UI initialized.', odState);
 		}
 		setInitialExcludedCheckboxState();
 		resetSearchState();
+		initializeAnnotationState();
 
 
 		// TODO - Check
 
-		// initializeAnnotationDraftState();
 		// setSelectedAnnotation(null);
 		// updateAnnotationTable();
 
@@ -297,6 +295,107 @@
 		const editorHtml = $('#rome-em-fieldedit-ui-template').html().replaceAll('\n', '');
 		const $editor = $(editorHtml);
 		odState.$editor = $editor;
+		odState.$add = $editor.find('#rome-add-button');
+		odState.$info = $editor.find('#rome-add-selection-info');
+		odState.$error = $editor.find('#rome-search-error');
+		odState.$search = $editor.find('input[name=rome-em-fieldedit-search]');
+		odState.$searchSpinner = $editor.find('.rome-edit-field-ui-spinner');
+
+		if (odState.editType == 'matrix') {
+			// Matrix-specific adjustments - none needed
+			// Insert at end of the dialog
+			odState.$dlg.append($editor);
+		}
+		else {
+			// Single-field-specific adjustments
+			// Mirror visibility of the Action Tags / Field Annotation DIV
+			// TODO - extract the mutation observer setup into a hook and call 
+			// helper hide/show functions
+			const actiontagsDIV = document.getElementById('div_field_annotation')
+				?? document.createElement('div');
+			const observer = new MutationObserver(() => {
+				const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
+				$editor.css('display', actiontagsVisible ? 'block' : 'none');
+			});
+			observer.observe(actiontagsDIV, { attributes: true, attributeFilter: ['style'] });
+			// Initial sync
+			const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
+			$editor.css('display', actiontagsVisible ? 'block' : 'none');
+			// Add a hidden field to transfer exclusion
+			odState.$dlg.find('#addFieldForm').prepend(
+				'<input type="hidden" name="rome-em-fieldedit-exclude" value="0">'
+			);
+
+			// Initial sync from the action tag
+			// updateAnnotationTable(); // TODO - Check
+
+			// Insert the UI as a new table row
+			const $tr = $('<tr><td colspan="2"></td></tr>');
+			$tr.find('td').append($editor);
+			odState.$dlg.find('#quesTextDiv > table > tbody').append($tr);
+		}
+
+		initializeSearchInput();
+		initializeAddButton();
+		initUserChangeWatcher();
+
+
+		const $table = odState.$dlg.find('#rome-annotation-table');
+		odState.dtInstance = $table.DataTable({
+			data: odState.rows,
+			columns: [
+				{
+					data: null,
+					render: (_data, _type, row) => renderSystemColumn(row)
+				},
+				{
+					data: null,
+					render: (_data, _type, row) => renderCodeColumn(row)
+				},
+				{
+					data: null,
+					render: (_data, _type, row) => renderDisplayColumn(row)
+				},
+				{
+					data: null,
+					render: (_data, type, row) => {
+						if (type === 'sort' || type === 'type') {
+							return getTargetSortKey(row);
+						}
+						return renderTargetColumn(row);
+					}
+				},
+				{
+					data: null,
+					orderable: false,
+					searchable: false,
+					render: (_data, _type, row) => renderActionColumn(row)
+				}
+			],
+			language: {
+				emptyTable: JSMO.tt('fieldedit_07')
+			},
+			paging: odState.dtAdvancedUiEnabled,
+			searching: odState.dtAdvancedUiEnabled,
+			info: odState.dtAdvancedUiEnabled,
+			lengthChange: false,
+			pageLength: 10,
+			order: [[3, 'asc']],
+			createdRow: (rowEl, rowData) => {
+				$(rowEl).data('rome-entry', rowData);
+			}
+		});
+
+
+		
+		// TODO - Check
+
+		// setupManualAnnotationHooks();
+		// setupSaveValidationHooks();
+		// ensureMatrixSaveHook();
+		// if (designerState.isMatrix) {
+		// 	setupMatrixLifecycleHandlers();
+		// }
 
 		// //#region Setup event handlers
 
@@ -373,64 +472,6 @@
 
 		// //#endregion
 
-
-
-
-
-
-
-
-
-
-
-
-
-		if (odState.editType == 'matrix') {
-			// Matrix-specific adjustments - none needed
-			// Insert at end of the dialog
-			odState.$dlg.append($editor);
-		}
-		else {
-			// Single-field-specific adjustments
-			// Mirror visibility of the Action Tags / Field Annotation DIV
-			// TODO - extract the mutation observer setup into a hook and call 
-			// helper hide/show functions
-			const actiontagsDIV = document.getElementById('div_field_annotation')
-				?? document.createElement('div');
-			const observer = new MutationObserver(() => {
-				const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-				$editor.css('display', actiontagsVisible ? 'block' : 'none');
-			});
-			observer.observe(actiontagsDIV, { attributes: true, attributeFilter: ['style'] });
-			// Initial sync
-			const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-			$editor.css('display', actiontagsVisible ? 'block' : 'none');
-			// ------
-
-
-			// Add a hidden field to transfer exclusion
-			odState.$dlg.find('#addFieldForm').prepend(
-				'<input type="hidden" name="rome-em-fieldedit-exclude" value="0">'
-			);
-
-			// Initial sync from the action tag
-			// updateAnnotationTable(); // TODO - Check
-
-			// Insert the UI as a new table row
-			const $tr = $('<tr><td colspan="2"></td></tr>');
-			$tr.find('td').append($editor);
-			odState.$dlg.find('#quesTextDiv > table > tbody').append($tr);
-		}
-
-		// TODO - Check
-		initializeSearchInput();
-		// initializeAddButton();
-		// setupManualAnnotationHooks();
-		// setupSaveValidationHooks();
-		// ensureMatrixSaveHook();
-		// if (designerState.isMatrix) {
-		// 	setupMatrixLifecycleHandlers();
-		// }
 	}
 
 
@@ -483,6 +524,7 @@
 	/** @type {ROME_OnlineDesignerState} */
 	const odState = {
 		editType: 'matrix', // TODO - set this based on the dialog type
+		parseResults: {},
 		rows: [],
 		fieldWatcher: null,
 		matrixWatcher: null,
@@ -492,6 +534,13 @@
 		selected: null,
 		$dlg: null,
 		$editor: null,
+		$add: null,
+		$error: null,
+		$info: null,
+		$search: null,
+		$searchSpinner: null,
+		helpContent: null,
+		minItemsForSelect2: 7,
 	}
 
 
@@ -540,7 +589,7 @@
 				tableCellFilter: filters,
 				fireOnInput: false,
 				patchProgrammatic: true
-			}).pause();
+			});
 		}
 	}
 
@@ -673,29 +722,51 @@
 	 * Initializes annotation draft state from currently rendered REDCap annotation input(s).
 	 * @returns {void}
 	 */
-	function initializeAnnotationDraftState() {
-		if (designerState.isMatrix) {
-			initializeMatrixDraftState();
-			return;
+	function initializeAnnotationState() {
+		if (odState.editType === 'matrix') {
+			initializeAnnotationStateFromMatrix();
 		}
+		else {
+			initializeAnnotationStateFromSingleField();
+		}
+	}
+
+	/**
+	 * Initializes annotation draft state from the field annotation 
+	 * @returns {void}
+	 */
+	function initializeAnnotationStateFromSingleField() {
 		const result = getOntologyAnnotation();
-		annotationDraftState.lastParseResult = result;
-		annotationDraftState.base = normalizeAnnotation(cloneAnnotation(result.json));
-		annotationDraftState.current = normalizeAnnotation(cloneAnnotation(result.json));
-		annotationDraftState.dirty = false;
-		annotationDraftState.parseStatus = result.error ? 'invalid' : 'valid';
-		annotationDraftState.parseErrorMessage = result.error ? result.errorMessage : '';
-		annotationDraftState.manualMode = false;
-		annotationDraftState.lastSyncedTextarea = `${designerState.$dlg.find('#field_annotation').val() ?? ''}`;
-		setJsonIssueOverlay(result.error ? result.errorMessage : false);
-		log('Initialized single-field draft state:', annotationDraftState);
+		if (result.error) {
+			odState.parseResults = {};
+			setJsonIssueOverlay(result.errorMessage);
+		}
+		else {
+			odState.parseResults[result.fieldName] = result;
+			setJsonIssueOverlay(false);
+		}
+		refreshAnnotationRows();
+	}
+
+	function refreshAnnotationRows() {
+		const fieldNames = Object.keys(odState.parseResults);
+		if (fieldNames.length === 0) {
+			odState.rows = [];
+		}
+		else {
+
+		}
+
+
+
+
 	}
 
 	/**
 	 * Initializes matrix draft state by reading each matrix row annotation textarea.
 	 * @returns {void}
 	 */
-	function initializeMatrixDraftState() {
+	function initializeAnnotationStateFromMatrix() {
 		matrixDraftState.rows = {};
 		matrixDraftState.rowOrder = [];
 		getMatrixRows().forEach(($row) => {
@@ -716,6 +787,8 @@
 		refreshJsonOverlayFromMatrixState();
 		log('Initialized matrix draft state:', matrixDraftState);
 	}
+
+
 
 	/**
 	 * Refreshes JSON error overlay for matrix mode based on invalid row parse states.
@@ -780,10 +853,10 @@
 	 * @returns {OntologyAnnotationJSON}
 	 */
 	function getSingleDraftAnnotation() {
-		if (!annotationDraftState.current) {
-			annotationDraftState.current = normalizeAnnotation(getMinimalOntologyAnnotation());
+		if (!annotationState.current) {
+			annotationState.current = normalizeAnnotation(getMinimalOntologyAnnotation());
 		}
-		return annotationDraftState.current;
+		return annotationState.current;
 	}
 
 	/**
@@ -868,7 +941,7 @@
 		const $area = designerState.$dlg.find('#field_annotation');
 		if ($area.length === 0) return;
 		const currentText = `${$area.val() ?? ''}`;
-		if (!force && !annotationDraftState.dirty && currentText === annotationDraftState.lastSyncedTextarea) return;
+		if (!force && !annotationState.dirty && currentText === annotationState.lastSyncedTextarea) return;
 		const annotation = normalizeAnnotation(getSingleDraftAnnotation());
 		const parse = ontologyParser.parse(currentText);
 		let next = currentText;
@@ -882,8 +955,8 @@
 			}
 		}
 		$area.val(next);
-		annotationDraftState.lastSyncedTextarea = next;
-		annotationDraftState.dirty = false;
+		annotationState.lastSyncedTextarea = next;
+		annotationState.dirty = false;
 	}
 
 	/**
@@ -920,20 +993,20 @@
 	function importSingleDraftFromTextarea() {
 		const parse = getOntologyAnnotation();
 		if (parse.error) {
-			annotationDraftState.parseStatus = 'invalid';
-			annotationDraftState.parseErrorMessage = parse.errorMessage;
+			annotationState.parseStatus = 'invalid';
+			annotationState.parseErrorMessage = parse.errorMessage;
 			setJsonIssueOverlay(parse.errorMessage);
 			return false;
 		}
-		annotationDraftState.parseStatus = 'valid';
-		annotationDraftState.parseErrorMessage = '';
-		annotationDraftState.lastParseResult = parse;
-		annotationDraftState.current = normalizeAnnotation(cloneAnnotation(parse.json));
-		annotationDraftState.base = normalizeAnnotation(cloneAnnotation(parse.json));
-		annotationDraftState.dirty = false;
-		annotationDraftState.lastSyncedTextarea = `${designerState.$dlg.find('#field_annotation').val() ?? ''}`;
+		annotationState.parseStatus = 'valid';
+		annotationState.parseErrorMessage = '';
+		annotationState.lastParseResult = parse;
+		annotationState.current = normalizeAnnotation(cloneAnnotation(parse.json));
+		annotationState.base = normalizeAnnotation(cloneAnnotation(parse.json));
+		annotationState.dirty = false;
+		annotationState.lastSyncedTextarea = `${designerState.$dlg.find('#field_annotation').val() ?? ''}`;
 		setJsonIssueOverlay(false);
-		log('Updated internal annotation state from manual textarea edit:', annotationDraftState);
+		log('Updated internal annotation state from manual textarea edit:', annotationState);
 		updateAnnotationTable();
 		return true;
 	}
@@ -1061,7 +1134,7 @@
 			const annotation = getSingleDraftAnnotation();
 			removed = pruneAnnotation(annotation);
 			if (removed > 0) {
-				annotationDraftState.dirty = true;
+				annotationState.dirty = true;
 				syncSingleDraftToTextarea(true);
 			}
 		}
@@ -1173,7 +1246,7 @@
 			const $area = designerState.$dlg.find('#field_annotation');
 			$area.off('.rome-manual');
 			$area.on('focus.rome-manual click.rome-manual', function () {
-				annotationDraftState.manualMode = true;
+				annotationState.manualMode = true;
 				syncSingleDraftToTextarea(true);
 				log('Entered manual annotation editing mode.');
 			});
@@ -1335,31 +1408,21 @@
 	 * @returns {void}
 	 */
 	function initializeAddButton() {
-		const $button = getAddButton();
-		const $indicator = getInfoIcon();
-		$button.off('click.rome-add').on('click.rome-add', function () {
+		odState.$add
+		.off('click.rome-add')
+		.on('click.rome-add', function () {
 			addSelectedAnnotationToDraft();
 		});
-		if ($indicator.length > 0) {
-			if (typeof $indicator.popover === 'function') {
-				log('Initializing Bootstrap popover for add-selection indicator.');
-				$indicator.popover({
-					trigger: 'click hover focus',
-					html: true,
-					sanitize: false,
-					container: designerState.$dlg.get(0),
-					content: 'No annotation selected.'
-				});
-			}
-			$indicator.off('click.rome-indicator-fallback').on('click.rome-indicator-fallback', function () {
-				const selected = selectionState.selected;
-				if (!selected) return;
-				if (typeof $indicator.popover !== 'function') {
-					log('Bootstrap popover unavailable, showing fallback dialog for selected annotation.');
-					simpleDialog(getSelectedAnnotationPopoverHtml(selected), 'Selected annotation');
-				}
-			});
-		}
+		odState.$info.popover({
+			trigger: 'click hover focus',
+			customClass: 'rome-annotation-popover',
+			html: true,
+			sanitize: false,
+			container: odState.$dlg.get(0),
+			content: () => getSelectedAnnotationPopoverHtml(),
+			title: 'Annotation to be added',
+			placement: 'top'
+		});
 		refreshAddButtonState();
 	}
 
@@ -1379,7 +1442,7 @@
 		addCodingToTarget(target, coding);
 		setSelectedAnnotation(null);
 		updateAnnotationTable();
-		log('Add completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationDraftState);
+		log('Add completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationState);
 	}
 
 	/**
@@ -1461,8 +1524,8 @@
 		const parts = target.split(':');
 		const targetType = parts[0];
 		addCodingToAnnotation(annotation, targetType, parts.slice(1).join(':'), coding);
-		annotationDraftState.dirty = true;
-		log('Updated single-field draft after add:', annotationDraftState.current);
+		annotationState.dirty = true;
+		log('Updated single-field draft after add:', annotationState.current);
 		// Keep action-tags textarea synchronized with UI edits.
 		syncSingleDraftToTextarea(true);
 	}
@@ -1532,7 +1595,7 @@
 			const annotation = getSingleDraftAnnotation();
 			if (!annotation) return;
 			removeCodingFromAnnotation(annotation, row.kind, row.choiceCode, coding.system, coding.code);
-			annotationDraftState.dirty = true;
+			annotationState.dirty = true;
 			syncSingleDraftToTextarea(true);
 		}
 	}
@@ -1546,7 +1609,7 @@
 		log('Delete requested for table row:', row);
 		removeAnnotationEntryFromDraft(row);
 		updateAnnotationTable();
-		log('Delete completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationDraftState);
+		log('Delete completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationState);
 	}
 
 	/**
@@ -1566,7 +1629,7 @@
 			display: coding.display
 		});
 		updateAnnotationTable();
-		log('Reassign completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationDraftState);
+		log('Reassign completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationState);
 	}
 
 	/**
@@ -1625,12 +1688,14 @@
 		return {
 			/**
 			 * Parse the LAST valid tag JSON object from the given text.
+			 * @param {string} fieldName
 			 * @param {string} text
 			 * @returns {OntologyAnnotationParseResult}
 			 */
-			parse(text) {
+			parse(fieldName, text) {
 				/** @type {OntologyAnnotationParseResult} */
 				const result = {
+					fieldName: fieldName,
 					// IMPORTANT: Do NOT run schema validation on the minimal annotation
 					json: getMinAnnotation(),
 					usedFallback: true,
@@ -1640,7 +1705,8 @@
 					warnings: [],
 					text: '',
 					start: -1,
-					end: -1
+					end: -1,
+					originalText: text,
 				};
 
 				if (typeof text !== 'string' || text.length === 0) return result;
@@ -1903,14 +1969,14 @@
 
 	/**
 	 * Gets the contents of an element and extracts the ontology JSON.
-	 * @param {string} [field] - When editing matrix groups, the field name to get the annotations from.
-	 * @returns {Object}
+	 * @param {string} [fieldName] - When editing matrix groups, the field name to get the annotations from.
+	 * @returns {OntologyAnnotationParseResult}
 	 */
-	function getOntologyAnnotation(field = '') {
+	function getOntologyAnnotation(fieldName = '') {
 		let $el;
 		if (designerState.isMatrix) {
-			if (field) {
-				$el = designerState.$dlg.find(`input[name="addFieldMatrixRow-varname_${field}"]`)
+			if (fieldName) {
+				$el = designerState.$dlg.find(`input[name="addFieldMatrixRow-varname_${fieldName}"]`)
 					.closest('.addFieldMatrixRow')
 					.find('textarea[name="addFieldMatrixRow-annotation"]')
 					.first();
@@ -1926,7 +1992,7 @@
 		} else {
 			content = $el.text();
 		}
-		const result = ontologyParser.parse(content);
+		const result = ontologyParser.parse(fieldName, content);
 		log('Parsed annotation text:', result);
 		return result;
 	}
@@ -2274,7 +2340,7 @@
 	 * @param {Object<string?,string>} choiceLabelMap
 	 * @returns {string}
 	 */
-	function renderTargetColumn(row, targets, currentChoiceCodes, choiceLabelMap) {
+	function renderTargetColumn(row, targets = [], currentChoiceCodes = new Set(), choiceLabelMap =  {}) {
 		const targetValue = row.kind === 'field'
 			? (designerState.isMatrix ? `field:${row.fieldName}` : 'field')
 			: (row.kind === 'unit' ? 'unit' : `choice:${row.choiceCode}`);
@@ -2300,7 +2366,7 @@
 	 * @param {boolean} showUnitWarning
 	 * @returns {string}
 	 */
-	function renderActionColumn(row, showUnitWarning) {
+	function renderActionColumn(row, showUnitWarning = false) {
 		const warningIcon = (showUnitWarning && row.kind === 'unit')
 			? '<span class="rome-target-warning text-warning rome-unit-row-warning ms-2" title="Unit targets are unusual for this field type."><i class="fa-solid fa-triangle-exclamation"></i></span>'
 			: '';
@@ -2480,7 +2546,7 @@
 	function applySelect2ToTargetSelects($selects) {
 		if (!$selects || $selects.length === 0) return;
 		if (typeof $.fn.select2 !== 'function') return;
-		const threshold = Number.parseInt(`${designerState.minItemsForSelect2 ?? 7}`, 10);
+		const threshold = Number.parseInt(`${odState.minItemsForSelect2 ?? 7}`, 10);
 		const minItems = Number.isFinite(threshold) && threshold > 0 ? threshold : 7;
 		const effectiveCount = getTargetOptionCountForThreshold();
 		const showSearch = effectiveCount > minItems;
@@ -2519,16 +2585,16 @@
 	 */
 	function showSearchErrorBadge(errorMessage) {
 		if (errorMessage) {
-			getSearchErrorIndicator()
-				.css('display', 'block')
-				.attr('data-bs-tooltip', 'hover')
-				.attr('title', errorMessage)
-				.tooltip('enable');
+			odState.$error
+			.css('display', 'block')
+			.attr('data-bs-tooltip', 'hover')
+			.attr('title', errorMessage)
+			.tooltip('enable');
 		}
 		else {
-			getSearchErrorIndicator()
-				.css('display', 'none')
-				.tooltip('disable');
+			odState.$error
+			.css('display', 'none')
+			.tooltip('disable');
 		}
 	}
 
@@ -2576,8 +2642,8 @@
 	 * @returns {void}
 	 */
 	function showSpinner(state) {
-		getSearchSpinner()[state ? 'addClass' : 'removeClass']('busy');
-		getSearchInput()[state ? 'addClass' : 'removeClass']('is-searching');
+		odState.$searchSpinner[state ? 'addClass' : 'removeClass']('busy');
+		odState.$search[state ? 'addClass' : 'removeClass']('is-searching');
 	}
 
 	/**
@@ -2585,64 +2651,22 @@
 	 * @param {boolean} state
 	 */
 	function showNoResultsState(state) {
-		getSearchInput()[state ? 'addClass' : 'removeClass']('is-no-results');
+		odState.$search[state ? 'addClass' : 'removeClass']('is-no-results');
 	}
 
-	/**
-	 * Gets the jQuery element for the search error indicator badge.
-	 * @returns {JQuery<HTMLElement>}
-	 */
-	function getSearchErrorIndicator() {
-		return odState.$editor.find('#rome-search-errors')
-	}
-
-	/**
-	 * Gets the jQuery element for the ontology lookup search input.
-	 * @returns {JQuery<HTMLElement>}
-	 */
-	function getSearchInput() {
-		return odState.$editor.find('input[name="rome-em-fieldedit-search"]');
-	}
-
-	/**
-	 * Gets the jQuery element for the ontology lookup add button.
-	 * @returns {JQuery<HTMLElement>}
-	 */
-	function getAddButton() {
-		return odState.$editor.find('#rome-add-button');
-	}
-
-	/**
-	 * Gets the jQuery element for the ontology lookup info icon.
-	 * @returns {JQuery<HTMLElement>}
-	 */
-	function getInfoIcon() {
-		return odState.$editor.find('#rome-add-selection-info');
-	}
-
-	/**
-	 * Gets the jQuery element for the ontology lookup search spinner.
-	 * @returns {JQuery<HTMLElement>}
-	 */
-	function getSearchSpinner() {
-		 return odState.$dlg.find('.rome-edit-field-ui-spinner');
-	}
 
 	/**
 	 * Initializes autocomplete search input for ontology lookup.
 	 */
 	function initializeSearchInput() {
-
-		const $search = getSearchInput();
-
 		// Init safely if this input already had an autocomplete instance.
-		if ($search.data('ui-autocomplete')) {
-			$search.autocomplete('destroy');
+		if (odState.$search.data('ui-autocomplete')) {
+			odState.$search.autocomplete('destroy');
 		}
-		$search.off('.ROME_autocomplete');
+		odState.$search.off('.ROME_autocomplete');
 
 		function raiseAutocompleteMenu() {
-			const ac = $search.data('ui-autocomplete');
+			const ac = odState.$search.data('ui-autocomplete');
 			const $menu = ac?.menu?.element;
 			if (!$menu || $menu.length === 0) return;
 
@@ -2654,7 +2678,7 @@
 			$menu.css('z-index', String(zIndex));
 		}
 
-		$search.autocomplete({
+		odState.$search.autocomplete({
 			minLength: config.minSearchLength ?? 2,
 			delay: 0, // we debounce manually
 			appendTo: 'body',
@@ -2727,7 +2751,7 @@
 					.appendTo(ul);
 			};
 
-		$search.on('autocompleteselect.ROME_autocomplete', function (e, ui) {
+		odState.$search.on('autocompleteselect.ROME_autocomplete', function (e, ui) {
 			if (searchState.debounceTimer) {
 				clearTimeout(searchState.debounceTimer);
 				searchState.debounceTimer = null;
@@ -2741,7 +2765,7 @@
 				type: h.type || null
 			});
 		});
-		$search.on('keydown keyup', function (event) {
+		odState.$search.on('keydown keyup', function (event) {
 			if (event.key === 'Enter') {
 				// Let jQuery UI autocomplete handle Enter, but block REDCap's parent dialog handlers.
 				event.stopPropagation();
@@ -2749,7 +2773,7 @@
 				return false;
 			}
 		});
-		$search.on('input.ROME_autocomplete', function () {
+		odState.$search.on('input.ROME_autocomplete', function () {
 			if (selectionState.selected) {
 				setSelectedAnnotation(null);
 			}
@@ -2776,50 +2800,27 @@
 	 * Refreshes Add button state and details popover based on current selection state.
 	 */
 	function refreshAddButtonState() {
-
-		const $button = getAddButton();
-		const $indicator = getInfoIcon();
 		const hasSelection = odState.selected !== null;
 		log(hasSelection ? 'Enabling Add button' : 'Disabling Add button');
-		$button.prop('disabled', !hasSelection);
-		$indicator.css('display', hasSelection ? 'inline-block' : 'none');
-		if ($indicator.length === 0 || !hasSelection) return;
-
-		const html = getSelectedAnnotationPopoverHtml(odState.selected);
-		const title = 'Annotation to be added';
-		$indicator.attr('data-bs-content', html).attr('data-content', html).attr('title', title);
-		if (typeof $indicator.popover === 'function') {
-			try {
-				$indicator.popover('dispose');
-			} catch (ignored) {
-				// ignore
-			}
-			$indicator.popover({
-				trigger: 'click hover focus',
-				customClass: 'rome-annotation-popover',
-				html: true,
-				sanitize: false,
-				container: odState.$dlg.get(0),
-				content: html,
-				title: title,
-				placement: 'top'
-			});
+		odState.$add.prop('disabled', !hasSelection);
+		odState.$info.css('display', hasSelection ? 'inline-block' : 'none');
+		if (hasSelection) {
+			// Set focus to the Add button
+			setTimeout(() => odState.$add.trigger('focus'), 0);
 		}
-		// Set focus to the Add button
-		setTimeout(() => $button.trigger('focus'), 0);
 	}
 
 	/**
 	 * Builds selection details HTML shown in the add-selection popover.
-	 * @param {SelectedAnnotationHit} annotation
 	 * @returns {string}
 	 */
-	function getSelectedAnnotationPopoverHtml(annotation) {
-		const source = (config.sources || []).find(s => s.id === annotation.sourceId);
-		const sourceLabel = source?.label || annotation.sourceId || 'Unknown source';
-		const system = annotation.system || '?';
-		const code = annotation.code || '?';
-		const display = annotation.display || '';
+	function getSelectedAnnotationPopoverHtml() {
+		if (!odState.selected) return 'No selection made.';
+		const source = (config.sources || []).find(s => s.id === odState.selected.sourceId);
+		const sourceLabel = source?.label || odState.selected.sourceId || 'Unknown source';
+		const system = odState.selected.system || '?';
+		const code = odState.selected.code || '?';
+		const display = odState.selected.display || '';
 		const linkPrefix = config.knownLinks?.[system] || '';
 		const linkHtml = linkPrefix
 			? `<a target="_blank" href="${escapeHTML(linkPrefix + code)}">Open in browser</a>`
@@ -2887,7 +2888,7 @@
 	function refreshDropdown(term) {
 		searchState.refreshing = true;
 		try {
-			getSearchInput().autocomplete('search', term);
+			odState.$search.autocomplete('search', term);
 		} finally {
 			searchState.refreshing = false;
 		}
@@ -3266,7 +3267,7 @@
 
 	function resetSearchState() {
 		stopSearch();
-		getSearchInput().val('');
+		odState.$search.val('');
 		searchState.term = '';
 		searchState.lastTerm = '';
 		searchState.lastTermCompleted = false;

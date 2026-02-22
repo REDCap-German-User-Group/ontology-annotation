@@ -33,7 +33,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Hooks
 
-	function redcap_module_link_check_display($project_id, $link) {
+	function redcap_module_link_check_display($project_id, $link)
+	{
 		// Allow for all users in all contexts
 		return $link;
 	}
@@ -367,6 +368,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 		// Add some language strings
 		$this->framework->tt_transferToJavascriptModuleObject([
+			'fieldedit_07',
 			'fieldedit_17',
 			'fieldedit_18',
 			'fieldedit_19',
@@ -419,15 +421,23 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 								<div id="rome-add-selection-info" class="rome-add-selection-info" title="No selection">
 									<i class="fa-solid fa-circle-info"></i>
 								</div>
-								<div id="rome-search-errors">
+								<div id="rome-search-error">
 									<i class="fa-solid fa-circle-exclamation fa-lg fa-fade"></i>
 								</div>
 							</div>
 							<div class="rome-edit-field-ui-list">
-								<h2><?= $this->tt('fieldedit_03') ?></h2>
-							</div>
-							<div class="rome-edit-field-ui-list-empty mt-2">
-								<?= $this->tt('fieldedit_07') ?>
+								<table id="rome-annotation-table" class="table table-sm table-striped align-middle">
+									<thead>
+										<tr>
+											<th>System</th>
+											<th>Code</th>
+											<th>Display</th>
+											<th>Target</th>
+											<th>Action</th>
+										</tr>
+									</thead>
+									<tbody></tbody>
+								</table>
 							</div>
 							<div class="rome-json-error-overlay" style="display:none;">
 								<div class="rome-json-error-overlay-content">
@@ -1561,8 +1571,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$indexCacheKey = null;
 				$itemCount = -1;
 				$meta = $src['meta'] ?? [];
-			}
-			else {
+			} else {
 				$docId = (int)$src['doc_id'];
 				$indexCacheKey = 'idx:' . $id . ':' . $docId;
 				$itemCount = (int)($src['item_count'] ?? 0);
@@ -1650,7 +1659,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $out;
 	}
 
-	function getConfiguredActiveRemoteSources(int $project_id): array 
+	function getConfiguredActiveRemoteSources(int $project_id): array
 	{
 		$out = [];
 		// TODO: get configured sources from project settings
@@ -1793,7 +1802,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		// One unified BioPortal call for misses
 		$pagesize = $limit_per_acronym * count($misses);
-		
+
 		$params = [
 			'q' => $q,
 			'ontologies' => implode(',', $misses),
@@ -2019,10 +2028,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return array_keys($set);
 	}
 
-	
+
 	#endregion
 
-	function getUserAgentString() 
+	function getUserAgentString()
 	{
 		return 'ROME-REDCap-EM (BioPortal search, experimental)';
 	}
@@ -2034,14 +2043,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * @param array $cronInfo 
 	 * @return string 
 	 */
-	function cron_prune($cronInfo) {
+	function cron_prune($cronInfo)
+	{
 		try {
 			$this->initConfig();
 			$cache = $this->getCache();
 			$cache->prune();
-		}
-		catch (Exception $e) {
-			$this->framework->log('Cache pruning failed: '.$e->getMessage());
+		} catch (Exception $e) {
+			$this->framework->log('Cache pruning failed: ' . $e->getMessage());
 			return "ROME: Pruning failed.";
 		}
 		return "ROME: Pruning completed successfully.";

@@ -69,7 +69,7 @@
  */
 
 /**
- * @typedef {Object} AnnotationDraftState
+ * @typedef {Object} AnnotationState
  * @property {OntologyAnnotationJSON|null} base
  * @property {OntologyAnnotationJSON|null} current
  * @property {OntologyAnnotationParseResult|null} lastParseResult
@@ -214,7 +214,7 @@
 
 /**
  * @typedef {Object} OntologyAnnotationParser
- * @property {(text: string) => OntologyAnnotationParseResult} parse
+ * @property {(fieldName: string, text: string) => OntologyAnnotationParseResult} parse
  *   Parse the LAST valid tag JSON object from the given text.
  */
 
@@ -222,12 +222,14 @@
 
 /**
  * @typedef {Object} OntologyAnnotationParseResult
+ * @property {string} fieldName
  * @property {OntologyAnnotationJSON} json
  * @property {number} numTags
  * @property {boolean} usedFallback
  * @property {boolean} error
  * @property {string} errorMessage
  * @property {OntologyAnnotationWarning[]} warnings
+ * @property {string} originalText
  * @property {string} text
  *   Exact substring of the LAST valid tag occurrence: from tag start to end of JSON object.
  *   Empty string if no valid tag was found.
@@ -358,6 +360,7 @@
  * @typedef {Object} ROME_OnlineDesignerState
  * @property {'field'|'matrix'} editType
  *   Tracks whether we're currently editing a field annotation or a matrix annotation
+ * @property {Object<string, OntologyAnnotationParseResult>} parseResults
  * @property {ROME_AnnotationRow[]} rows
  *   Keeps track of the current state of annotation rows
  * @property {boolean} enabled
@@ -378,6 +381,13 @@
  *   The field or matrix edit dialog
  * @property {JQuery<HTMLElement>=} $editor
  *   The ROME annotation editor surface
+ * @property {JQuery<HTMLElement>=} $add
+ * @property {JQuery<HTMLElement>=} $info
+ * @property {JQuery<HTMLElement>=} $error
+ * @property {JQuery<HTMLElement>=} $search
+ * @property {JQuery<HTMLElement>=} $searchSpinner
+ * @property {string=} helpContent
+ * @property {Number} minItemsForSelect2
  */
 
 /**
