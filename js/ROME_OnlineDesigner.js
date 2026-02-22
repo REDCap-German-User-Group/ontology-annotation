@@ -231,12 +231,18 @@
 	function activateAnnotationsEditor() {
 		if (odState.$dlg.find('.rome-edit-field-ui-container').length == 0) {
 			log('Initializing UI ...', odState);
-			initializeAnnotationEditor();
+			initAnnotationEditor();
 			log('UI initialized.', odState);
 		}
+		addMatrixRowIds();
 		setInitialExcludedCheckboxState();
 		resetSearchState();
-		initializeAnnotationState();
+
+		const targets = buildTargetOptions();
+		const choiceLabelMap = getChoiceLabelMap();
+
+
+		initAnnotationState();
 
 
 		// TODO - Check
@@ -291,7 +297,7 @@
 	/**
 	 * Inserts the ROME UI surface into the active REDCap dialog and wires handlers.
 	 */
-	function initializeAnnotationEditor() {
+	function initAnnotationEditor() {
 		const editorHtml = $('#rome-em-fieldedit-ui-template').html().replaceAll('\n', '');
 		const $editor = $(editorHtml);
 		odState.$editor = $editor;
@@ -302,7 +308,6 @@
 		odState.$searchSpinner = $editor.find('.rome-edit-field-ui-spinner');
 
 		if (odState.editType == 'matrix') {
-			// Matrix-specific adjustments - none needed
 			// Insert at end of the dialog
 			odState.$dlg.append($editor);
 		}
@@ -338,53 +343,8 @@
 		initializeSearchInput();
 		initializeAddButton();
 		initUserChangeWatcher();
+		initDatatable();
 
-
-		const $table = odState.$dlg.find('#rome-annotation-table');
-		odState.dtInstance = $table.DataTable({
-			data: odState.rows,
-			columns: [
-				{
-					data: null,
-					render: (_data, _type, row) => renderSystemColumn(row)
-				},
-				{
-					data: null,
-					render: (_data, _type, row) => renderCodeColumn(row)
-				},
-				{
-					data: null,
-					render: (_data, _type, row) => renderDisplayColumn(row)
-				},
-				{
-					data: null,
-					render: (_data, type, row) => {
-						if (type === 'sort' || type === 'type') {
-							return getTargetSortKey(row);
-						}
-						return renderTargetColumn(row);
-					}
-				},
-				{
-					data: null,
-					orderable: false,
-					searchable: false,
-					render: (_data, _type, row) => renderActionColumn(row)
-				}
-			],
-			language: {
-				emptyTable: JSMO.tt('fieldedit_07')
-			},
-			paging: odState.dtAdvancedUiEnabled,
-			searching: odState.dtAdvancedUiEnabled,
-			info: odState.dtAdvancedUiEnabled,
-			lengthChange: false,
-			pageLength: 10,
-			order: [[3, 'asc']],
-			createdRow: (rowEl, rowData) => {
-				$(rowEl).data('rome-entry', rowData);
-			}
-		});
 
 
 		
@@ -474,6 +434,61 @@
 
 	}
 
+	function addMatrixRowIds() {
+		odState.$dlg.find('input.field_name_matrix').each(function() {
+			const $tr = $(this).closest('tr');
+			ensureMatrixRowId($tr);
+		});
+	}
+
+	function initDatatable() {
+		const $table = odState.$dlg.find('#rome-annotation-table');
+		odState.dtInstance = $table.DataTable({
+			data: odState.rows,
+			columns: [
+				{
+					data: null,
+					render: (_data, _type, row) => renderSystemColumn(row)
+				},
+				{
+					data: null,
+					render: (_data, _type, row) => renderCodeColumn(row)
+				},
+				{
+					data: null,
+					render: (_data, _type, row) => renderDisplayColumn(row)
+				},
+				{
+					data: null,
+					render: (_data, type, row) => {
+						if (type === 'sort' || type === 'type') {
+							return getTargetSortKey(row);
+						}
+						return renderTargetColumn(row);
+					}
+				},
+				{
+					data: null,
+					orderable: false,
+					searchable: false,
+					render: (_data, _type, row) => renderActionColumn(row)
+				}
+			],
+			language: {
+				emptyTable: JSMO.tt('fieldedit_07')
+			},
+			paging: odState.dtAdvancedUiEnabled,
+			searching: odState.dtAdvancedUiEnabled,
+			info: odState.dtAdvancedUiEnabled,
+			lengthChange: false,
+			pageLength: 10,
+			order: [[3, 'asc']],
+			createdRow: (rowEl, rowData) => {
+				$(rowEl).data('rome-entry', rowData);
+			}
+		});
+	}
+
 
 	//#endregion
 
@@ -541,6 +556,7 @@
 		$searchSpinner: null,
 		helpContent: null,
 		minItemsForSelect2: 7,
+		targetOptions: [],
 	}
 
 
@@ -583,8 +599,25 @@
 			// @ts-ignore
 			odState[watcher] = WatchTargets.watch(elements, {
 				onEvent: (info) => {
-					// TODO - add some useful work and remove the logging
-					log('WatchDog:', info);
+					if (info.kind === 'edit') {
+						const $el = $(info.el);
+						if ($el.is('.field_name_matrix')) {
+							// Field name changed
+							log('Field name changed');
+						}
+						else if ($el.is('.field_annotation_matrix, #field_annotation')) {
+							// Annotations changed
+							log('Annotations changed');
+						}
+						else if ($el.is('#element_enum_matrix, #element_enum')) {
+							// Enum changed
+							log('Enum changed');
+						}
+					}
+					else if (info.kind === 'rows') {
+						// Rows added or removed
+						addMatrixRowIds();
+					}
 				},
 				tableCellFilter: filters,
 				fireOnInput: false,
@@ -722,7 +755,7 @@
 	 * Initializes annotation draft state from currently rendered REDCap annotation input(s).
 	 * @returns {void}
 	 */
-	function initializeAnnotationState() {
+	function initAnnotationState() {
 		if (odState.editType === 'matrix') {
 			initializeAnnotationStateFromMatrix();
 		}
@@ -754,6 +787,7 @@
 			odState.rows = [];
 		}
 		else {
+
 
 		}
 
@@ -2098,35 +2132,51 @@
 
 	/**
 	 * Builds add-target dropdown options for current dialog mode.
-	 * @returns {{value:string, label:string}[]}
 	 */
 	function buildTargetOptions() {
+		/** @type {ROME_TargetOption[]} */
 		const options = [];
-		if (designerState.isMatrix) {
-			const fields = matrixDraftState.rowOrder
-				.map(rowId => ({ rowId, row: matrixDraftState.rows[rowId] }))
-				.filter(x => !!x.row)
-				.sort((a, b) => {
-					const aLabel = `${a.row.varName || a.rowId}`.toLowerCase();
-					const bLabel = `${b.row.varName || b.rowId}`.toLowerCase();
-					return aLabel.localeCompare(bLabel);
+		if (odState.editType === 'matrix') {
+			// Fields
+			odState.$dlg.find('input.field_name_matrix').each(function() {
+				const fieldName = ($(this).val() ?? '').toString().trim();
+				if (fieldName === '') return;
+				const rowId = $(this).closest('tr').attr('data-rome-row-id');
+				if (rowId === undefined) return;
+				options.push({
+					rowId: rowId,
+					value: `field:${fieldName}`,
+					display: `Field: ${fieldName}`,
+					targetType: 'field'
 				});
-			for (const { rowId, row } of fields) {
-				const rowLabel = `${row.varName || rowId}`.trim();
-				options.push({ value: `field:${rowLabel}`, label: `Field - ${rowLabel}` });
-			}
-			options.push({ value: 'unit', label: 'Unit' });
+			});
+			// Unit
+			options.push({ rowId: '', value: 'unit', display: 'Unit', targetType: 'unit' });
+			// Choices
 			for (const choice of getChoiceOptions()) {
-				options.push({ value: `choice:${choice.code}`, label: `${choice.code}: ${choice.label}` });
+				options.push({
+					rowId: '',
+					value: `choice:${choice.code}`,
+					display: `[${choice.code}]: ${choice.label}`,
+					targetType: 'choice'
+				});
 			}
-			return options;
 		}
-		options.push({ value: 'field', label: 'Field' });
-		options.push({ value: 'unit', label: 'Unit' });
-		for (const choice of getChoiceOptions()) {
-			options.push({ value: `choice:${choice.code}`, label: `${choice.code}: ${choice.label}` });
+		else {
+			// Field
+			options.push({ rowId: '', value: 'field:', display: 'Field', targetType: 'field' });
+			// Unit
+			options.push({ rowId: '', value: 'unit', display: 'Unit', targetType: 'unit' });
+			for (const choice of getChoiceOptions()) {
+				options.push({ 
+					rowId: '',
+					value: `choice:${choice.code}`,
+					display: `[${choice.code}]: ${choice.label}`,
+					targetType: 'choice'
+				});
+			}
 		}
-		return options;
+		odState.targetOptions = options;
 	}
 
 	/**
@@ -2143,8 +2193,11 @@
 	 * @returns {{code:string, label:string}[]}
 	 */
 	function getChoiceOptions() {
+		const enumText = String(odState.editType === 'field'
+			? $('#field_enum').val() ?? ''
+			: $('#element_enum_matrix').val() ?? '');
 		const out = [];
-		for (const line of (designerState.enum || '').split('\n')) {
+		for (const line of enumText.split('\n')) {
 			if (!line.trim()) continue;
 			const [codeRaw, labelRaw] = line.split(',', 2);
 			const code = `${codeRaw || ''}`.trim();

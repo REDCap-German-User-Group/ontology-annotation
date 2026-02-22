@@ -388,6 +388,7 @@
  * @property {JQuery<HTMLElement>=} $searchSpinner
  * @property {string=} helpContent
  * @property {Number} minItemsForSelect2
+ * @property {ROME_TargetOption[]} targetOptions
  */
 
 /**
@@ -396,6 +397,14 @@
  * @property {string=} targetName
  * @property {'field'|'unit'|'choice'} targetType
  * 
+ */
+
+/**
+ * @typedef {Object} ROME_TargetOption
+ * @property {string} rowId
+ * @property {string} value
+ * @property {string} display
+ * @property {'field'|'unit'|'choice'} targetType
  */
 
 
