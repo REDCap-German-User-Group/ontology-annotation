@@ -2,7 +2,7 @@
   * @typedef {Object} WatchHandle
   * @property {() => void} unwatch
   * @property {() => void} pause
-  * @property {() => void} unpause
+  * @property {() => void} resume
   * @property {() => boolean} isPaused
   */
 
@@ -169,7 +169,7 @@ const WatchTargets = (() => {
 				const w = watchers.get(id);
 				if (w) w.paused = true;
 			},
-			unpause() {
+			resume() {
 				const w = watchers.get(id);
 				if (w) w.paused = false;
 			},
@@ -614,6 +614,6 @@ const WatchTargets = (() => {
 // });
 //
 // handle.pause();
-// handle.unpause();
+// handle.resume();
 // console.log(handle.isPaused());
 // handle.unwatch();

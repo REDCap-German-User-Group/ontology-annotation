@@ -24,7 +24,7 @@
 }
 
 .rome-edit-field-ui-container input[type="search"] {
-	max-width: 500px;
+	max-width: 400px;
 }
 
 .rome-edit-field-ui-list {
@@ -294,4 +294,11 @@
 }
 .select2-selection__rendered {
 	margin-top: -2px;
+}
+
+#rome-annotation-table .rome-row-target {
+	min-width: 150px;
+}
+#rome-search-bar .select2-container {
+	min-width: 180px;
 }

@@ -345,9 +345,135 @@
 		initializeAddButton();
 		initUserChangeWatcher();
 		initDatatable();
+
+		// Table events
+		odState.$dlg.find('.rome-edit-field-ui-list').off('change').off('click')
+		.on('change', '.rome-row-target', dispatchTableEvent)
+		.on('click', '.rome-row-delete', dispatchTableEvent);
 	}
 
 
+	function dispatchTableEvent(event) {
+
+		// Get row, then find the DataTable entry for the row
+		const $tr = $(event.target).closest('tr');
+		const rowIndex = odState.dtInstance.row($tr).index();
+		const row = odState.rows[rowIndex];
+
+		const action = event.type === 'change' ? 'assign-taget' : 'delete-row';
+		if (action === 'assign-taget') {
+			const newTarget = $(event.target).val();
+			assignRowToTarget(row, newTarget);
+		}
+		else {
+			deleteAnnotationRow(row);
+		}
+	}
+
+	/**
+	 * 
+	 * @param {ROME_AnnotationRow} row 
+	 * @param {string} newTarget 
+	 */
+	function assignRowToTarget(row, newTarget) {
+		log('Assigned row', row, 'to new target: "' + newTarget + '"', odState);
+		if (newTarget.startsWith('field:')) {
+			const targetName = newTarget.substring(6);
+			row.targetType = 'field';
+			row.targetName = targetName;
+		}
+		else if (newTarget === 'unit') {
+			row.targetType = 'unit';
+			row.targetName = '';
+		}
+		else if (newTarget.startsWith('choice:')) {
+			const code = newTarget.substring(7);
+			row.targetType = 'choice';
+			row.targetName = code;
+		}
+		redrawAnnotationsTable();
+		setAnnotations();
+	}
+
+	function deleteAnnotationRow(row) {
+		log('Deleting row', row);
+		odState.rows.splice(odState.rows.indexOf(row), 1);
+		redrawAnnotationsTable();
+		setAnnotations();
+	}
+
+	function setAnnotations(removeNonExistentChoices = false) {
+		getWatcher().pause();
+
+		// Build unit and choice stub
+		const stub = getMinimalOntologyAnnotation();
+		// Unit annotation(s)
+		odState.rows.filter(r => r.targetType === 'unit').forEach(r => {
+			stub.dataElement.unit.coding.push(r.annotation);
+		});
+		if (stub.dataElement.unit.coding.length === 0) {
+			delete stub.dataElement.unit;
+		}
+		else {
+			stub.dataElement.unit.text = stub.dataElement.unit.coding[0].display ?? '';
+		}
+		// Choice annotations
+		for (const code of Object.keys(odState.choiceLabelMap)) {
+			stub.dataElement.valueCodingMap[code] = { coding: [] };
+		}
+		odState.rows.filter(r => r.targetType === 'choice').forEach(r => {
+			if (!odState.choiceLabelMap[r.targetName]) {
+				if (removeNonExistentChoices) return;
+				if(!stub.dataElement.valueCodingMap[r.targetName]) {
+					stub.dataElement.valueCodingMap[r.targetName] = { coding: [] };
+				}
+			}
+			stub.dataElement.valueCodingMap[r.targetName].coding.push(r.annotation);
+		});
+		for (const code of Object.keys(stub.dataElement.valueCodingMap)) {
+			if (stub.dataElement.valueCodingMap[code].coding.length === 0) {
+				delete stub.dataElement.valueCodingMap[code];
+			}
+		}
+		
+		// Field annotations
+
+		const selector = odState.editType === 'field' ? '#field_annotation' : 'textarea[name=addFieldMatrixRow-annotation]';
+		odState.$dlg.find(selector).each(function () {
+			const $annotation = $(this);
+			const rowId = odState.editType === 'field' ? '' : ensureMatrixRowId($annotation.closest('tr'));
+			odState.rows
+				.filter(r => r.targetType === 'field' && r.targetName === rowId)
+				.forEach(r => {
+					stub.dataElement.coding.push(r.annotation);
+				});
+			const jsonString = `${config.atName}=${JSON.stringify(stub, null, 2)}`;
+			const prevParsed = odState.parseResults[rowId] ?? null;
+			if (prevParsed === null) {
+				$annotation.val(jsonString);
+			}
+			else {
+				// Replace part from start to end with new string, preserving any text before or after
+				const newVal = prevParsed.originalText.substring(0, prevParsed.start) + jsonString + prevParsed.originalText.substring(prevParsed.end);
+				$annotation.val(newVal);
+			}
+			// Clear codings for next iteration
+			stub.dataElement.coding = [];
+		});
+		getWatcher().resume();
+		initAnnotationState();
+		log('Updating annotations with current state.', odState);
+	}
+
+	function redrawAnnotationsTable() {
+		odState.dtInstance.clear().rows.add(odState.rows).draw();
+	}
+
+	//#region DataTable Rendering
+
+	/**
+	 * Initializes the DataTable instance for annotation display and manipulation.
+	 */
 	function initDatatable() {
 		const $table = odState.$dlg.find('#rome-annotation-table');
 		odState.dtInstance = $table.DataTable({
@@ -396,7 +522,109 @@
 		});
 	}
 
+	/**
+	 * Renders System column cell content.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderSystemColumn(row) {
+		return escapeHTML(row.annotation?.system || '?');
+	}
 
+	/**
+	 * Renders Code column cell content, with known-system external link when available.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderCodeColumn(row) {
+		const system = row.annotation?.system || '';
+		const code = row.annotation?.code || '';
+		if (config.knownLinks?.[system]) {
+			return `<a target="_blank" href="${escapeHTML(config.knownLinks[system] + code)}">${escapeHTML(code || '?')}</a>`;
+		}
+		return escapeHTML(code || '?');
+	}
+
+	/**
+	 * Renders Display column cell content.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderDisplayColumn(row) {
+		return escapeHTML(row.annotation?.display || '');
+	}
+
+	/**
+	 * Renders Target column select control for one row.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderTargetColumn(row) {
+
+		const rowTarget = getRowTargetValue(row);
+		const isMissingTarget = odState.targetOptions.some(t => t.value === rowTarget) === false;
+		const rowTargets = odState.targetOptions.slice();
+		if (isMissingTarget) {
+			const display = `Missing target: ${row.targetType === 'field'
+					? `Field: ${row.targetName}`
+					: (row.targetType === 'choice' ? `Choice [${row.targetName}]` : 'Unit')}`;
+			rowTargets.unshift({
+				rowId: '',
+				value: rowTarget,
+				display: display,
+				targetType: row.targetType
+			});
+		}
+		return `<select class="form-select form-select-xs rome-row-target ${isMissingTarget ? 'target-missing' : ''}">
+			${rowTargets.map(target => `<option value="${escapeHTML(target.value)}" ${target.value === rowTarget ? 'selected' : ''}>${escapeHTML(target.display)}</option>`).join('')}
+		</select>`;
+	}
+
+	function getRowTargetValue(row) {
+		if (row.targetType === 'field') {
+			return `field:${row.targetName}`;
+		}
+		if (row.targetType === 'unit') {
+			return 'unit';
+		}
+		if (row.targetType === 'choice') {
+			return `choice:${row.targetName}`;
+		}
+		return '';
+	}
+
+	/**
+	 * Builds stable sort key for target column.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function getTargetSortKey(row) {
+		if (row.targetType === 'field') {
+			return 'a:' + (odState.rowIdFieldMap[row.targetName] ?? row.targetName ?? '?');
+		}
+		if (row.targetType === 'unit') {
+			return 'b:';
+		}
+		if (row.targetType === 'choice') {
+			return 'c:' + (odState.choiceLabelMap[row.targetName]?.pos || '0');
+		}
+		return 'z:';
+	}
+
+
+	/**
+	 * Renders Action column controls for one row.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderActionColumn(row) {
+		const warningIcon = (odState.showUnitWarning && row.targetType === 'unit')
+			? '<span class="rome-target-warning text-warning rome-unit-row-warning ms-2" title="Unit targets are unusual for this field type."><i class="fa-solid fa-triangle-exclamation"></i></span>'
+			: '';
+		return `<button type="button" class="btn btn-xs btn-link text-danger p-0 rome-row-delete" title="Delete annotation"><i class="fa fa-trash"></i></button>${warningIcon}`;
+	}
+
+	//#endregion DataTable Rendering
 
 	//#endregion
 
@@ -467,6 +695,8 @@
 		minItemsForSelect2: 7,
 		targetOptions: [],
 		choiceLabelMap: {},
+		rowIdFieldMap: {},
+		showUnitWarning: false,
 	}
 
 
@@ -545,6 +775,10 @@
 				patchProgrammatic: true
 			});
 		}
+	}
+
+	function getWatcher() {
+		return odState.editType === 'field' ? odState.fieldWatcher : odState.matrixWatcher;
 	}
 
 	/**
@@ -705,40 +939,57 @@
 
 
 	function refreshAnnotationRows() {
-		const fieldNames = Object.keys(odState.parseResults);
+		const rowIds = Object.keys(odState.parseResults);
 		/** @type {ROME_AnnotationRow[]} */
 		const rows = [];
-		for (const fieldName of fieldNames) {
+		for (const rowId of rowIds) {
 			const annotations = normalizeAnnotation(
-				odState.parseResults[fieldName].json
+				odState.parseResults[rowId].json
 			).dataElement;
 			for (const coding of annotations?.coding ?? []) {
-				rows.push({
-					targetType: 'field',
-					targetName: fieldName,
-					annotation: coding,
-				});
+				if (checkCodingUnique(rows, coding, 'field')) {
+					rows.push({
+						targetType: 'field',
+						targetName: rowId,
+						annotation: coding,
+					});
+				}
 			}
 			for (const coding of annotations.unit?.coding ?? []) {
-				rows.push({
-					targetType: 'unit',
-					targetName: null,
-					annotation: coding,
-				});
+				if (checkCodingUnique(rows, coding, 'unit')) {
+					rows.push({
+						targetType: 'unit',
+						targetName: null,
+						annotation: coding,
+					});
+				}
 			}
 			for (const code in annotations?.valueCodingMap ?? {}) {
-				rows.push({
-					targetType: 'choice',
-					targetName: code,
-					annotation: annotations.valueCodingMap[code],
-				});
+				const codings = annotations.valueCodingMap[code]?.coding ?? [];
+				for (const coding of codings) {
+					if (checkCodingUnique(rows, coding, 'choice')) {
+						rows.push({
+							targetType: 'choice',
+							targetName: code,
+							annotation: coding,
+						});
+					}
+				}
 			}
 		}
 		odState.rows = rows;
 		odState.dtInstance.clear().rows.add(rows).draw();
 	}
 
-
+	/**
+	 * 
+	 * @param {ROME_AnnotationRow[]} rows 
+	 * @param {OntologyAnnotationCoding} coding 
+	 * @param {'field'|'unit'|'choice'} targetType
+	 */
+	function checkCodingUnique(rows, coding, targetType) {
+		return !rows.some(r => r.targetType === targetType && r.annotation?.system === coding?.system && r.annotation?.code === coding?.code);
+	}
 
 
 	/**
@@ -1545,17 +1796,6 @@
 		}
 	}
 
-	/**
-	 * Removes one coding entry from draft state by table entry.
-	 * @param {AnnotationTableEntry|null|undefined} row
-	 * @returns {void}
-	 */
-	function deleteAnnotationRow(row) {
-		log('Delete requested for table row:', row);
-		removeAnnotationEntryFromDraft(row);
-		updateAnnotationTable();
-		log('Delete completed. Current state:', designerState.isMatrix ? matrixDraftState : annotationState);
-	}
 
 	/**
 	 * Reassigns one coding row to a new target location in draft state.
@@ -1942,7 +2182,6 @@
 	function getMinimalOntologyAnnotation() {
 		/** @type {OntologyAnnotationJSON} */
 		const obj = JSON.parse(config.minimalAnnotation);
-		obj.dataElement.type = getFieldType();
 		return obj;
 	}
 
@@ -1976,8 +2215,8 @@
 	 * @returns {string}
 	 */
 	function getFieldType() {
-		if (designerState.isMatrix) {
-			return designerState.$dlg.find('select#field_type_matrix').val()?.toString() ?? '';
+		if (odState.editType === 'matrix') {
+			return odState.$dlg.find('select#field_type_matrix').val()?.toString() ?? '';
 		}
 		return $('select#field_type').val()?.toString() ?? '';
 	}
@@ -2020,21 +2259,20 @@
 	}
 
 	/**
-	 * Returns true when Unit target appears unusual for the current REDCap field constraints.
-	 * @returns {boolean}
+	 * Checks if setting a unit annotations is sensible for the current field type/validation.
 	 */
-	function shouldShowUnitWarning() {
+	function setShowUnitWarning() {
 		const fieldType = getFieldType();
-		const valType = `${designerState.$dlg.find('#val_type, #val_type_matrix').first().val() ?? ''}`.toLowerCase();
+		const valType = `${odState.$dlg.find('#val_type, #val_type_matrix').first().val() ?? ''}`.toLowerCase();
 		if (['radio', 'select', 'checkbox'].includes(fieldType)) {
-			const nonNumericChoice = (designerState.enum || '').split('\n').some(line => {
-				const [code] = line.split(',', 1);
+			const nonNumericChoice = Object.keys(odState.choiceLabelMap).some(code => {
 				return code && !/^[-+]?\d+(\.\d+)?$/.test(code.trim());
 			});
-			return nonNumericChoice;
+			odState.showUnitWarning = nonNumericChoice;
+			return;
 		}
 		const nonNumericValidators = ['email', 'alpha_only', 'letters_only', 'zipcode', 'phone'];
-		return nonNumericValidators.includes(valType);
+		odState.showUnitWarning = nonNumericValidators.includes(valType);
 	}
 
 	/**
@@ -2044,52 +2282,67 @@
 		/** @type {ROME_TargetOption[]} */
 		const options = [];
 		const choiceLabelMap = {};
+		const rowIdFieldMap = {};
 		if (odState.editType === 'matrix') {
 			// Fields
 			odState.$dlg.find('input.field_name_matrix').each(function() {
 				const fieldName = ($(this).val() ?? '').toString().trim();
 				if (fieldName === '') return;
 				const rowId = ensureMatrixRowId($(this).closest('tr'));
+				rowIdFieldMap[rowId] = fieldName;
 				options.push({
 					rowId: rowId,
-					value: `field:${fieldName}`,
+					value: `field:${rowId}`,
 					display: `Field: ${fieldName}`,
 					targetType: 'field'
 				});
 			});
-			// Unit
-			options.push({ rowId: '', value: 'unit', display: 'Unit', targetType: 'unit' });
 			// Choices
+			let pos = 0;
 			for (const choice of getChoiceOptions()) {
+				pos++;
 				options.push({
 					rowId: '',
 					value: `choice:${choice.code}`,
 					display: `[${choice.code}]: ${choice.label}`,
 					targetType: 'choice'
 				});
-				choiceLabelMap[choice.code] = choice.label;
+				choiceLabelMap[choice.code] = {
+					label: choice.label,
+					pos: pos
+				};
 			}
+			// Unit
+			options.push({ rowId: '', value: 'unit', display: 'Unit', targetType: 'unit' });
 		}
 		else {
 			// Field
 			options.push({ rowId: '', value: 'field:', display: 'Field', targetType: 'field' });
-			// Unit
-			options.push({ rowId: '', value: 'unit', display: 'Unit', targetType: 'unit' });
 			// Choices
+			let pos = 0;
 			for (const choice of getChoiceOptions()) {
+				pos++;
 				options.push({ 
 					rowId: '',
 					value: `choice:${choice.code}`,
 					display: `[${choice.code}]: ${choice.label}`,
 					targetType: 'choice'
 				});
-				choiceLabelMap[choice.code] = choice.label;
+				choiceLabelMap[choice.code] = { 
+					label: choice.label,
+					pos: pos
+				};
 			}
+			// Unit
+			options.push({ rowId: '', value: 'unit', display: 'Unit', targetType: 'unit' });
 		}
 		odState.targetOptions = options;
 		odState.choiceLabelMap = choiceLabelMap;
+		odState.rowIdFieldMap = rowIdFieldMap;
 		log('Build target options:', options, choiceLabelMap)
+		setShowUnitWarning();
 		updateAnnotationTargetsDropdown();
+		redrawAnnotationsTable();
 	}
 
 
@@ -2124,6 +2377,15 @@
 		return out;
 	}
 
+
+
+
+
+
+
+
+
+
 	/**
 	 * Returns choice order metadata used for Target-column lexical sort keys.
 	 * @returns {{positions: Object<string, number>, width: number}}
@@ -2146,14 +2408,6 @@
 		return buildAnnotationTableEntries().filter(r => r.kind === 'choice' && r.choicePosition < 0);
 	}
 
-	/**
-	 * Builds stable sort key for target column.
-	 * @param {AnnotationTableEntry} row
-	 * @returns {string}
-	 */
-	function getTargetSortKey(row) {
-		return row.sortBy || 'Z';
-	}
 
 	/**
 	 * Flattens current draft annotation(s) into table rows for DataTables.
@@ -2258,78 +2512,6 @@
 		return rows;
 	}
 
-	/**
-	 * Renders System column cell content.
-	 * @param {AnnotationTableEntry} row
-	 * @returns {string}
-	 */
-	function renderSystemColumn(row) {
-		return escapeHTML(row.annotation?.system || '?');
-	}
-
-	/**
-	 * Renders Code column cell content, with known-system external link when available.
-	 * @param {AnnotationTableEntry} row
-	 * @returns {string}
-	 */
-	function renderCodeColumn(row) {
-		const system = row.annotation?.system || '';
-		const code = row.annotation?.code || '';
-		if (config.knownLinks?.[system]) {
-			return `<a target="_blank" href="${escapeHTML(config.knownLinks[system] + code)}">${escapeHTML(code || '?')}</a>`;
-		}
-		return escapeHTML(code || '?');
-	}
-
-	/**
-	 * Renders Display column cell content.
-	 * @param {AnnotationTableEntry} row
-	 * @returns {string}
-	 */
-	function renderDisplayColumn(row) {
-		return escapeHTML(row.annotation?.display || '');
-	}
-
-	/**
-	 * Renders Target column select control for one row.
-	 * @param {AnnotationTableEntry} row
-	 * @param {{value:string,label:string}[]} targets
-	 * @param {Set<string>} currentChoiceCodes
-	 * @param {Object<string?,string>} choiceLabelMap
-	 * @returns {string}
-	 */
-	function renderTargetColumn(row, targets = [], currentChoiceCodes = new Set(), choiceLabelMap =  {}) {
-		const targetValue = row.kind === 'field'
-			? (designerState.isMatrix ? `field:${row.fieldName}` : 'field')
-			: (row.kind === 'unit' ? 'unit' : `choice:${row.choiceCode}`);
-		const targetLabel = row.kind === 'field'
-			? `Field - ${row.fieldName}`
-			: (row.kind === 'unit' ? 'Unit' : `Choice - ${choiceLabelMap[row.choiceCode] || row.choiceCode}`);
-		const isMissingTarget = row.kind === 'choice' && !currentChoiceCodes.has(row.choiceCode);
-		const rowTargets = targets.slice();
-		if (!rowTargets.some(t => t.value === targetValue)) {
-			rowTargets.unshift({
-				value: targetValue,
-				label: `Missing target: ${targetLabel}`
-			});
-		}
-		return `<select class="form-select form-select-xs rome-row-target ${isMissingTarget ? 'target-missing' : ''}">
-			${rowTargets.map(target => `<option value="${escapeHTML(target.value)}" ${target.value === targetValue ? 'selected' : ''}>${escapeHTML(target.label)}</option>`).join('')}
-		</select>`;
-	}
-
-	/**
-	 * Renders Action column controls for one row.
-	 * @param {AnnotationTableEntry} row
-	 * @param {boolean} showUnitWarning
-	 * @returns {string}
-	 */
-	function renderActionColumn(row, showUnitWarning = false) {
-		const warningIcon = (showUnitWarning && row.kind === 'unit')
-			? '<span class="rome-target-warning text-warning rome-unit-row-warning ms-2" title="Unit targets are unusual for this field type."><i class="fa-solid fa-triangle-exclamation"></i></span>'
-			: '';
-		return `<button type="button" class="btn btn-xs btn-link text-danger p-0 rome-row-delete" title="Delete annotation"><i class="fa fa-trash"></i></button>${warningIcon}`;
-	}
 
 	/**
 	 * Initializes tooltips for unit warning icons inside annotation table.
@@ -2398,7 +2580,7 @@
 		const targets = buildTargetOptions();
 		const choiceLabelMap = getChoiceLabelMap();
 		const currentChoiceCodes = new Set(Object.keys(choiceLabelMap));
-		const showUnitWarning = shouldShowUnitWarning();
+		const showUnitWarning = setShowUnitWarning();
 		if ($.fn.DataTable) {
 			annotationTableState.dt = $table.DataTable({
 				data: rows,

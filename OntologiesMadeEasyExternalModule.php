@@ -850,8 +850,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$minimal = [
 			"dataElement" => [
 				'coding' => [],
-				'text' => '',
 				'valueCodingMap' => new stdClass(),
+				'unit' => [
+					'coding' => [],
+					'text' => '',
+				]
 			],
 		];
 		return json_encode($minimal, JSON_UNESCAPED_UNICODE);

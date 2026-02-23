@@ -173,12 +173,19 @@
 
 /**
  * @typedef {Object} OntologyAnnotationDataElement
- * @property {string=} type
- * @property {Array<{system:string, code:string, display?:string}>=} coding
- * @property {Object<string, {coding:Array<{system:string, code:string, display?:string}>}>=} valueCodingMap
- * @property {{coding:Array<{system:string, code:string, display?:string}>}=} unit
+ * @property {string=} text
+ * @property {OntologyAnnotationCoding[]} coding
+ * @property {Object<string, {coding:OntologyAnnotationCoding[]}>} valueCodingMap
+ * @property {{coding:OntologyAnnotationCoding[], text:?string}=} unit
  */
 
+
+/**
+ * @typedef {Object} OntologyAnnotationCoding
+ * @property {string} system
+ * @property {string} code
+ * @property {string=} display
+ */
 
 /**
  * @typedef {Object} OntologyAnnotationWarning
@@ -391,7 +398,9 @@
  * @property {string=} helpContent
  * @property {Number} minItemsForSelect2
  * @property {ROME_TargetOption[]} targetOptions
- * @property {Object<?string,string>} choiceLabelMap
+ * @property {Object<?string,{label:string, pos:Number}>} choiceLabelMap
+ * @property {Object<?string,string>} rowIdFieldMap
+ * @property {boolean} showUnitWarning
  */
 
 /**
