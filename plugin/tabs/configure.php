@@ -11,11 +11,15 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 /** @var OntologiesMadeEasyExternalModule $module */
 
+
+$canConfigure = $module->framework->getProjectSetting('can-configure') ?? false;
+$canConfigure = $canConfigure ? 'checked' : '';
+
 ?>
 <div class="rome-plugin-page">
 	<h2>General Configuration (Admins Only)</h2>
 	<div class="form-check form-switch">
-		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-can-configure" data-rome-setting="can-configure">
+		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-can-configure" data-rome-setting="can-configure" <?= $canConfigure ?>>
 		<label class="form-check-label" for="rome-set-can-configure">Allow access to this page for users with design rights in this project.</label>
 	</div>
 	<p class="text-muted">

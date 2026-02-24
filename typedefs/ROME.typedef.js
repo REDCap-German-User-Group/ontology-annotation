@@ -38,7 +38,7 @@
 /**
  * @typedef {Object} DiscoveryData
  * @property {DiscoveryField[]} fields
- * @property {object[]} projects
+ * @property {Object<string,Object>} projects
  */
 
 /**

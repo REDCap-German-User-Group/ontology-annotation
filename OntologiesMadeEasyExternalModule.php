@@ -295,6 +295,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return $this->refresh_exclusions($payload);
 			case 'discover':
 				return $this->discoverOntologies($payload);
+			case 'configure':
+				return $this->setConfigFromPluginPage($payload);
 		}
 	}
 
@@ -321,6 +323,62 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 		return $js_base_config;
 	}
+
+	#endregion
+
+	#region Set Configuration from plugin pages
+
+	private function requireProjectContext() {
+		return $this->project_id !== null;
+	}
+
+	private function requireDesignRights() {
+		if (!$this->requireProjectContext()) return false;
+		if (!defined('USERID')) return false;
+		$user = $this->framework->getUser(USERID);
+		return $user->hasDesignRights($this->project_id);
+	}
+
+	private function requireSuperuser() {
+		if (!defined('USERID')) return false;
+		$user = $this->framework->getUser(USERID);
+		return $user->isSuperUser();
+	}
+
+	private function setConfigFromPluginPage($payload) {
+		$response = [
+			'success' => true,
+			'error' => null,
+		];
+
+		$valid_settings = [
+			'discoverable' => [ 'requireProjectContext', 'requireDesignRights' ],
+			'can-configure' => [ 'requireProjectContext', 'requireSuperuser' ],
+		];
+
+		$setting = $payload['setting'] ?? '';
+		$new_value = $payload['value'] ?? null;
+
+		if (!array_key_exists($setting, $valid_settings)) {
+			$response['success'] = false;
+			$response['error'] = 'Invalid setting';
+			return $response;
+		}
+		foreach ($valid_settings[$setting] as $requirement) {
+			if (method_exists($this, $requirement) && is_callable([$this, $requirement])) {
+				$result = $this->$requirement();
+				if (!$result) {
+					$response['success'] = false;
+					$response['error'] = 'Insufficient permissions';
+					return $response;
+				}
+			}
+		}
+		$this->framework->setProjectSetting($setting, $new_value, $this->project_id);
+		
+		return $response;
+	}
+
 
 	#endregion
 
@@ -678,67 +736,198 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 */
 	private function discoverOntologies($payload)
 	{
+		// $sql = <<<SQL
+		// 	WITH
+		// 		-- all projects that have the module installed and metadata marked as 'discoverable'
+		// 		project_ids AS
+		// 		(
+		// 			SELECT exs.project_id
+		// 			FROM redcap_external_modules ex 
+		// 			INNER JOIN redcap_external_module_settings exs ON
+		// 				ex.external_module_id=exs.external_module_id AND
+		// 				ex.directory_prefix = ? AND
+		// 				exs.key = 'discoverable' AND
+		// 				exs.value='true'
+		// 		),
+		// 		-- name + contact info of the projects
+		// 		project_infos AS
+		// 		(
+		// 			SELECT rp.project_id, app_title, COALESCE(project_contact_email, ru.user_email) AS email,
+		// 				COALESCE(project_contact_name, CONCAT(ru.user_firstname, ' ', ru.user_lastname)) AS contact
+		// 			FROM redcap_projects rp INNER JOIN project_ids ON rp.project_id=project_ids.project_id
+		// 			LEFT JOIN redcap_user_information ru ON rp.created_by=ru.ui_id
+		// 		),
+		// 		-- all the fields from these projects with an @ONTOLOGY annotation	        
+		// 		fields as
+		// 		(
+		// 			SELECT project_id, field_name, 
+		// 				regexp_replace(misc, ".*@ONTOLOGY='([^']*)'.*", "\\\\1") AS ontology
+		// 			FROM redcap_metadata 
+		// 			WHERE project_id IN (SELECT project_id FROM project_ids) AND 
+		// 				misc LIKE '%@ONTOLOGY%'
+		// 		),
+		// 		-- all the annotations for these fields
+		// 		annotations AS 
+		// 		(
+		// 			SELECT project_id, field_name, j.system, j.code, j.display
+		// 			FROM fields, json_table(
+		// 				ontology, '$.dataElement.coding[*]' columns(
+		// 					system varchar(255) path '$.system',
+		// 					code   varchar(255) path '$.code',
+		// 					display varchar(255) path '$.display')
+		// 			) j 
+		// 			WHERE json_valid(ontology)
+		// 		),
+		// 		-- grouped annotations
+		// 		grouped_annotations AS
+		// 		(
+		// 			SELECT system, code, display,
+		// 				json_objectagg(project_id, field_name) as field_names,
+		// 				json_arrayagg(project_id) as projects
+		// 			FROM annotations
+		// 			GROUP BY system, code, display
+		// 		)
+		// 		-- putting it all together: project_info and grouped annotated fields
+		// 		SELECT json_object
+		// 		(
+		// 			'projects', (SELECT json_objectagg(project_id, json_object('app_title', app_title, 'email', email, 'contact', contact)) FROM project_infos),
+		// 			'fields', (SELECT json_arrayagg(json_object('field_names', field_names, 'system', system, 'code', code, 'display', display, 'projects', projects)) FROM grouped_annotations)
+		// 		) AS info;
+		// SQL;
+		// $start = microtime(true);
+		// $q = $this->query($sql, [$this->PREFIX]);
+		// $result = $q->fetch_assoc();
+
+		// $end = microtime(true);
+		// $duration_ms = round(($end - $start) * 1000, 2);
+		// $json = json_decode($result["info"], true); 
+		// $json['queryDurationMs'] = $duration_ms;
+		// return $json;
+
+
+		// Part 1
 		$sql = <<<SQL
-			WITH
-				-- all projects that have the module installed and metadata marked as 'discoverable'
-				project_ids AS
-				(
-					SELECT exs.project_id
-					FROM redcap_external_modules ex 
-					INNER JOIN redcap_external_module_settings exs ON
-						ex.external_module_id=exs.external_module_id AND
-						ex.directory_prefix = ? AND
-						exs.key = 'discoverable' AND
-						exs.value='true'
-				),
-				-- name + contact info of the projects
-				project_infos AS
-				(
-					SELECT rp.project_id, app_title, COALESCE(project_contact_email, ru.user_email) AS email,
-						COALESCE(project_contact_name, CONCAT(ru.user_firstname, ' ', ru.user_lastname)) AS contact
-					FROM redcap_projects rp INNER JOIN project_ids ON rp.project_id=project_ids.project_id
-					LEFT JOIN redcap_user_information ru ON rp.created_by=ru.ui_id
-				),
-				-- all the fields from these projects with an @ONTOLOGY annotation	        
-				fields as
-				(
-					SELECT project_id, field_name, 
-						regexp_replace(misc, ".*@ONTOLOGY='([^']*)'.*", "\\\\1") AS ontology
-					FROM redcap_metadata 
-					WHERE project_id IN (SELECT project_id FROM project_ids) AND 
-						misc LIKE '%@ONTOLOGY%'
-				),    
-				-- all the annotations for these fields
-				annotations AS 
-				(
-					SELECT project_id, field_name, j.system, j.code, j.display
-					FROM fields, json_table(
-						ontology, '$.dataElement.coding[*]' columns(
-							system varchar(255) path '$.system',
-							code   varchar(255) path '$.code',
-							display varchar(255) path '$.display')
-					) j 
-					WHERE json_valid(ontology)
-				),
-				-- grouped annotations
-				grouped_annotations AS
-				(
-					SELECT system, code, display,
-						json_objectagg(project_id, field_name) as field_names,
-						json_arrayagg(project_id) as projects
-					FROM annotations
-					GROUP BY system, code, display
-				)
-				-- putting it all together: project_info and grouped annotated fields
-				SELECT json_object
-				(
-					'projects', (SELECT json_objectagg(project_id, json_object('app_title', app_title, 'email', email, 'contact', contact)) FROM project_infos),
-					'fields', (SELECT json_arrayagg(json_object('field_names', field_names, 'system', system, 'code', code, 'display', display, 'projects', projects)) FROM grouped_annotations)
-				) AS info;
+			SELECT
+				rp.project_id,
+				rp.app_title,
+				COALESCE(rp.project_contact_email, ru.user_email) AS email,
+				COALESCE(rp.project_contact_name, CONCAT(ru.user_firstname, ' ', ru.user_lastname)) AS contact
+			FROM redcap_external_modules ex
+			INNER JOIN redcap_external_module_settings exs
+				ON ex.external_module_id = exs.external_module_id
+				AND ex.directory_prefix = ?
+				AND exs.`key` = 'discoverable'
+				AND exs.`value` = 'true'
+			INNER JOIN redcap_projects rp
+				ON rp.project_id = exs.project_id
+			LEFT JOIN redcap_user_information ru
+				ON rp.created_by = ru.ui_id;
 		SQL;
+		$start = microtime(true);
 		$q = $this->query($sql, [$this->PREFIX]);
-		$result = $q->fetch_assoc();
-		return $result["info"]; // JSON string
+		$projects = [];
+		while ($row = $q->fetch_assoc()) {
+			$projects[$row['project_id']] = [
+				'app_title' => $row['app_title'],
+				'email' => $row['email'],
+				'contact' => $row['contact'],
+			];
+		}
+		$end = microtime(true);
+		$duration_ms = round(($end - $start) * 1000, 2);
+		$json['projects'] = $projects;
+		$json['projectQueryDurationMs'] = $duration_ms;
+		// Part 2
+		$sql = <<<SQL
+			SELECT
+				y.project_id,
+				y.field_name,
+				CASE
+					WHEN y.json_start > 0 AND y.last_brace_in_tail > 0
+					THEN SUBSTRING(y.tail, y.json_start, y.last_brace_in_tail - y.json_start + 1)
+					ELSE NULL
+				END AS ontology_json
+			FROM (
+				SELECT
+					x.project_id,
+					x.field_name,
+					x.tail,
+					x.json_start,
+					(LENGTH(x.tail) - LOCATE('}', REVERSE(x.tail)) + 1) AS last_brace_in_tail
+				FROM (
+					SELECT
+						m.project_id,
+						m.field_name,
+						SUBSTRING(m.misc, LOCATE('@ONTOLOGY', m.misc)) AS tail,
+						/* erste '{' im Tail (Start JSON) */
+						LOCATE('{', SUBSTRING(m.misc, LOCATE('@ONTOLOGY', m.misc))) AS json_start
+					FROM redcap_external_modules ex
+					INNER JOIN redcap_external_module_settings exs
+						ON ex.external_module_id = exs.external_module_id
+						AND ex.directory_prefix = ?
+						AND exs.`key` = 'discoverable'
+						AND exs.`value` = 'true'
+					INNER JOIN redcap_metadata m
+						ON m.project_id = exs.project_id
+					WHERE m.misc LIKE '%@ONTOLOGY%'
+				) AS x
+			) AS y;
+		SQL;
+
+		$fields = [];
+		$start = microtime(true);
+		$q = $this->query($sql, [$this->PREFIX]);
+		while ($row = $q->fetch_assoc()) {
+			$fields[] = $row;
+		}
+		$end = microtime(true);
+		$duration_ms = round(($end - $start) * 1000, 2);
+		$json['fieldQueryDurationMs'] = $duration_ms;
+
+		$parser = $this->createOntologyAnnotationParser([
+			'tag' => '@ONTOLOGY',
+			'getMinAnnotation' => function() { return json_decode($this->getMinimalAnnotationJSON(), true); },
+			'validate' => null,
+		]);
+		$start = microtime(true);
+		$annotations = [];
+		foreach ($fields as $field) {
+			$r = $parser->parse('@ONTOLOGY='.$field['ontology_json']);
+			if (!$r['error']) {
+				foreach ($r['json']['dataElement']['coding'] as $coding) {
+					$system = "{$coding['system']}";
+					$code = "{$coding['code']}";
+					if (!isset($annotations[$system][$code])) {
+						$annotations[$system][$code] = [
+							'display' => $coding['display'] ?? null,
+							'field_names' => [],
+							'projects' => [],
+						];
+					}
+					$pid = $field['project_id'];
+					$annotations[$system][$code]['field_names'][$pid] = $field['field_name'];
+					$annotations[$system][$code]['projects'][$pid] = true;
+				}
+			}
+		}
+		$alt_fields = [];
+		foreach ($annotations as $system => $codes) {
+			foreach ($codes as $code => $info) {
+				$alt_fields[] = [
+					'system' => $system,
+					'code' => $code,
+					'display' => $info['display'],
+					'field_names' => $info['field_names'],
+					'projects' => array_keys($info['projects']),
+				];
+			}
+		}
+		$end = microtime(true);
+		$duration_ms = round(($end - $start) * 1000, 2);
+		$json['annotationProcessingDurationMs'] = $duration_ms;
+		$json['fields'] = $alt_fields;
+
+		return $json;
 	}
 
 	#endregion

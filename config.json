@@ -183,7 +183,8 @@
 		"get-fieldhelp",
 		"set-matrix-exclusion",
 		"refresh-exclusions",
-		"discover"
+		"discover",
+		"configure"
 	],
 	"no-csrf-pages": [
         "ajax/search",

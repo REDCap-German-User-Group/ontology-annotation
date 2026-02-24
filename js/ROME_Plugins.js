@@ -45,16 +45,41 @@
 		JSMO = jsmo ?? null;
 
 		// Initalize based on plugin page
-		switch(config.plugin) {
-			case 'discover':
-				$(function() {
+		$(function () {
+			switch (config.plugin) {
+				case 'discover':
 					initDiscovery();
-				});
-				break;
-		}
-		initialized = true;
-		log(`Initialized plugin page (${config.plugin})`, config);
+					break;
+				case 'manage':
+					initConfigPage(config.plugin);
+					break;
+			}
+			initialized = true;
+			log(`Initialized plugin page (${config.plugin})`, config);
+		});
 	}
+
+
+
+	//#region Manage / Configure
+
+	function initConfigPage(page) {
+		$('.rome-plugin-page').on('change', '[data-rome-setting]', function (e) {
+			const $el = $(e.target);
+			const setting = $el.attr('data-rome-setting');
+			if (!setting) return;
+			const value = $el.is(':checkbox') ? $el.is(':checked') : $el.val();
+			JSMO?.ajax('configure', { setting, value })
+			.then(function (response) {
+
+				log('Configuration updated', { setting, value, response });
+			}).catch(function (err) {
+				error('Error setting configuration', err);
+			});
+		});
+	}
+
+	//#endregion
 
 
 
@@ -65,41 +90,41 @@
 
 	function initDiscovery() {
 		JSMO?.ajax('discover', {})
-		.then(function(response) {
-			ds.data = JSON.parse(response);
-			log('Received discover info: ', ds.data);
-			if (!Array.isArray(ds.data.fields)) ds.data.fields = [];
-			if (!Array.isArray(ds.data.projects)) ds.data.projects = [];
-			const options = ds.data.fields.map((field, idx) => ({
-				'id': idx,
-				'title': `${field.display} [${field.system}: ${field.code}], n=${field.projects.length}`
-			}));
-			if (ds.data.fields.length == 0) {
-				$('#rome-matching-projects-message').hide();
-				$('.rome-discover-select-waiter').text('No ontology annotations found in any projects.').addClass('rome-no-annotations red mb-2');
-				$('#rome-discover-select').prop('disabled', true);
-				updateDiscoveredProjectsTable();
-			}
-			else {
-				const settings = {
-					'options': options,
-					'valueField': 'id',
-					'onChange': updateDiscoveredProjectsTable,
-					'labelField': 'title',
-					'searchField': 'title'
-				};
-				// @ts-ignore
-				ds.TS = new window.TomSelect('#rome-discover-select', settings);
-			}
-			if (ds.data) {
-				$('.rome-discover-project-count').text(Object.keys(ds.data.projects).length);
-			}
-		})
-		.catch(function(err) {
-			console.error('Error requesting ROME info', err);
-		});
+			.then(function (response) {
+				ds.data = response;
+				log('Received discover info: ', ds.data);
+				if (!Array.isArray(ds.data.fields)) ds.data.fields = [];
+				if (!ds.data.projects) ds.data.projects = {};
+				const options = ds.data.fields.map((field, idx) => ({
+					'id': idx,
+					'title': `${field.display} [${field.system}: ${field.code}], n=${field.projects.length}`
+				}));
+				if (ds.data.fields.length == 0) {
+					$('#rome-matching-projects-message').hide();
+					$('.rome-discover-select-waiter').text('No ontology annotations found in any projects.').addClass('rome-no-annotations red mb-2');
+					$('#rome-discover-select').prop('disabled', true);
+					updateDiscoveredProjectsTable();
+				}
+				else {
+					const settings = {
+						'options': options,
+						'valueField': 'id',
+						'onChange': updateDiscoveredProjectsTable,
+						'labelField': 'title',
+						'searchField': 'title'
+					};
+					// @ts-ignore
+					ds.TS = new window.TomSelect('#rome-discover-select', settings);
+				}
+				if (ds.data) {
+					$('.rome-discover-project-count').text(Object.keys(ds.data.projects).length);
+				}
+			})
+			.catch(function (err) {
+				console.error('Error requesting ROME info', err);
+			});
 	}
-	
+
 	function updateDiscoveredProjectsTable() {
 		if (!ds.data) return;
 		if (!ds.TS || ds.TS.getValue().length == 0) {
@@ -112,7 +137,7 @@
 			.filter(i => ds.data.fields[i].field_names[pid])
 			.map(i => `${ds.data.fields[i].display}: ${ds.data.fields[i].field_names[pid]}`)
 			.join('<br>');
-		const formatProjectId = (/** @type Number */ pid) => config.isAdmin && pid != config.pid 
+		const formatProjectId = (/** @type Number */ pid) => config.isAdmin && pid != config.pid
 			? `<a href="${window['app_path_webroot']}index.php?pid=${pid}" target="_blank">${pid}</a>`
 			: `${pid}`;
 
@@ -122,22 +147,22 @@
 			project_ids = project_ids.intersection(sets.pop());
 		}
 		// Build table
-		const html = 
+		const html =
 			`<table class="table">
 				<thead>
 					<tr>
 						<th>PID</th><th>Project Name</th><th>Contact</th><th>Email</th><th>Fields</th>
 					</tr>
 				</thead>
-				<tbody>` + [...project_ids].map(project_id => 
-					`<tr>
+				<tbody>` + [...project_ids].map(project_id =>
+				`<tr>
 						<td>${formatProjectId(project_id)}</td>
 						<td>${ds.data.projects[project_id].app_title}</td>
 						<td>${ds.data.projects[project_id].contact}</td>
 						<td>${ds.data.projects[project_id].email}</td>
 						<td>${fieldnamesForProject(project_id)}</td>
 					</tr>`).join('') +
-				`</tbody>
+			`</tbody>
 			</table>`;
 		$("#resulttable").html(html);
 	}

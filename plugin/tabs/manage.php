@@ -10,6 +10,9 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 /** @var OntologiesMadeEasyExternalModule $module */
 
+$discoverable = $module->framework->getProjectSetting('discoverable') ?? false;
+$discoverable = $discoverable ? 'checked' : '';
+
 ?>
 <div class="rome-plugin-page">
 	<h2>Manage Ontologies</h2>
@@ -17,7 +20,7 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 		Management options will appear here soon &hellip;
 	</p>
 	<div class="form-check form-switch">
-		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-discoverable" data-rome-setting="discoverable">
+		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-discoverable" data-rome-setting="discoverable" <?= $discoverable ?>>
 		<label class="form-check-label" for="rome-set-discoverable">Make the metadata (annotated fields + contact data) from this project discoverable to other users.</label>
 	</div>
 
