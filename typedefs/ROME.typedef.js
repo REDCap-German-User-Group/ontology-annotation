@@ -401,6 +401,8 @@
  * @property {Object<?string,{label:string, pos:Number}>} choiceLabelMap
  * @property {Object<?string,string>} rowIdFieldMap
  * @property {boolean} showUnitWarning
+ * @property {function} fitDialog
+ * 
  */
 
 /**

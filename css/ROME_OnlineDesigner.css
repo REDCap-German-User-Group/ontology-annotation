@@ -230,6 +230,10 @@
 
 #div_add_field #rome-annotation-table {
 	min-width: 800px;
+	width: 100% !important;
+}
+#div_add_field #rome-annotation-table th {
+	width: auto !important;
 }
 
 #addMatrixPopup #rome-annotation-table {
