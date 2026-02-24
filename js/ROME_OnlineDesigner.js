@@ -127,6 +127,7 @@
 		setInitialExcludedCheckboxState();
 		resetSearchState();
 		buildTargetOptions();
+		initInfoPopover();
 		initAnnotationState();
 		
 		setTimeout(() => {
@@ -696,31 +697,6 @@
 		return odState.editType === 'field' ? odState.fieldWatcher : odState.matrixWatcher;
 	}
 
-	/**
-	 * Extracts the annotation content from the respective textarea elements, indexed by field name.
-	 * @returns {Map<string,string>}
-	 */
-	function getAnnotationContent() {
-		const contentMap = new Map();
-		if (odState.editType === 'field') {
-			const content = String($('#field_annotation').val() ?? '');
-			contentMap.set('field', content); // for field edit, the fieldname is hardcoded to 'field'
-		}
-		else if (odState.editType === 'matrix') {
-			$('tr.addFieldMatrixRow').each(function () {
-				const $tr = $(this);
-				const fieldName = String($tr.find('td.addFieldMatrixRowVar input').val() ?? '').trim();
-				// Only bother when field name has been set
-				if (fieldName === '') return;
-				const content = String($tr.find('td.addFieldMatrixRowFieldAnnotation textarea').val() ?? '');
-				contentMap.set(fieldName, content);
-			});
-		}
-		return contentMap;
-	}
-
-
-
 
 	/**
 	 * Escapes text for safe HTML rendering.
@@ -825,6 +801,19 @@
 		refreshAnnotationRows();
 	}
 
+
+	function initInfoPopover() {
+		odState.$info.popover({
+			trigger: 'click hover focus',
+			customClass: 'rome-annotation-popover',
+			html: true,
+			sanitize: false,
+			container: odState.$dlg.get(0),
+			content: () => getSelectedAnnotationPopoverHtml(),
+			title: 'Annotation to be added',
+			placement: 'top'
+		});
+	}
 
 	function refreshAnnotationRows() {
 		const rowIds = Object.keys(odState.parseResults);
