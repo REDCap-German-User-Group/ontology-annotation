@@ -16,11 +16,12 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 	<p class="text-muted">
 		About content &hellip;
 	</p>
-	<hr>
-	<h2>External Libraries</h2>
-	<p>ROME makes use of the following third party libraries and softwares:</p>
-	<ul>
-		<li><b>Tom Select</b> (Apache 2.0) - <a target="_blank" href="https://tom-select.js.org/">https://tom-select.js.org/</a></li>
-		<li><b>hghlight.js</b> (BSD-3-Clause) - <a target="_blank" href="https://highlightjs.org/">https://highlightjs.org/</a></li>
-	</ul>
+	<hr class="mt-5">
+	<section class="fs12 text-muted ms-2 me-2">
+		<b>External Libraries</b> &mdash;<br>ROME makes use of the following third party libraries and softwares:
+		<ul>
+			<li><b>Tom Select</b> (Apache 2.0) - <a target="_blank" href="https://tom-select.js.org/">https://tom-select.js.org/</a></li>
+			<li><b>highlight.js</b> (BSD-3-Clause) - <a target="_blank" href="https://highlightjs.org/">https://highlightjs.org/</a></li>
+		</ul>
+	</section>
 </div>
