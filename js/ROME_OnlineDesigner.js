@@ -53,64 +53,8 @@
 	let JSMO = null;
 
 
-
-
-	/** @type {OnlineDesignerState} */ // OBSOLETE
-	const designerState = {
-	};
-
 	/** @type {OntologyAnnotationParser} */
 	let ontologyParser;
-
-	/**
-	 * Mutable in-dialog annotation draft state for single-field editing.
-	 * @type {AnnotationState}
-	 */
-	const annotationState = {
-
-		base: null,
-		current: null,
-		lastParseResult: null,
-		dirty: false,
-		parseStatus: 'valid',
-		parseErrorMessage: '',
-		manualMode: false,
-		lastSyncedTextarea: ''
-	};
-
-	/**
-	 * OBSOLETE
-	 * Mutable in-dialog annotation draft state for matrix editing.
-	 * @type {MatrixDraftState}
-	 */
-	const matrixDraftState = {
-		rows: {},
-		rowOrder: [],
-		observer: null
-	};
-
-	/**
-	 * OBSOLETE - see odState.selected
-	 * Current search selection used by the Add button flow.
-	 * @type {AnnotationSelectionState}
-	 */
-	const selectionState = {
-		selected: null
-	};
-
-	/**
-	 * OBSOLETE see dtInstance, dtAdvancedUiEnabled in odState
-	 * DataTable integration state for the annotation grid.
-	 * @type {AnnotationTableState}
-	 */
-	const annotationTableState = {
-		dt: null,
-		advancedUiEnabled: false
-	};
-
-	// OBSOLETE ??
-	/** @type {number|null} */
-	let manualImportTimer = null;
 
 
 	/** Flag used to signal that the intercepted save operations should proceed */
@@ -971,18 +915,6 @@
 		return ontologyParser.parse(value);
 	}
 
-	/**
-	 * Returns the currently active single-field draft annotation.
-	 * @returns {OntologyAnnotationJSON}
-	 */
-	function getSingleDraftAnnotation() {
-		if (!annotationState.current) {
-			annotationState.current = normalizeAnnotation(getMinimalOntologyAnnotation());
-		}
-		return annotationState.current;
-	}
-
-
 
 
 
@@ -1599,26 +1531,6 @@
 
 	//#endregion Action Tag Parser and Annotation Accessor
 
-	/**
-	 * Returns current field names in context (single-field or all matrix row vars).
-	 * @returns {string[]}
-	 */
-	function getFieldNames() {
-		const fieldNames = [];
-		if (designerState.isMatrix) {
-			designerState.$dlg.find('input.field_name_matrix').each(function () {
-				const fieldName = `${$(this).val()}`.trim();
-				if (fieldName !== '') {
-					fieldNames.push(fieldName);
-				}
-			});
-
-		}
-		else {
-			fieldNames.push(String(designerState.$dlg.find('input#field_name').val() ?? '??'));
-		}
-		return fieldNames;
-	}
 
 
 
@@ -1776,7 +1688,7 @@
 
 	/**
 	 * Returns rows that target missing choice codes.
-	 * @returns {AnnotationTableEntry[]}
+	 * @returns {ROME_AnnotationRow[]}
 	 */
 	function getMissingChoiceTargetRows() {
 		return []; // TODO
@@ -1788,9 +1700,9 @@
 	 * @returns {JQuery<HTMLElement>|undefined}
 	 */
 	function getSelect2DropdownParent() {
-		const $dialog = designerState.$dlg?.closest('[role="dialog"]');
+		const $dialog = odState.$dlg?.closest('[role="dialog"]');
 		if ($dialog && $dialog.length > 0) return $dialog;
-		return designerState.$dlg;
+		return odState.$dlg;
 	}
 
 	/**
@@ -2023,7 +1935,7 @@
 			}
 		});
 		odState.$search.on('input.ROME_autocomplete', function () {
-			if (selectionState.selected) {
+			if (odState.selected) {
 				setSelectedAnnotation(null);
 			}
 		});
