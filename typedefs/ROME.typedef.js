@@ -176,9 +176,15 @@
  * @property {string=} text
  * @property {OntologyAnnotationCoding[]} coding
  * @property {Object<string, {coding:OntologyAnnotationCoding[]}>} valueCodingMap
- * @property {{coding:OntologyAnnotationCoding[], text:?string}=} unit
+ * @property {OntologyAnnotationUnit} unit
  */
 
+
+/**
+ * @typedef {Object} OntologyAnnotationUnit
+ * @property {OntologyAnnotationCoding[]} coding
+ * @property {string=} text
+ */
 
 /**
  * @typedef {Object} OntologyAnnotationCoding
@@ -401,7 +407,6 @@
  * @property {Object<?string,{label:string, pos:Number}>} choiceLabelMap
  * @property {Object<?string,string>} rowIdFieldMap
  * @property {boolean} showUnitWarning
- * @property {function} fitDialog
  * 
  */
 
