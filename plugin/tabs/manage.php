@@ -16,4 +16,13 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 	<p class="text-muted">
 		Management options will appear here soon &hellip;
 	</p>
+	<div class="form-check form-switch">
+		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-discoverable" data-rome-setting="discoverable">
+		<label class="form-check-label" for="rome-set-discoverable">Make the metadata (annotated fields + contact data) from this project discoverable to other users.</label>
+	</div>
+
+
+
+
+
 </div>

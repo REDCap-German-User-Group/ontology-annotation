@@ -16,7 +16,8 @@ $user = $module->framework->getUser();
 if ($user == null) exit;
 $is_project = $config['pid'] !== null;
 
-$annotate_enabled = $manage_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
+$annotate_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
+$manage_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
 $configure_enabled = $user->isSuperUser() || 
 	(
 		$is_project && 

@@ -13,7 +13,11 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 ?>
 <div class="rome-plugin-page">
-	<h2>General Configuration</h2>
+	<h2>General Configuration (Admins Only)</h2>
+	<div class="form-check form-switch">
+		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-can-configure" data-rome-setting="can-configure">
+		<label class="form-check-label" for="rome-set-can-configure">Allow access to this page for users with design rights in this project.</label>
+	</div>
 	<p class="text-muted">
 		Configuration options (instance-wide) will appear here soon &hellip;
 	</p>
