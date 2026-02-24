@@ -33,7 +33,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Hooks
 
-	function redcap_module_link_check_display($project_id, $link) {
+	function redcap_module_link_check_display($project_id, $link)
+	{
 		// Allow for all users in all contexts
 		return $link;
 	}
@@ -61,13 +62,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Only run in project context and on specific pages
 		if ($project_id == null) return;
 		$page = defined('PAGE') ? PAGE : null;
-		if (!in_array($page, ['Design/edit_field.php'])) return;
 
 		// Online Designer - Edit Field
 		if ($page == 'Design/edit_field.php') {
 			$this->initProject($project_id);
 			$field_name = $_POST['field_name'];
-			$exclude = ($_POST['rome-em-fieldedit-exclude'] ?? '0') == '1';
+			$exclude = ($_POST['rome-em-exclude'] ?? '0') == '1';
 			$this->set_field_exclusion([$field_name], $exclude);
 		}
 	}
@@ -237,9 +237,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Write back updated repeatable setting if needed.
 		if (count($changed_entries)) {
 			// Full per key arrays must be written. Therefore, we need to transform them first
+			$firstChangedEntry = $changed_entries[array_key_first($changed_entries)] ?? [];
 			$valuesByKey = [];
 			foreach ($entries as $idx => $entry) {
-				foreach (array_first($changed_entries) as $key => $value) {
+				foreach ($firstChangedEntry as $key => $value) {
 					if (array_key_exists($idx, $changed_entries)) {
 						// Use changed value
 						$value = $changed_entries[$idx][$key];
@@ -362,9 +363,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'sources' => $sources_list,
 			'searchEndpoint' => $this->framework->getUrl('ajax/search.php'),
 			'pollEndpoint' => $this->framework->getUrl('ajax/poll.php'),
+			'minSearchLength' => self::MIN_SEARCH_LENGTH,
+			'fixedEnums' => $this->getFixedEnums(),
+
 		];
 		// Add some language strings
 		$this->framework->tt_transferToJavascriptModuleObject([
+			'fieldedit_07',
 			'fieldedit_17',
 			'fieldedit_18',
 			'fieldedit_19',
@@ -372,9 +377,17 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$config = array_merge($config, $this->refresh_exclusions($form));
 		$ih = $this->getInjectionHelper();
 		$ih->js('js/ConsoleDebugLogger.js');
+		$ih->js('js/WatchTargets.js');
 		$ih->js('js/ROME_OnlineDesigner.js');
 		$ih->css('css/ROME_OnlineDesigner.css');
 		echo RCView::script(self::NS_PREFIX . self::EM_NAME . '.init(' . json_encode($config) . ", $jsmo_name);");
+	}
+
+	private function getFixedEnums() {
+		return [
+			'truefalse' => "1, ".\RCView::getLangStringByKey('design_186')."\n0, ".\RCView::getLangStringByKey('design_187'),
+			'yesno' => "1, ".\RCView::getLangStringByKey('design_100')."\n0, ".\RCView::getLangStringByKey('design_99'),
+		];
 	}
 
 	private function add_templates($view)
@@ -390,37 +403,60 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				<div class="rome-edit-field-ui-container">
 					<div class="rome-edit-field-ui-header">
 						<h1><?= $this->tt('fieldedit_01') ?></h1>
-						<input type="checkbox" class="form-check-input ms-3 rome-em-fieldedit-exclude">
-						<label class="form-check-label ms-1 rome-em-fieldedit-exclude">
-							<span class="rome-em-fieldedit-exclude-field">
+						<div class="rome-em-exclude-field">
+							<label class="form-check-label ms-1 rome-em-field-exclude">
+								<input type="checkbox" class="form-check-input ms-3 rome-em-exclude">
 								<?= $this->tt('fieldedit_11') ?>
-							</span>
-							<span class="rome-em-fieldedit-exclude-matrix">
+							</label>
+						</div>
+						<div class="rome-em-exclude-matrix">
+							<label  class="form-check-label ms-1 rome-em-matrix-exclude">
+								<input type="checkbox" class="form-check-input ms-3 rome-em-exclude">
 								<?= $this->tt('fieldedit_12') ?>
-							</span>
-						</label>
+							</label>
+						</div>
 					</div>
 					<div class="rome-edit-field-ui-body">
-						<div id="rome-search-bar" class="d-flex align-items-baseline gap-2">
-							<span><?= $this->tt('fieldedit_08') ?></span>
-							<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm rome-search" placeholder="<?= $this->tt('fieldedit_02') ?>">
-							<span class="rome-edit-field-ui-spinner">
-								<i class="fa-solid fa-spinner fa-spin-pulse rome-edit-field-ui-spinner-spinning"></i>
-								<i class="fa-solid fa-arrow-right fa-lg rome-edit-field-ui-spinner-not-spinning"></i>
-							</span>
-							<select id="rome-field-choice" class="form-select form-select-sm w-auto">
-								<option value="dataElement"><?= $this->tt('fieldedit_18') ?></option>
-							</select>
-							<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs" disabled><?= $this->tt('fieldedit_10') ?></button>
-							<div id="rome-edit-field-error">
-								<i class="fa-solid fa-circle-exclamation fa-lg fa-fade"></i>
+						<div class="rome-edit-field-ui-content-wrapper">
+							<div id="rome-search-bar" class="d-flex align-items-baseline gap-2">
+								<span><?= $this->tt('fieldedit_08') ?></span>
+								<input type="search" name="rome-em-fieldedit-search" class="form-control form-control-sm rome-search" placeholder="<?= $this->tt('fieldedit_02') ?>">
+								<span class="rome-edit-field-ui-spinner">
+									<i class="fa-solid fa-spinner fa-spin-pulse rome-edit-field-ui-spinner-spinning"></i>
+									<i class="fa-solid fa-arrow-right fa-lg rome-edit-field-ui-spinner-not-spinning"></i>
+								</span>
+								<select id="rome-field-choice" class="form-select form-select-sm w-auto">
+									<option value="dataElement"><?= $this->tt('fieldedit_18') ?></option>
+								</select>
+								<button id="rome-add-button" data-rome-action="add" type="button" class="btn btn-rcgreen btn-xs" disabled><?= $this->tt('fieldedit_10') ?></button>
+								<div id="rome-add-selection-info" class="rome-add-selection-info" title="No selection">
+									<i class="fa-solid fa-circle-info"></i>
+								</div>
+								<div id="rome-search-error">
+									<i class="fa-solid fa-circle-exclamation fa-lg fa-fade"></i>
+								</div>
 							</div>
-						</div>
-						<div class="rome-edit-field-ui-list">
-							<h2><?= $this->tt('fieldedit_03') ?></h2>
-						</div>
-						<div class="rome-edit-field-ui-list-empty mt-2">
-							<?= $this->tt('fieldedit_07') ?>
+							<div class="rome-edit-field-ui-list">
+								<table id="rome-annotation-table" class="table table-sm table-striped align-middle">
+									<thead>
+										<tr>
+											<th>System</th>
+											<th>Code</th>
+											<th>Display</th>
+											<th>Target</th>
+											<th>Action</th>
+										</tr>
+									</thead>
+									<tbody></tbody>
+								</table>
+							</div>
+							<div class="rome-json-error-overlay" style="display:none;">
+								<div class="rome-json-error-overlay-content">
+									<h3>Annotation JSON Error</h3>
+									<div class="rome-json-error-overlay-message"></div>
+									<p>Please fix the `@ONTOLOGY` JSON in Field Annotation. Search and table actions are temporarily disabled.</p>
+								</div>
+							</div>
 						</div>
 					</div>
 					<div class="rome-edit-field-ui-footer">
@@ -702,7 +738,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		SQL;
 		$q = $this->query($sql, [$this->PREFIX]);
 		$result = $q->fetch_assoc();
-		return $result["info"];
+		return $result["info"]; // JSON string
 	}
 
 	#endregion
@@ -814,8 +850,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$minimal = [
 			"dataElement" => [
 				'coding' => [],
-				'text' => '',
 				'valueCodingMap' => new stdClass(),
+				'unit' => [
+					'coding' => [],
+					'text' => '',
+				]
 			],
 		];
 		return json_encode($minimal, JSON_UNESCAPED_UNICODE);
@@ -1546,8 +1585,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$indexCacheKey = null;
 				$itemCount = -1;
 				$meta = $src['meta'] ?? [];
-			}
-			else {
+			} else {
 				$docId = (int)$src['doc_id'];
 				$indexCacheKey = 'idx:' . $id . ':' . $docId;
 				$itemCount = (int)($src['item_count'] ?? 0);
@@ -1635,7 +1673,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $out;
 	}
 
-	function getConfiguredActiveRemoteSources(int $project_id): array 
+	function getConfiguredActiveRemoteSources(int $project_id): array
 	{
 		$out = [];
 		// TODO: get configured sources from project settings
@@ -1778,7 +1816,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		// One unified BioPortal call for misses
 		$pagesize = $limit_per_acronym * count($misses);
-		
+
 		$params = [
 			'q' => $q,
 			'ontologies' => implode(',', $misses),
@@ -2004,10 +2042,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return array_keys($set);
 	}
 
-	
+
 	#endregion
 
-	function getUserAgentString() 
+	function getUserAgentString()
 	{
 		return 'ROME-REDCap-EM (BioPortal search, experimental)';
 	}
@@ -2019,14 +2057,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * @param array $cronInfo 
 	 * @return string 
 	 */
-	function cron_prune($cronInfo) {
+	function cron_prune($cronInfo)
+	{
 		try {
 			$this->initConfig();
 			$cache = $this->getCache();
 			$cache->prune();
-		}
-		catch (Exception $e) {
-			$this->framework->log('Cache pruning failed: '.$e->getMessage());
+		} catch (Exception $e) {
+			$this->framework->log('Cache pruning failed: ' . $e->getMessage());
 			return "ROME: Pruning failed.";
 		}
 		return "ROME: Pruning completed successfully.";

@@ -4,6 +4,7 @@
 	margin-top: 10px;
 	border: 1px solid #ccc;
 	padding: 6px 8px 10px 8px;
+	width: 100%;
 }
 
 #addMatrixPopup .rome-edit-field-ui-container {
@@ -23,7 +24,11 @@
 }
 
 .rome-edit-field-ui-container input[type="search"] {
-	max-width: 500px;
+	max-width: 400px;
+}
+
+.rome-edit-field-ui-list {
+	margin-top: 10px;
 }
 
 .rome-edit-field-ui-list-empty {
@@ -44,19 +49,23 @@
 	display: flex;
 }
 
-#div_add_field .rome-em-fieldedit-exclude-matrix {
+#div_add_field .rome-em-exclude-matrix {
 	display: none;
 }
 
-#addMatrixPopup .rome-em-fieldedit-exclude-field {
+#addMatrixPopup .rome-em-exclude-field {
 	display: none;
+}
+
+#addMatrixPopup #rome-add-button {
+	white-space: nowrap;
 }
 
 .rome-edit-field-ui-body {
 	margin-bottom: 10px;
 }
 
-.rome-edit-field-ui-container:has(input.rome-em-fieldedit-exclude:checked) .rome-edit-field-ui-body {
+.rome-edit-field-ui-container:has(input.rome-em-exclude:checked) .rome-edit-field-ui-body {
 	display: none;
 }
 
@@ -92,52 +101,208 @@
 	border-radius: var(--bs-border-radius-sm);
 }
 
-#rome-edit-field-error {
+#rome-search-errors {
 	color: var(--bs-danger);
 	display: none;
 }
 
-#rome-edit-field-error .fa-fade {
+.rome-add-selection-info {
+	display: none;
+	color: #6c757d;
+	cursor: pointer;
+}
+
+.rome-add-popover {
+	max-width: 320px;
+	font-size: 12px;
+}
+
+#rome-search-errors .fa-fade {
 	--fa-animation-duration: 1.5s;
 	--fa-fade-opacity: 0.7;
 }
 
+.rome-edit-field-ui-content-wrapper {
+	position: relative;
+}
+
+.rome-json-error-overlay {
+	position: absolute;
+	inset: 0;
+	background: rgba(255, 235, 235, 0.8);
+	z-index: 15;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 12px;
+}
+
+.rome-json-error-overlay-content {
+	background: #ffffff;
+	border: 1px solid #dc3545;
+	border-radius: 6px;
+	padding: 12px 14px;
+	max-width: 720px;
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.rome-json-error-overlay-content h3 {
+	margin: 0 0 8px 0;
+	font-size: 16px;
+	font-weight: 700;
+	color: #b02a37;
+}
+
+.rome-json-error-overlay-content p {
+	margin: 8px 0 0 0;
+}
+
 .rome-search {
-  border: 2px solid var(--bs-border-color);
+	border: 2px solid var(--bs-border-color);
 }
 
 /* Busy state: animated border */
-.rome-search.is-searching{
-  border: 2px solid transparent;          /* creates a real border-box to paint into */
-  background:
-    linear-gradient(var(--bs-body-bg), var(--bs-body-bg)) padding-box,
-    linear-gradient(90deg,
-      var(--bs-border-color),
-      var(--bs-primary),
-      var(--bs-border-color)
-    ) border-box;
+.rome-search.is-searching {
+	border: 2px solid transparent;
+	/* creates a real border-box to paint into */
+	background:
+		linear-gradient(var(--bs-body-bg), var(--bs-body-bg)) padding-box,
+		linear-gradient(90deg,
+			var(--bs-border-color),
+			var(--bs-primary),
+			var(--bs-border-color)) border-box;
 
-  /* IMPORTANT: make the border gradient wider so moving it is visible */
-  background-size: 100% 100%, 200% 100%;
-  background-position: 0 0, 0 0;
+	/* IMPORTANT: make the border gradient wider so moving it is visible */
+	background-size: 100% 100%, 200% 100%;
+	background-position: 0 0, 0 0;
 
-  animation: bs-search-border-scan 2.2s linear infinite;
+	animation: bs-search-border-scan 2.2s linear infinite;
 }
 
 /* Keep Bootstrap focus ring */
-.rome-search.is-searching:focus{
-    color: var(--bs-body-color);
-    background-color: var(--bs-body-bg);
-    outline: 0;
-    box-shadow: 0 0 0 .25rem rgba(13,110,253,.25);
+.rome-search.is-searching:focus {
+	color: var(--bs-body-color);
+	background-color: var(--bs-body-bg);
+	outline: 0;
+	box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .25);
 }
 
-@keyframes bs-search-border-scan{
-  to { background-position: 0 0, 200% 0; }
+.rome-search.is-no-results {
+	border-color: rgba(220, 53, 69, 0.45);
+	background-color: rgba(220, 53, 69, 0.06);
+}
+
+@keyframes bs-search-border-scan {
+	to {
+		background-position: 0 0, 200% 0;
+	}
 }
 
 
 .rome-ac-hl {
 	font-weight: 700;
-	color:rgb(80, 103, 235)
+	color: rgb(80, 103, 235)
+}
+
+.rome-target-warning {
+	margin-left: 4px;
+}
+
+.target-missing {
+	outline: 2px solid #dc3545;
+}
+
+.select2.target-missing {
+	border-radius: 5px;
+}
+
+#rome-annotation-table .select2-container .select2-selection--single {
+	height: 24px;
+}
+
+#rome-annotation-table .select2-container .select2-selection--single .select2-selection__rendered {
+	line-height: 23px;
+}
+
+#rome-annotation-table .select2-container--default .select2-selection--single .select2-selection__arrow {
+	top: -1px;
+}
+
+#div_add_field #rome-annotation-table {
+	min-width: 800px;
+	width: 100% !important;
+}
+#div_add_field #rome-annotation-table th {
+	width: auto !important;
+}
+
+#addMatrixPopup #rome-annotation-table {
+	width: 100%;
+}
+
+.rome-save-remove-button {
+	border: 1px solid #dc3545 !important;
+	color: #495057 !important;
+	background: #ffffff !important;
+}
+
+.rome-cancel-save-button {
+	font-weight: 700 !important;
+}
+
+.rome-save-keep-button {
+	border: 1px solid #198754 !important;
+	color: #495057 !important;
+	background: #ffffff !important;
+}
+
+#rome-annotation-table thead tr th {
+	font-size: 11px;
+	padding: 4px;
+	padding-right: 20px;
+
+}
+
+
+.rome-annotation-popover .popover-header {
+	font-size: 13px;
+	background-color: #319aff;
+	color: white;
+	padding: 4px 8px;
+}
+
+.rome-annotation-popover .popover-body {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+.rome-annotation-popover .popover-body div:has(a) {
+    margin-top: 4px;
+}
+
+.rome-edit-field-ui-list {
+	margin-top: 15px;
+}
+
+.rome-edit-field-ui-list .dataTables_empty {
+	font-style: italic;
+}
+
+#rome-annotation-table {
+	min-width: 730px;
+}
+
+
+.select2-dropdown {
+	min-width: 200px;
+}
+.select2-selection__rendered {
+	margin-top: -2px;
+}
+
+#rome-annotation-table .rome-row-target {
+	min-width: 150px;
+}
+#rome-search-bar .select2-container {
+	min-width: 180px;
 }

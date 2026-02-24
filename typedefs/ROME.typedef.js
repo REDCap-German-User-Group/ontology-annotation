@@ -1,5 +1,8 @@
 // ROME type definitions
 
+/// <reference path="../js/WatchTargets.js" />
+
+
 // @ts-check
 
 /**
@@ -30,6 +33,8 @@
  * @property {SourceInfo[]=} sources
  * @property {string=} searchEndpoint
  * @property {string=} pollEndpoint
+ * @property {Number=} minSearchLength
+ * @property {Object<?string,string>=} fixedEnums
  */
 
 /**
@@ -59,8 +64,69 @@
  * @property {string=} fieldType
  * @property {string=} enum
  * @property {boolean=} isMatrix
+ * @property {Number=} minItemsForSelect2
  * @property {JQuery<HTMLElement>=} $dlg
  * @property {JQuery<HTMLElement>=} $input
+ */
+
+/**
+ * @typedef {Object} AnnotationState
+ * @property {OntologyAnnotationJSON|null} base
+ * @property {OntologyAnnotationJSON|null} current
+ * @property {OntologyAnnotationParseResult|null} lastParseResult
+ * @property {boolean} dirty
+ * @property {'valid'|'invalid'} parseStatus
+ * @property {string} parseErrorMessage
+ * @property {boolean} manualMode
+ * @property {string} lastSyncedTextarea
+ */
+
+/**
+ * @typedef {Object} MatrixDraftRowState
+ * @property {string} rowId
+ * @property {string} varName
+ * @property {'valid'|'invalid'} parseStatus
+ * @property {string} parseErrorMessage
+ * @property {OntologyAnnotationJSON} base
+ * @property {OntologyAnnotationJSON} current
+ * @property {boolean} dirty
+ */
+
+/**
+ * @typedef {Object} MatrixDraftState
+ * @property {Object<string, MatrixDraftRowState>} rows
+ * @property {string[]} rowOrder
+ * @property {MutationObserver|null} observer
+ */
+
+/**
+ * @typedef {Object} SelectedAnnotationHit
+ * @property {string=} sourceId
+ * @property {string} system
+ * @property {string} code
+ * @property {string=} display
+ * @property {string=} type
+ */
+
+/**
+ * @typedef {Object} AnnotationSelectionState
+ * @property {SelectedAnnotationHit|null} selected
+ */
+
+/**
+ * @typedef {Object} AnnotationTableState
+ * @property {any} dt 
+ * @property {boolean} advancedUiEnabled
+ */
+
+/**
+ * @typedef {Object} AnnotationTableEntry
+ * @property {'field'|'unit'|'choice'} kind
+ * @property {string} fieldName
+ * @property {string} choiceCode
+ * @property {number} choicePosition
+ * @property {string} sortBy
+ * @property {{system:string, code:string, display:string}} annotation
  */
 
 /**
@@ -91,7 +157,7 @@
 
 /**
  * @typedef {Object} OntologyAnnotationJSON
- * @property {string} resourceType
+ * @property {string=} resourceType
  * @property {OntologyAnnotationMeta=} meta
  * @property {OntologyAnnotationDataElement} dataElement
  */
@@ -107,9 +173,25 @@
 
 /**
  * @typedef {Object} OntologyAnnotationDataElement
- * @property {string} type
+ * @property {string=} text
+ * @property {OntologyAnnotationCoding[]} coding
+ * @property {Object<string, {coding:OntologyAnnotationCoding[]}>} valueCodingMap
+ * @property {OntologyAnnotationUnit} unit
  */
 
+
+/**
+ * @typedef {Object} OntologyAnnotationUnit
+ * @property {OntologyAnnotationCoding[]} coding
+ * @property {string=} text
+ */
+
+/**
+ * @typedef {Object} OntologyAnnotationCoding
+ * @property {string} system
+ * @property {string} code
+ * @property {string=} display
+ */
 
 /**
  * @typedef {Object} OntologyAnnotationWarning
@@ -146,7 +228,7 @@
 
 /**
  * @typedef {Object} OntologyAnnotationParser
- * @property {(text: string) => OntologyAnnotationParseResult} parse
+ * @property {(fieldName: string, text: string) => OntologyAnnotationParseResult} parse
  *   Parse the LAST valid tag JSON object from the given text.
  */
 
@@ -154,12 +236,14 @@
 
 /**
  * @typedef {Object} OntologyAnnotationParseResult
+ * @property {string} rowId
  * @property {OntologyAnnotationJSON} json
  * @property {number} numTags
  * @property {boolean} usedFallback
  * @property {boolean} error
  * @property {string} errorMessage
  * @property {OntologyAnnotationWarning[]} warnings
+ * @property {string} originalText
  * @property {string} text
  *   Exact substring of the LAST valid tag occurrence: from tag start to end of JSON object.
  *   Empty string if no valid tag was found.
@@ -283,3 +367,70 @@
  * @property {(key: TranslationKey, item: any) => void} tt_add
  *   Adds or replaces an item (typically a string) in the JSMO language store under `key`.
  */
+
+
+
+/**
+ * @typedef {Object} ROME_OnlineDesignerState
+ * @property {'field'|'matrix'} editType
+ *   Tracks whether we're currently editing a field annotation or a matrix annotation
+ * @property {Object<string, OntologyAnnotationParseResult>} parseResults
+ * @property {string} fieldType
+ * @property {ROME_AnnotationRow[]} rows
+ *   Keeps track of the current state of annotation rows
+ * @property {boolean} enabled
+ *   Whether annotation facilities should be enabled for this field/matrix. If not, the UI
+ *   is largely disabled. When set to true, all action tags are removed immediatly, but a
+ *   backup copy will be retained in case the user flips the switch before saving (in case
+ *   of matrix groups and field name changes, field annotations that cannot be matched
+ *   must be shown as unassigned; these will definitely be lost if not reassigned.
+ * @property {WatchHandle=} fieldWatcher
+ *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer.
+ * @property {WatchHandle=} matrixWatcher
+ *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer.
+ * @property {SelectedAnnotationHit=} selected
+ *   Current search selection used by the Add button flow.
+ * @property {Object} dtInstance DataTables instance (TODO - type this properly)
+ * @property {boolean} dtAdvancedUiEnabled
+ * @property {JQuery<HTMLElement>=} $dlg
+ *   The field or matrix edit dialog
+ * @property {JQuery<HTMLElement>=} $editor
+ *   The ROME annotation editor surface
+ * @property {JQuery<HTMLElement>=} $add
+ * @property {JQuery<HTMLElement>=} $info
+ * @property {JQuery<HTMLElement>=} $error
+ * @property {JQuery<HTMLElement>=} $search
+ * @property {JQuery<HTMLElement>=} $searchSpinner
+ * @property {string=} helpContent
+ * @property {Number} minItemsForSelect2
+ * @property {ROME_TargetOption[]} targetOptions
+ * @property {Object<?string,{label:string, pos:Number}>} choiceLabelMap
+ * @property {Object<?string,string>} rowIdFieldMap
+ * @property {boolean} showUnitWarning
+ * 
+ */
+
+/**
+ * @typedef {Object} ROME_AnnotationRow
+ * @property {Object=} annotation
+ * @property {string=} targetName
+ * @property {'field'|'unit'|'choice'} targetType
+ * 
+ */
+
+/**
+ * @typedef {Object} ROME_TargetOption
+ * @property {string} rowId
+ * @property {string} value
+ * @property {string} display
+ * @property {'field'|'unit'|'choice'} targetType
+ */
+
+
+
+
+/**
+ * @typedef {Object<?string,string>} AnnotationContent
+ */
+
+

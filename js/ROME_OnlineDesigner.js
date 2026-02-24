@@ -1,10 +1,6 @@
 // Ontology Made Easy EM - Online Designer Integration
 
 // TODOs
-// - [ ] Scrap the whole Ontology table as is and replace with a DataTable and a backend structure*
-// - [ ] Instead of the search field, require manual search trigger and display results in a popover,
-//       which displays searches in internal and any external ontologies as they come in. Use a 
-//       DataTable for this, that can be searched and filtered further.
 // - [ ] Add a config option/filter to limit searching to selected ontologies (from those configured in
 //       the module settings).
 // - [ ] Add a schema validator (such as https://github.com/ajv-validator/ajv) to the module
@@ -21,8 +17,9 @@
 /// <reference types="jquery" />
 /// <reference types="jqueryui" />
 /// <reference path="../../../codebase/Resources/js/base.js" />
-/// <reference path="./ROME.typedef.js" />
+/// <reference path="../typedefs/ROME.typedef.js" />
 /// <reference path="./ConsoleDebugLogger.js" />
+/// <reference path="./WatchTargets.js" />
 
 // @ts-check
 ; (function () {
@@ -42,7 +39,7 @@
 	// @ts-ignore
 	const EM = window[NS_PREFIX + EM_NAME] ?? {
 		init: initialize,
-		showFieldHelp: showFieldHelp
+		showFieldHelp: showHelp
 	};
 	// @ts-ignore
 	window[NS_PREFIX + EM_NAME] = EM;
@@ -55,11 +52,69 @@
 	/** @type {JavascriptModuleObject|null} */
 	let JSMO = null;
 
-	/** @type {OnlineDesignerState} */
-	const designerState = {};
+
+
+
+	/** @type {OnlineDesignerState} */ // OBSOLETE
+	const designerState = {
+	};
 
 	/** @type {OntologyAnnotationParser} */
 	let ontologyParser;
+
+	/**
+	 * Mutable in-dialog annotation draft state for single-field editing.
+	 * @type {AnnotationState}
+	 */
+	const annotationState = {
+
+		base: null,
+		current: null,
+		lastParseResult: null,
+		dirty: false,
+		parseStatus: 'valid',
+		parseErrorMessage: '',
+		manualMode: false,
+		lastSyncedTextarea: ''
+	};
+
+	/**
+	 * OBSOLETE
+	 * Mutable in-dialog annotation draft state for matrix editing.
+	 * @type {MatrixDraftState}
+	 */
+	const matrixDraftState = {
+		rows: {},
+		rowOrder: [],
+		observer: null
+	};
+
+	/**
+	 * OBSOLETE - see odState.selected
+	 * Current search selection used by the Add button flow.
+	 * @type {AnnotationSelectionState}
+	 */
+	const selectionState = {
+		selected: null
+	};
+
+	/**
+	 * OBSOLETE see dtInstance, dtAdvancedUiEnabled in odState
+	 * DataTable integration state for the annotation grid.
+	 * @type {AnnotationTableState}
+	 */
+	const annotationTableState = {
+		dt: null,
+		advancedUiEnabled: false
+	};
+
+	// OBSOLETE ??
+	/** @type {number|null} */
+	let manualImportTimer = null;
+
+
+	/** Flag used to signal that the intercepted save operations should proceed */
+	const SAVE_SKIP_SENTINEL_KEY = '__romeSkipMissingChoicePrompt';
 
 	/**
 	 * Implements the public init method.
@@ -70,40 +125,1123 @@
 
 		config = config_data;
 		JSMO = jsmo;
+
 		// Configure the logger
 		LOGGER.configure({ active: config.debug, name: 'ROME Online Designer', version: config.version });
+
 		// Configure the ontology parser
 		ontologyParser = createOntologyAnnotationParser({
 			tag: config.atName,
 			getMinAnnotation: getMinimalOntologyAnnotation
 		});
 
-		//#region Hijack Hooks
+		// Hooks
+		$(function() {
+			ensureFieldSaveHook();
+			ensureMatrixSaveHook();
+			ensureFitDialogHook(); // <- Main entry point for UI injection.
+		});
+		addAjaxHooks();
 
-		// Adds the edit field UI
-		const orig_fitDialog = window['fitDialog'];
-		window['fitDialog'] = function (ob) {
-			orig_fitDialog(ob);
-			if (ob && ob['id'] && ['div_add_field', 'addMatrixPopup'].includes(ob.id)) {
-				designerState.$dlg = $(ob);
-				designerState.isMatrix = ob.id == 'addMatrixPopup';
-				try {
-					updateEditFieldUI();
+		log('Initialization complete.', config);
+	}
+
+	//#endregion
+
+	//#region Help
+
+	/**
+	 * Shows a help dialog in response to the "Learn about using Ontology Annotations"
+	 */
+	function showHelp() {
+		if (!odState.helpContent) {
+			JSMO.ajax('get-fieldhelp').then(response => {
+				odState.helpContent = response;
+				showHelp();
+			}).catch(err => {
+				error(err);
+			});
+		}
+		else {
+			log('Showing help dialog');
+			simpleDialog(odState.helpContent, config.moduleDisplayName);
+		}
+	}
+
+	//#endregion Help
+
+	/**
+	 * Refreshes the dialog-level ROME UI whenever REDCap opens/refits the editor dialog.
+	 * Initializes draft state from action tags and re-renders targets/table controls.
+	 * @returns {void}
+	 */
+	function injectAnnotationsEditor() {
+		if (odState.$dlg.find('.rome-edit-field-ui-container').length == 0) {
+			initAnnotationEditor();
+			log('UI initialized.', odState);
+		}
+		setInitialExcludedCheckboxState();
+		resetSearchState();
+		buildTargetOptions();
+		initAnnotationState();
+		
+		setTimeout(() => {
+			requestAnimationFrame(() => {
+				refitDialog();
+			});
+		}, 10);
+		// Disable search when there are errors and add error indicator
+		if (config.errors?.length ?? 0 > 0) {
+			odState.$editor.find('#rome-search-bar :input').prop('disabled', true);
+			showSearchErrorBadge(config.errors.join('\n'));
+		}
+	}
+
+	function refitDialog() {
+		try {
+			const winh = $(window).height();
+			odState.$dlg.dialog('option', 'height', winh - 20);
+			odState.$dlg.dialog('option', 'position', { my: 'center', at: 'center', of: window });
+		} 
+		catch (e) {
+			// Ignored 
+		}
+	}
+
+	/**
+	 * Returns whether the "exclude from annotation" checkbox is currently enabled.
+	 * @returns {boolean}
+	 */
+	function isExcludedCheckboxChecked() {
+		const checked = odState.$dlg.find('input.rome-em-exclude').prop('checked');
+		return checked;
+	}
+
+	/**
+	 * Determines the inital exclusion state and sets it in the UI
+	 */
+	function setInitialExcludedCheckboxState() {
+		let enabled = true;
+		if (odState.editType == 'matrix') {
+			const matrixGroupName = '' + odState.$dlg.find('#grid_name').val();
+			enabled = !config.matrixGroupsExcluded.includes(matrixGroupName);
+		}
+		else {
+			const fieldName = '' + odState.$dlg.find('input[name="field_name"]').val();
+			enabled = !config.fieldsExcluded.includes(fieldName);
+		}
+		updateExcludedCheckboxStateAndHiddenInput(enabled);
+	}
+
+	/**
+	 * Updates the enabled state and the state of the excluded checkbox and the hidden field.
+	 * @param {boolean} enabled
+	 */
+	function updateExcludedCheckboxStateAndHiddenInput(enabled) {
+		odState.enabled = enabled;
+		odState.$dlg.find('input.rome-em-exclude').prop('checked', !enabled);
+		$('input[name="rome-em-exclude"]').val(enabled ? '0' : '1');
+	}
+
+	/**
+	 * Updates the excluded hidden field before saving.
+	 */
+	function updateExcludedCheckboxHiddenInput() {
+		const exclude = odState.$dlg.find('input.rome-em-exclude').prop('checked');
+		$('input[name="rome-em-exclude"]').val(exclude ? '1' : '0');
+	}
+
+
+	/**
+	 * Inserts the ROME UI surface into the active REDCap dialog and wires handlers.
+	 */
+	function initAnnotationEditor() {
+		const editorHtml = $('#rome-em-fieldedit-ui-template').html().replaceAll('\n', '');
+		const $editor = $(editorHtml);
+		odState.$editor = $editor;
+		odState.$add = $editor.find('#rome-add-button');
+		odState.$info = $editor.find('#rome-add-selection-info');
+		odState.$error = $editor.find('#rome-search-error');
+		odState.$search = $editor.find('input[name=rome-em-fieldedit-search]');
+		odState.$searchSpinner = $editor.find('.rome-edit-field-ui-spinner');
+
+		if (odState.editType == 'matrix') {
+			$editor.find('.rome-em-exclude-field').remove();
+			// Insert at end of the dialog
+			odState.$dlg.append($editor);
+		}
+		else {
+			$editor.find('.rome-em-exclude-matrix').remove();
+			// Single-field-specific adjustments
+			// Mirror visibility of the Action Tags / Field Annotation DIV
+			// TODO - extract the mutation observer setup into a hook and call 
+			// helper hide/show functions
+			const actiontagsDIV = document.getElementById('div_field_annotation')
+				?? document.createElement('div');
+			const observer = new MutationObserver(() => {
+				const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
+				$editor.css('display', actiontagsVisible ? 'block' : 'none');
+			});
+			observer.observe(actiontagsDIV, { attributes: true, attributeFilter: ['style'] });
+			// Initial sync
+			const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
+			$editor.css('display', actiontagsVisible ? 'block' : 'none');
+			// Add a hidden field to transfer exclusion
+			odState.$dlg.find('#addFieldForm').prepend(
+				'<input type="hidden" name="rome-em-exclude" value="0">'
+			);
+
+			// Initial sync from the action tag
+			// updateAnnotationTable(); // TODO - Check
+
+			// Insert the UI as a new table row
+			const $tr = $('<tr><td colspan="2"></td></tr>');
+			$tr.find('td').append($editor);
+			odState.$dlg.find('#quesTextDiv > table > tbody').append($tr);
+		}
+
+		initSearchInput();
+		initUserChangeWatcher();
+		initDatatable();
+
+		// Table events
+		odState.$dlg.find('.rome-edit-field-ui-list').off('change').off('click')
+		.on('change', '.rome-row-target', dispatchTableEvent)
+		.on('click', '.rome-row-delete', dispatchTableEvent);
+		// Add new annotation event
+		odState.$add.off('click').on('click', function () {
+			addAnnotationRow();
+		});
+	}
+
+
+	function dispatchTableEvent(event) {
+
+		// Get row, then find the DataTable entry for the row
+		const $tr = $(event.target).closest('tr');
+		const rowIndex = odState.dtInstance.row($tr).index();
+		const row = odState.rows[rowIndex];
+
+		const action = event.type === 'change' ? 'assign-taget' : 'delete-row';
+		if (action === 'assign-taget') {
+			const newTarget = $(event.target).val();
+			assignRowToTarget(row, newTarget);
+		}
+		else {
+			deleteAnnotationRow(row);
+		}
+	}
+
+	/**
+	 * 
+	 * @param {ROME_AnnotationRow} row 
+	 * @param {string} newTarget 
+	 */
+	function assignRowToTarget(row, newTarget) {
+		log('Assigned row', row, 'to new target: "' + newTarget + '"', odState);
+		if (newTarget.startsWith('field:')) {
+			const targetName = newTarget.substring(6);
+			row.targetType = 'field';
+			row.targetName = targetName;
+		}
+		else if (newTarget === 'unit') {
+			row.targetType = 'unit';
+			row.targetName = '';
+		}
+		else if (newTarget.startsWith('choice:')) {
+			const code = newTarget.substring(7);
+			row.targetType = 'choice';
+			row.targetName = code;
+		}
+		redrawAnnotationsTable();
+		setAnnotations();
+	}
+
+	function deleteAnnotationRow(row) {
+		log('Deleting row', row);
+		odState.rows.splice(odState.rows.indexOf(row), 1);
+		redrawAnnotationsTable();
+		setAnnotations();
+	}
+
+
+	function addAnnotationRow() {
+		if (!odState.selected) return;
+		const target = `${odState.$dlg.find('#rome-field-choice').val() ?? ''}`;
+		if (target === '') return;
+		const targetType = target === 'unit' ? 'unit' : (target.startsWith('choice:') ? 'choice' : 'field');
+		const targetName = targetType === 'unit' ? '' : (targetType === 'choice' ? target.substring(7) : target.substring(6));
+		const coding = {
+			system: odState.selected.system,
+			code: odState.selected.code,
+			display: odState.selected.display
+		}
+		odState.rows.push({
+			annotation: coding,
+			targetType: targetType,
+			targetName: targetName
+		});
+		setAnnotations();
+		initAnnotationState();
+		log('Adding annotation row', coding);
+	}
+	
+
+	/**
+	 * Persists the current annotation rows to the respective textarea(s) as JSON action tag(s).
+	 * @param {boolean} removeNonExistentChoices When true, non-existent choices will be removed
+	 */
+	function setAnnotations(removeNonExistentChoices = false) {
+		getWatcher().pause();
+		// Build unit and choice stub
+		const stub = getMinimalOntologyAnnotation();
+		// Unit annotation(s)
+		odState.rows.filter(r => r.targetType === 'unit').forEach(r => {
+			stub.dataElement.unit.coding.push(r.annotation);
+		});
+		if (stub.dataElement.unit.coding.length === 0) {
+			delete stub.dataElement.unit;
+		}
+		else {
+			stub.dataElement.unit.text = stub.dataElement.unit.coding[0].display ?? '';
+		}
+		// Choice annotations
+		for (const code of Object.keys(odState.choiceLabelMap)) {
+			stub.dataElement.valueCodingMap[code] = { coding: [] };
+		}
+		odState.rows.filter(r => r.targetType === 'choice').forEach(r => {
+			if (!odState.choiceLabelMap[r.targetName]) {
+				if (removeNonExistentChoices) return;
+				if(!stub.dataElement.valueCodingMap[r.targetName]) {
+					stub.dataElement.valueCodingMap[r.targetName] = { coding: [] };
 				}
-				catch (e) {
-					console.error(e);
+			}
+			stub.dataElement.valueCodingMap[r.targetName].coding.push(r.annotation);
+		});
+		for (const code of Object.keys(stub.dataElement.valueCodingMap)) {
+			if (stub.dataElement.valueCodingMap[code].coding.length === 0) {
+				delete stub.dataElement.valueCodingMap[code];
+			}
+		}
+		// Field annotations
+		const selector = odState.editType === 'field' ? '#field_annotation' : 'textarea[name=addFieldMatrixRow-annotation]';
+		odState.$dlg.find(selector).each(function () {
+			const $annotation = $(this);
+			const rowId = odState.editType === 'field' ? '' : ensureMatrixRowId($annotation.closest('tr'));
+			odState.rows
+				.filter(r => r.targetType === 'field' && r.targetName === rowId)
+				.forEach(r => {
+					stub.dataElement.coding.push(r.annotation);
+				});
+			const jsonString = `${config.atName}=${JSON.stringify(stub, null, 2)}`;
+			const prevParsed = odState.parseResults[rowId] ?? null;
+			if (prevParsed === null) {
+				$annotation.val(jsonString);
+			}
+			else {
+				// Replace part from start to end with new string, preserving any text before or after
+				const newVal = prevParsed.originalText.substring(0, prevParsed.start) + jsonString + prevParsed.originalText.substring(prevParsed.end);
+				$annotation.val(newVal);
+			}
+			// Clear codings for next iteration
+			stub.dataElement.coding = [];
+		});
+		getWatcher().resume();
+		initAnnotationState();
+		log('Updating annotations with current state.', odState);
+	}
+
+	//#region DataTable Rendering
+
+	/**
+	 * Initializes the DataTable instance for annotation display and manipulation.
+	 */
+	function initDatatable() {
+		const $table = odState.$dlg.find('#rome-annotation-table');
+		odState.dtInstance = $table.DataTable({
+			autoWidth: true,
+			data: odState.rows,
+			columns: [
+				{
+					data: null,
+					render: (_data, _type, row) => renderSystemColumn(row)
+				},
+				{
+					data: null,
+					render: (_data, _type, row) => renderCodeColumn(row)
+				},
+				{
+					data: null,
+					render: (_data, _type, row) => renderDisplayColumn(row)
+				},
+				{
+					data: null,
+					render: (_data, type, row) => {
+						if (type === 'sort' || type === 'type') {
+							return getTargetSortKey(row);
+						}
+						return renderTargetColumn(row);
+					}
+				},
+				{
+					data: null,
+					orderable: false,
+					searchable: false,
+					render: (_data, _type, row) => renderActionColumn(row)
+				}
+			],
+			language: {
+				emptyTable: JSMO.tt('fieldedit_07')
+			},
+			paging: odState.dtAdvancedUiEnabled,
+			searching: odState.dtAdvancedUiEnabled,
+			info: odState.dtAdvancedUiEnabled,
+			lengthChange: false,
+			pageLength: 10,
+			order: [[3, 'asc']],
+			createdRow: (rowEl, rowData) => {
+				$(rowEl).data('rome-entry', rowData);
+			}
+		});
+	}
+
+	/**
+	 * Renders System column cell content.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderSystemColumn(row) {
+		return escapeHTML(row.annotation?.system || '?');
+	}
+
+	/**
+	 * Renders Code column cell content, with known-system external link when available.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderCodeColumn(row) {
+		const system = row.annotation?.system || '';
+		const code = row.annotation?.code || '';
+		if (config.knownLinks?.[system]) {
+			return `<a target="_blank" href="${escapeHTML(config.knownLinks[system] + code)}">${escapeHTML(code || '?')}</a>`;
+		}
+		return escapeHTML(code || '?');
+	}
+
+	/**
+	 * Renders Display column cell content.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderDisplayColumn(row) {
+		return escapeHTML(row.annotation?.display || '');
+	}
+
+	/**
+	 * Renders Target column select control for one row.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderTargetColumn(row) {
+
+		const rowTarget = getRowTargetValue(row);
+		const isMissingTarget = odState.targetOptions.some(t => t.value === rowTarget) === false;
+		const rowTargets = odState.targetOptions.slice();
+		if (isMissingTarget) {
+			const display = `Missing target: ${row.targetType === 'field'
+					? `Field: ${row.targetName}`
+					: (row.targetType === 'choice' ? `Choice [${row.targetName}]` : 'Unit')}`;
+			rowTargets.unshift({
+				rowId: '',
+				value: rowTarget,
+				display: display,
+				targetType: row.targetType
+			});
+		}
+		return `<select class="form-select form-select-xs rome-row-target ${isMissingTarget ? 'target-missing' : ''}">
+			${rowTargets.map(target => `<option value="${escapeHTML(target.value)}" ${target.value === rowTarget ? 'selected' : ''}>${escapeHTML(target.display)}</option>`).join('')}
+		</select>`;
+	}
+
+	function getRowTargetValue(row) {
+		if (row.targetType === 'field') {
+			return `field:${row.targetName}`;
+		}
+		if (row.targetType === 'unit') {
+			return 'unit';
+		}
+		if (row.targetType === 'choice') {
+			return `choice:${row.targetName}`;
+		}
+		return '';
+	}
+
+	/**
+	 * Builds stable sort key for target column.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function getTargetSortKey(row) {
+		if (row.targetType === 'field') {
+			return 'a:' + (odState.rowIdFieldMap[row.targetName] ?? row.targetName ?? '?');
+		}
+		if (row.targetType === 'unit') {
+			return 'b:';
+		}
+		if (row.targetType === 'choice') {
+			return 'c:' + (odState.choiceLabelMap[row.targetName]?.pos || '0');
+		}
+		return 'z:';
+	}
+
+	/**
+	 * Renders Action column controls for one row.
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
+	function renderActionColumn(row) {
+		const warningIcon = (odState.showUnitWarning && row.targetType === 'unit')
+			? '<span class="rome-target-warning text-warning rome-unit-row-warning ms-2" title="Unit targets are unusual for this field type."><i class="fa-solid fa-triangle-exclamation"></i></span>'
+			: '';
+		return `<button type="button" class="btn btn-xs btn-link text-danger p-0 rome-row-delete" title="Delete annotation"><i class="fa fa-trash"></i></button>${warningIcon}`;
+	}
+
+	/**
+	 * Redraws the annotation DataTable.
+	 */
+	function redrawAnnotationsTable() {
+		odState.dtInstance.clear().rows.add(odState.rows).draw();
+	}
+
+	//#endregion DataTable Rendering
+
+
+
+	/**
+	 * Persists matrix exclusion status via module AJAX and updates cached UI config.
+	 * @param {string} matrixGroupName
+	 * @param {boolean} exclude
+	 * @returns {void}
+	 */
+	function saveMatrixFormExclusion(matrixGroupName, exclude) {
+		log('Saving exclusion for matrix group "' + matrixGroupName + '": ', exclude);
+		JSMO.ajax('set-matrix-exclusion', {
+			grid_name: matrixGroupName,
+			exclude: exclude ? '1' : '0'
+		});
+		// Update config
+		if (exclude) {
+			if (!config.matrixGroupsExcluded.includes(matrixGroupName)) {
+				config.matrixGroupsExcluded.push(matrixGroupName);
+			}
+		}
+		else {
+			config.matrixGroupsExcluded = config.matrixGroupsExcluded.filter(val => val != matrixGroupName);
+		}
+	}
+
+
+
+
+	/** @type {ROME_OnlineDesignerState} */
+	const odState = {
+		editType: 'field',
+		fieldType: '',
+		parseResults: {},
+		rows: [],
+		fieldWatcher: null,
+		matrixWatcher: null,
+		enabled: true, // TODO - set this based on the exclusion state
+		dtInstance: null,
+		dtAdvancedUiEnabled: false,
+		selected: null,
+		$dlg: null,
+		$editor: null,
+		$add: null,
+		$error: null,
+		$info: null,
+		$search: null,
+		$searchSpinner: null,
+		helpContent: null,
+		minItemsForSelect2: 7,
+		targetOptions: [],
+		choiceLabelMap: {},
+		rowIdFieldMap: {},
+		showUnitWarning: false,
+	}
+
+
+	/**
+	 * Sets the current edit type based on the dialog object.
+	 * @param {HTMLElement} dialogObj 
+	 */
+	function setEditType(dialogObj) {
+		odState.editType = dialogObj.id == 'addMatrixPopup' ? 'matrix' : 'field'
+		odState.fieldType = odState.editType === 'field' ? String($('#field_type').val() ?? '') : 'matrix';
+		odState.$dlg = $(dialogObj);
+	}
+
+	/**
+	 * Initializes user change watchers for field name (matrix only), 
+	 * field annotation, and choices. Watchers are attached once only.
+	 */
+	function initUserChangeWatcher() {
+		const elements = [];
+		const filters = [];
+		const watcher = odState.editType === 'field' ? 'fieldWatcher' : 'matrixWatcher';
+		if (odState.editType === 'field' && odState.fieldWatcher == null) {
+			// Annotation
+			elements.push(document.getElementById('field_annotation'));
+			// Choices
+			elements.push(document.getElementById('element_enum'));
+			// Field type
+			elements.push(document.getElementById('field_type'));
+		}
+		else if (odState.editType === 'matrix' && odState.matrixWatcher == null) {
+			// Table of matrix fields (including field names and annotations)
+			elements.push(document.querySelector('table.addFieldMatrixRowParent'));
+			// Choices
+			elements.push(document.getElementById('element_enum_matrix'));
+			elements.push(document.getElementById('section_header_matrix'));
+			filters.push(
+				'input[name^=addFieldMatrixRow-varname_]',
+				'textarea[name=addFieldMatrixRow-annotation]',
+				'textarea[name=element_enum_matrix]',
+			);
+		}
+		if (elements.length > 0) {
+			// @ts-ignore
+			odState[watcher] = WatchTargets.watch(elements, {
+				onEvent: (info) => {
+					if (info.kind === 'edit') {
+						const $el = $(info.el);
+						if ($el.is('.field_name_matrix')) {
+							// Field name changed
+							buildTargetOptions();
+						}
+						else if ($el.is('.field_annotation_matrix, #field_annotation')) {
+							// Annotations changed
+							initAnnotationState();
+							refreshAnnotationRows();
+						}
+						else if ($el.is('#element_enum_matrix, #element_enum')) {
+							// Enum changed
+							buildTargetOptions();
+							updateAnnotationTargetsDropdown();
+							refreshAnnotationRows();
+						}
+						else if ($el.is('#field_type')) {
+							// Field type changed
+							buildTargetOptions();
+							odState.fieldType = String($el.val() ?? '');
+						}
+					}
+					else if (info.kind === 'rows') {
+						// Rows added or removed
+						refreshAnnotationRows();
+					}
+				},
+				tableCellFilter: filters,
+				fireOnInput: false,
+				patchProgrammatic: true
+			});
+		}
+	}
+
+	function getWatcher() {
+		return odState.editType === 'field' ? odState.fieldWatcher : odState.matrixWatcher;
+	}
+
+	/**
+	 * Extracts the annotation content from the respective textarea elements, indexed by field name.
+	 * @returns {Map<string,string>}
+	 */
+	function getAnnotationContent() {
+		const contentMap = new Map();
+		if (odState.editType === 'field') {
+			const content = String($('#field_annotation').val() ?? '');
+			contentMap.set('field', content); // for field edit, the fieldname is hardcoded to 'field'
+		}
+		else if (odState.editType === 'matrix') {
+			$('tr.addFieldMatrixRow').each(function () {
+				const $tr = $(this);
+				const fieldName = String($tr.find('td.addFieldMatrixRowVar input').val() ?? '').trim();
+				// Only bother when field name has been set
+				if (fieldName === '') return;
+				const content = String($tr.find('td.addFieldMatrixRowFieldAnnotation textarea').val() ?? '');
+				contentMap.set(fieldName, content);
+			});
+		}
+		return contentMap;
+	}
+
+
+
+
+	/**
+	 * Escapes text for safe HTML rendering.
+	 * @param {string} str
+	 * @returns {string}
+	 */
+	function escapeHTML(str) {
+		return String(str)
+			.replace(/&/g, '&amp;')
+			.replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+			.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	}
+
+	/**
+	 * Ensures ontology annotation JSON is normalized for draft-state operations.
+	 * @param {OntologyAnnotationJSON|Object} raw
+	 * @returns {OntologyAnnotationJSON}
+	 */
+	function normalizeAnnotation(raw) {
+		/** @type {OntologyAnnotationJSON} */
+		const annotation = (raw && typeof raw === 'object' && !Array.isArray(raw))
+			? /** @type {OntologyAnnotationJSON} */ (raw)
+			: getMinimalOntologyAnnotation();
+		if (!annotation.dataElement || typeof annotation.dataElement !== 'object') {
+			annotation.dataElement = getMinimalOntologyAnnotation().dataElement;
+		}
+		if (!Array.isArray(annotation.dataElement.coding)) {
+			annotation.dataElement.coding = [];
+		}
+		if (!annotation.dataElement.valueCodingMap || typeof annotation.dataElement.valueCodingMap !== 'object') {
+			annotation.dataElement.valueCodingMap = {};
+		}
+		for (const [choiceCode, entry] of Object.entries(annotation.dataElement.valueCodingMap)) {
+			if (!entry || typeof entry !== 'object') {
+				annotation.dataElement.valueCodingMap[choiceCode] = { coding: [] };
+				continue;
+			}
+			if (!Array.isArray(entry.coding)) {
+				entry.coding = [];
+			}
+		}
+		if (!annotation.dataElement.unit || typeof annotation.dataElement.unit !== 'object') {
+			annotation.dataElement.unit = { coding: [] };
+		}
+		if (!Array.isArray(annotation.dataElement.unit.coding)) {
+			annotation.dataElement.unit.coding = [];
+		}
+		return annotation;
+	}
+
+	/**
+	 * Initializes annotation draft state from currently rendered REDCap annotation input(s).
+	 * @returns {void}
+	 */
+	function initAnnotationState() {
+		odState.parseResults = {};
+		odState.rows = [];
+		if (odState.editType === 'matrix') {
+			initAnnotationStateFromMatrix();
+		}
+		else {
+			initAnnotationStateFromSingleField();
+		}
+	}
+
+	/**
+	 * Initializes annotation draft state from the field annotation 
+	 * @returns {void}
+	 */
+	function initAnnotationStateFromSingleField() {
+		const result = getOntologyAnnotation();
+		if (result.error) {
+			odState.parseResults = {};
+			setJsonIssueOverlay(result.errorMessage);
+		}
+		else {
+			odState.parseResults[result.rowId] = result;
+			setJsonIssueOverlay(false);
+		}
+		refreshAnnotationRows();
+	}
+
+	/**
+	 * Initializes matrix draft state by reading each matrix row annotation textarea.
+	 * @returns {void}
+	 */
+	function initAnnotationStateFromMatrix() {
+		getMatrixRows().forEach(($row) => {
+			const rowId = ensureMatrixRowId($row);
+			const fieldName = `${$row.find('.field_name_matrix:first').val() ?? ''}`.trim();
+			const result = getOntologyAnnotation(rowId);
+			odState.parseResults[rowId] = result;
+		});
+		for (const rowId in odState.parseResults) {
+			const result = odState.parseResults[rowId];
+			if (result.error) {
+				odState.parseResults = {};
+				setJsonIssueOverlay(result.errorMessage);
+				break;
+			}
+		}
+		refreshAnnotationRows();
+	}
+
+
+	function refreshAnnotationRows() {
+		const rowIds = Object.keys(odState.parseResults);
+		/** @type {ROME_AnnotationRow[]} */
+		const rows = [];
+		for (const rowId of rowIds) {
+			const annotations = normalizeAnnotation(
+				odState.parseResults[rowId].json
+			).dataElement;
+			for (const coding of annotations?.coding ?? []) {
+				if (checkCodingUnique(rows, coding, 'field')) {
+					rows.push({
+						targetType: 'field',
+						targetName: rowId,
+						annotation: coding,
+					});
+				}
+			}
+			for (const coding of annotations.unit?.coding ?? []) {
+				if (checkCodingUnique(rows, coding, 'unit')) {
+					rows.push({
+						targetType: 'unit',
+						targetName: null,
+						annotation: coding,
+					});
+				}
+			}
+			for (const code in annotations?.valueCodingMap ?? {}) {
+				const codings = annotations.valueCodingMap[code]?.coding ?? [];
+				for (const coding of codings) {
+					if (checkCodingUnique(rows, coding, 'choice')) {
+						rows.push({
+							targetType: 'choice',
+							targetName: code,
+							annotation: coding,
+						});
+					}
 				}
 			}
 		}
+		odState.rows = rows;
+		odState.dtInstance.clear().rows.add(rows).draw();
+	}
 
-		//#endregion
+	/**
+	 * 
+	 * @param {ROME_AnnotationRow[]} rows 
+	 * @param {OntologyAnnotationCoding} coding 
+	 * @param {'field'|'unit'|'choice'} targetType
+	 */
+	function checkCodingUnique(rows, coding, targetType) {
+		return !rows.some(r => r.targetType === targetType && r.annotation?.system === coding?.system && r.annotation?.code === coding?.code);
+	}
 
-		//#region AJAX Hooks
+	/**
+	 * Gets all matrix row elements from the currently open matrix dialog.
+	 * @returns {JQuery<HTMLElement>[]}
+	 */
+	function getMatrixRows() {
+		const rows = [];
+		odState.$dlg.find('.addFieldMatrixRowParent .addFieldMatrixRow').each(function () {
+			rows.push($(this));
+		});
+		return rows;
+	}
 
+	/**
+	 * Returns the stable client-side row identifier for a matrix row and creates one if missing.
+	 * @param {JQuery<HTMLElement>} $row
+	 * @returns {string}
+	 */
+	function ensureMatrixRowId($row) {
+		let rowId = `${$row.attr('data-rome-row-id') ?? ''}`.trim();
+		if (rowId === '') {
+			rowId = `row_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+			$row.attr('data-rome-row-id', rowId);
+		}
+		return rowId;
+	}
+
+	/**
+	 * Parses ontology annotation from one matrix-row textarea.
+	 * @param {JQuery<HTMLElement>} $row
+	 * @returns {OntologyAnnotationParseResult}
+	 */
+	function parseRowAnnotation($row) {
+		const value = `${$row.find('textarea[name="addFieldMatrixRow-annotation"]').first().val() ?? ''}`;
+		return ontologyParser.parse(value);
+	}
+
+	/**
+	 * Returns the currently active single-field draft annotation.
+	 * @returns {OntologyAnnotationJSON}
+	 */
+	function getSingleDraftAnnotation() {
+		if (!annotationState.current) {
+			annotationState.current = normalizeAnnotation(getMinimalOntologyAnnotation());
+		}
+		return annotationState.current;
+	}
+
+
+
+
+
+
+	/**
+	 * Ensures current UI draft can be saved and blocks submit if ONTOLOGY JSON is invalid.
+	 * @returns {boolean}
+	 */
+	function validateBeforeSave(onProceedAfterMissingChoiceWarning = null, skipMissingChoicePrompt = false) {
+
+		return true;
+
+		if (designerState.isMatrix) {
+			syncAllMatrixDraftsToTextareas();
+			const invalidRows = [];
+			getMatrixRows().forEach(($row) => {
+				const rowId = ensureMatrixRowId($row);
+				const rowState = matrixDraftState.rows[rowId];
+				if (!rowState) return;
+				const parse = parseRowAnnotation($row);
+				if (parse.error) {
+					invalidRows.push({ rowId, rowName: rowState.varName || rowId, message: parse.errorMessage });
+				}
+			});
+			if (invalidRows.length > 0) {
+				log('Blocked matrix save due to invalid rows:', invalidRows);
+				showInvalidSaveDialog(
+					`Cannot save matrix. ${invalidRows.length} row(s) contain invalid ontology JSON.`,
+					() => syncAllMatrixDraftsToTextareas()
+				);
+				return false;
+			}
+			return maybeWarnMissingChoiceTargetsOnSave(onProceedAfterMissingChoiceWarning, skipMissingChoicePrompt);
+		}
+		syncSingleDraftToTextarea(true);
+		const parse = getOntologyAnnotation();
+		if (parse.error) {
+			log('Blocked field save due to invalid ontology JSON:', parse.errorMessage);
+			showInvalidSaveDialog(
+				`Cannot save field. ${parse.errorMessage}`,
+				() => syncSingleDraftToTextarea(true)
+			);
+			return false;
+		}
+		return maybeWarnMissingChoiceTargetsOnSave(onProceedAfterMissingChoiceWarning, skipMissingChoicePrompt);
+	}
+
+	/**
+	 * Warns and blocks save when annotations are still mapped to missing choice targets.
+	 * Save can continue only after explicit user acknowledgement.
+	 * @param {null|(() => void)} onProceedAfterWarning
+	 * @returns {boolean}
+	 */
+	function maybeWarnMissingChoiceTargetsOnSave(onProceedAfterWarning = null, skipMissingChoicePrompt = false) {
+		if (skipMissingChoicePrompt) return true;
+		const missing = getMissingChoiceTargetRows();
+		if (missing.length === 0) return true;
+		log('Save warning: missing choice targets detected.', missing);
+		showMissingChoiceSaveDialog(missing.length, onProceedAfterWarning || null);
+		return false;
+	}
+
+	/**
+	 * Displays a blocking confirmation dialog for missing choice targets.
+	 * @param {number} count
+	 * @param {null|(() => void)} onProceed
+	 * @returns {void}
+	 */
+	function showMissingChoiceSaveDialog(count, onProceed = null) {
+		odState.$dlg.find('.rome-missing-choice-save-dialog').remove();
+		const $dlg = $('<div></div>')
+			.addClass('rome-missing-choice-save-dialog')
+			.html(
+				`${count} annotation(s) target choice values that no longer exist.<br><br>` +
+				`Any untargeted choice annotations may be lost when saving.<br><br>` +
+				`How do you want to proceed?`
+			)
+			.dialog({
+				modal: true,
+				title: 'Warning: Missing Choice Targets',
+				width: 520,
+				open: function () {
+					const $widget = $(this).dialog('widget');
+					const $buttons = $widget.find('.ui-dialog-buttonpane button');
+					$buttons.eq(0).addClass('rome-cancel-save-button');
+					$buttons.eq(1).addClass('rome-save-remove-button');
+					$buttons.eq(2).addClass('rome-save-keep-button');
+				},
+				close: function () {
+					$(this).dialog('destroy').remove();
+				},
+				buttons: [
+					{
+						text: 'Cancel',
+						click: function () {
+							$(this).dialog('close');
+						}
+					},
+					{
+						text: 'Save and remove',
+						click: function () {
+							removeMissingChoiceTargetsFromDraft();
+							$(this).dialog('close');
+							if (typeof onProceed === 'function') {
+								onProceed();
+							}
+						}
+					},
+					{
+						text: 'Save and keep',
+						click: function () {
+							$(this).dialog('close');
+							if (typeof onProceed === 'function') {
+								onProceed();
+							}
+						}
+					}
+				]
+			});
+		log('Displayed blocking missing-choice warning dialog.', { count, hasProceed: typeof onProceed === 'function' });
+	}
+
+	/**
+	 * Shows invalid-save dialog with options to continue manual editing or revert to valid draft state.
+	 * @param {string} message
+	 * @param {() => void} onRevert
+	 * @returns {void}
+	 */
+	function showInvalidSaveDialog(message, onRevert) {
+		const dialogId = `rome-invalid-${Date.now()}`;
+		const content = `
+			<div id="${dialogId}" class="rome-invalid-dialog">
+				<p>${escapeHTML(message)}</p>
+				<p>You can fix the JSON manually, or revert to the current in-memory annotation state.</p>
+				<div class="d-flex gap-2 justify-content-end">
+					<button type="button" class="btn btn-xs btn-defaultrc rome-invalid-fix">Fix manually</button>
+					<button type="button" class="btn btn-xs btn-rcgreen rome-invalid-revert">Revert to draft</button>
+				</div>
+			</div>`;
+		simpleDialog(content, 'Invalid ontology annotation');
+		$(document).off(`click.${dialogId}`);
+		$(document).on(`click.${dialogId}`, `#${dialogId} .rome-invalid-revert`, function () {
+			onRevert();
+			setJsonIssueOverlay(false);
+			$(`#${dialogId}`).closest('.ui-dialog-content').dialog('close');
+			$(document).off(`click.${dialogId}`);
+		});
+		$(document).on(`click.${dialogId}`, `#${dialogId} .rome-invalid-fix`, function () {
+			$(`#${dialogId}`).closest('.ui-dialog-content').dialog('close');
+			$(document).off(`click.${dialogId}`);
+		});
+	}
+
+	//#region Add Hooks
+
+	/**
+	 * Ensures REDCap single-field save entrypoint is wrapped with validation logic.
+	 * @returns {void}
+	 */
+	function ensureFieldSaveHook() {
+		const existing = window['addEditFieldSave'];
+		if (typeof existing !== 'function') return;
+		if (existing.__romeWrapped === true) return;
+		const wrapped = function () {
+			const self = this;
+			const args = Array.from(arguments);
+			let skipMissingChoicePrompt = false;
+			const last = args[args.length - 1];
+			if (last && typeof last === 'object' && last[SAVE_SKIP_SENTINEL_KEY] === true) {
+				skipMissingChoicePrompt = true;
+				args.pop();
+			}
+			if (!validateBeforeSave(() => {
+				window.setTimeout(() => {
+					window['addEditFieldSave'].apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
+				}, 0);
+			}, skipMissingChoicePrompt)) return false;
+			updateExcludedCheckboxHiddenInput();
+			return existing.apply(self, args);
+		};
+		wrapped.__romeWrapped = true;
+		window['addEditFieldSave'] = wrapped;
+	}
+
+	/**
+	 * Hooks into the fitDialog function tp know when to inject the annotation editor UI.
+ 	 * @returns {void}
+	 */
+	function ensureFitDialogHook() {
+		const existing = window['fitDialog'];
+		if (typeof existing !== 'function') return;
+		if (existing['__romeWrapped'] === true) return;
+		const wrapped = function () {
+			const self = this;
+			const args = Array.from(arguments);
+
+			const ob = args[0];
+			if (ob && ob['id'] && ['div_add_field', 'addMatrixPopup'].includes(ob.id)) {
+				odState.$dlg = $(ob);
+				if (ob.id === 'addMatrixPopup') {
+					odState.editType = 'matrix';
+					odState.fieldType = String($('#field_type_matrix').val() ?? '');
+				}
+				else {
+					odState.editType = 'field';
+					odState.fieldType = String($('#field_type').val() ?? '');
+				}
+				try {
+					injectAnnotationsEditor();
+				}
+				catch (e) {
+					// In case of error, we remove the editor and log to console
+					if (odState.$editor != null) odState.$editor.remove();
+					console.error('Error initializing ROME Online Designer UI:', e);
+				}
+			}
+			return existing.apply(self, args);
+		};
+		wrapped.__romeWrapped = true;
+		window['fitDialog'] = wrapped;
+	}
+
+	/**
+	 * Ensures matrix save calls are wrapped with validation and sync logic once per page.
+	 * @returns {void}
+	 */
+	function ensureMatrixSaveHook() {
+		const existing = window['matrixGroupSave'];
+		if (typeof existing !== 'function') return;
+		if (existing.__romeWrapped === true) return;
+		const wrapped = function () {
+			const self = this;
+			const args = Array.from(arguments);
+			let skipMissingChoicePrompt = false;
+			const last = args[args.length - 1];
+			if (last && typeof last === 'object' && last[SAVE_SKIP_SENTINEL_KEY] === true) {
+				skipMissingChoicePrompt = true;
+				args.pop();
+			}
+			if (!validateBeforeSave(() => {
+				window.setTimeout(() => {
+					window['matrixGroupSave'].apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
+				}, 0);
+			}, skipMissingChoicePrompt)) return false;
+			return existing.apply(self, args);
+		};
+		wrapped.__romeWrapped = true;
+		window['matrixGroupSave'] = wrapped;
+	}
+
+	/**
+	 * Adds global AJAX prefilters to hook into Design edit and render calls for 
+	 * matrix and field dialogs.
+	 */
+	function addAjaxHooks() {
 		$.ajaxPrefilter(function (options, originalOptions, jqXHR) {
 			if (options.url?.includes('Design/edit_matrix.php')) {
 				// Matrix saving
-				const matrixGroupName = $('#grid_name').val();
+				const matrixGroupName = String($('#grid_name').val());
 				const exclude = isExcludedCheckboxChecked();
 				const originalSuccess = options.success;
 				options.success = function (data, textStatus, jqXHR) {
@@ -131,470 +1269,11 @@
 				}
 			}
 		});
-		//#endregion
-
-		log('Initialization complete.', config);
 	}
 
-	//#endregion
+	//#endregion Add Hooks
 
-	//#region Help
-
-	/**
-	 * Shows a help dialog in response to the "Learn about using Ontology Annotations"
-	 */
-	function showFieldHelp() {
-		if (!designerState.fieldHelpContent) {
-			JSMO.ajax('get-fieldhelp').then(response => {
-				designerState.fieldHelpContent = response;
-				showFieldHelp();
-			}).catch(err => {
-				error(err);
-			});
-		}
-		else {
-			log('Showing field help');
-			simpleDialog(designerState.fieldHelpContent, config.moduleDisplayName);
-		}
-	}
-
-	//#endregion
-
-	//#region Edit Field UI
-
-	function updateEditFieldUI() {
-		if (designerState.$dlg.find('.rome-edit-field-ui-container').length == 0) {
-			addEditFieldUI();
-		}
-		log('Updating Edit Field UI');
-		// Exclusion checkbox
-		let excluded = false;
-		if (designerState.isMatrix) {
-			const matrixGroupName = '' + designerState.$dlg.find('#grid_name').val();
-			excluded = config.matrixGroupsExcluded.includes(matrixGroupName);
-		}
-		else {
-			const fieldName = '' + designerState.$dlg.find('input[name="field_name"]').val();
-			excluded = config.fieldsExcluded.includes(fieldName);
-		}
-		setExcludedCheckboxState(excluded);
-		designerState.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
-		updateAnnotationTable();
-		// Disable search when there are errors and add error indicator
-		if (config.errors?.length ?? 0 > 0) {
-			designerState.$dlg.find('#rome-search-bar :input').prop('disabled', true);
-			showErrorBadge(config.errors.join('\n'));
-		}
-		resetSearchState();
-		log('Search state has been reset.', searchState);
-	}
-
-
-	function isExcludedCheckboxChecked() {
-		return designerState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked') == true;
-	}
-
-	function setExcludedCheckboxState(state) {
-		designerState.$dlg.find('input.rome-em-fieldedit-exclude').prop('checked', state);
-		$('input[name="rome-em-fieldedit-exclude"]').val(state ? '1' : '0');
-	}
-
-
-	function addEditFieldUI() {
-		if (designerState.$dlg.find('.rome-edit-field-ui-container').length > 0) return;
-		let $ui;
-		if (designerState.isMatrix) {
-			log('Adding Edit Matrix UI');
-			$ui = $($('#rome-em-fieldedit-ui-template').html());
-		}
-		else {
-			log('Adding Edit Field UI');
-			$ui = $('<tr><td colspan="2"></td></tr>');
-			$ui.find('td').append($($('#rome-em-fieldedit-ui-template').html()));
-		}
-
-		//#region Setup event handlers
-
-		// Track changes to the choices
-		const $enum = designerState.isMatrix
-			? designerState.$dlg.find('textarea[name="element_enum_matrix"]')
-			: designerState.$dlg.find('textarea[name="element_enum"]');
-		// Detect user input
-		$enum[0].addEventListener('change', () => {
-			trackEnumChange($enum.val());
-		});
-		// Detect programmatic changes by redefining .value
-		const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
-		Object.defineProperty($enum.get(0), 'value', {
-			get() {
-				// @ts-ignore
-				return descriptor['get'].call(this);
-			},
-			set(newVal) {
-				// @ts-ignore
-				descriptor.set.call(this, newVal);
-				trackEnumChange(newVal);
-			}
-		});
-		// Keep track of changes
-		function trackEnumChange(val) {
-			if (val !== designerState.enum) {
-				const fieldType = getFieldType();
-				if (['select', 'radio', 'checkbox'].includes(fieldType)) {
-					setEnum(val);
-				}
-			}
-		}
-		// Track changes of the field type and set enum
-		designerState.$dlg.find('select[name="field_type"]').on('change', () => {
-			designerState.fieldType = getFieldType();
-			log('Field type changed:', designerState.fieldType);
-			if (designerState.fieldType == 'yesno' || designerState.fieldType == 'truefalse') {
-				const val = $('#div_element_' + designerState.fieldType + '_enum div').last().html().trim().replace('<br>', '\n');
-				setEnum(val);
-			}
-			else if (['select', 'radio', 'checkbox'].includes(designerState.fieldType)) {
-				trackEnumChange($enum.val());
-			}
-			else {
-				setEnum('');
-			}
-		}).trigger('change');
-		// Init and track "Do not annotate this field/matrix"
-		$ui.find('.rome-em-fieldedit-exclude').each(function () {
-			const $this = $(this);
-			const id = 'rome-em-fieldedit-exclude-' + (designerState.isMatrix ? 'matrix' : 'field');
-			if ($this.is('input')) {
-				$this.attr('id', id);
-				$this.on('change', function () {
-					const checked = $(this).prop('checked');
-					if (!designerState.isMatrix) {
-						// Store exclusion
-						designerState.$dlg.find('[name="rome-em-fieldedit-exclude"]').val(checked ? 1 : 0);
-					}
-					log('Do not annotate is ' + (checked ? 'checked' : 'not checked'));
-					if (checked) performExclusionCheck();
-				});
-			}
-			else if ($this.is('label')) {
-				$this.attr('for', id);
-			}
-		});
-		// // Init auto completion
-		// const $searchInput = $ui.find('input[name="rome-em-fieldedit-search"]');
-		// const $searchSpinner = $ui.find('.rome-edit-field-ui-spinner');
-		// const throttledSearch = throttle(function (request, response) {
-		// 	const payload = {
-		// 		"term": request.term,
-		// 		"data.isMatrix": data.isMatrix,
-		// 		"name": data.isMatrix ? data.$dlg.find('input[name="grid_name"]').val() : data.$dlg.find('input[name="field_name"]').val(),
-		// 		// TODO - maybe need add value from target dropdown, in case this affect what we do here
-		// 	};
-		// 	$searchSpinner.addClass('busy');
-		// 	log('Search request:', payload);
-		// 	JSMO.ajax('search', payload)
-		// 		.then(searchResult => {
-		// 			log('Search result:', searchResult);
-		// 			response(searchResult);
-		// 		})
-		// 		.catch(err => error(err))
-		// 		.finally(() => $searchSpinner.removeClass('busy'));
-		// }, 500, { leading: false, trailing: true });
-		// $searchInput.autocomplete({
-		// 	source: throttledSearch,
-		// 	minLength: 2,
-		// 	delay: 0,
-		// 	open: function (event, ui) {
-		// 		// For some reason, the z-index of the parent dialog keeps shifting up
-		// 		const z = '' + (Number.parseInt(data.$dlg.parents('[role="dialog"]').css('z-index') ?? '199') + 1);
-		// 		const action = ('' + $searchInput.val()).length == 0 ? 'hide' : 'show';
-		// 		$('.ui-autocomplete, .ui-menu-item').css('z-index', z)[action]();
-		// 	},
-		// 	focus: function (event, ui) {
-		// 		return false;
-		// 	},
-		// 	select: function (event, ui) {
-		// 		log('Autosuggest selected:', ui);
-
-		// 		if (ui.item.value !== '') {
-		// 			$searchInput.val(ui.item.label);
-		// 			document.getElementById("rome-add-button").onclick = function () {
-		// 				updateOntologyActionTag(ui.item);
-		// 			};
-		// 		}
-		// 		return false;
-		// 	}
-		// })
-		// 	.data('ui-autocomplete')._renderItem = function (ul, item) {
-		// 		return $("<li></li>")
-		// 			.data("item", item)
-		// 			.append("<a>" + item.display + "</a>")
-		// 			.appendTo(ul);
-		// 	};
-
-		//#endregion
-
-		if (designerState.isMatrix) {
-			// Matrix-specific adjustments
-			// Insert at end of the dialog
-			designerState.$dlg.append($ui);
-		}
-		else {
-			// Single-field-specific adjustments
-			// Mirror visibility of the Action Tags / Field Annotation DIV
-			const actiontagsDIV = document.getElementById('div_field_annotation')
-				?? document.createElement('div');
-			const observer = new MutationObserver(() => {
-				const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-				$ui.css('display', actiontagsVisible ? 'table-row' : 'none');
-			});
-			observer.observe(actiontagsDIV, { attributes: true, attributeFilter: ['style'] });
-			// Initial sync
-			const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
-			$ui.css('display', actiontagsVisible ? 'table-row' : 'none');
-			// Add a hidden field to transfer exclusion
-			designerState.$dlg.find('#addFieldForm').prepend('<input type="hidden" name="rome-em-fieldedit-exclude" value="0">');
-			// Initial sync from the action tag
-			updateAnnotationTable()
-			// Insert the UI as a new table row
-			designerState.$dlg.find('#quesTextDiv > table > tbody').append($ui);
-		}
-
-		initializeSearchInput('input[name="rome-em-fieldedit-search"]');
-	}
-
-
-	//#endregion
-
-	function performExclusionCheck() {
-		const misc = [];
-		designerState.$dlg.find(designerState.isMatrix ? '[name="addFieldMatrixRow-annotation"]' : '[name="field_annotation"]').each(function () {
-			misc.push($(this).val() ?? '');
-		});
-		if (misc.join(' ').includes(config.atName)) {
-			simpleDialog(JSMO.tt(designerState.isMatrix ? 'fieldedit_15' : 'fieldedit_14', config.atName), JSMO.tt('fieldedit_13'));
-		}
-	}
-
-	function saveMatrixFormExclusion(matrixGroupName, exclude) {
-		log('Saving exclusion for matrix group "' + matrixGroupName + '": ', exclude);
-		JSMO.ajax('set-matrix-exclusion', {
-			grid_name: matrixGroupName,
-			exclude: exclude ? '1' : '0'
-		});
-		// Update config
-		if (exclude) {
-			if (!config.matrixGroupsExcluded.includes(matrixGroupName)) {
-				config.matrixGroupsExcluded.push(matrixGroupName);
-			}
-		}
-		else {
-			config.matrixGroupsExcluded = config.matrixGroupsExcluded.filter(val => val != matrixGroupName);
-		}
-	}
-
-	/**
-	 * Gets the current field type
-	 * @returns {string}
-	 */
-	function getFieldType() {
-		return $('select#field_type').val()?.toString() ?? '';
-	}
-
-	/**
-	 * Updates the enum value store
-	 * @param {string} val 
-	 */
-	function setEnum(val) {
-		if (designerState.enum !== val) {
-			designerState.enum = val;
-			if (designerState.enum != '') {
-				log('Enum changed:', designerState.enum);
-			}
-			else {
-				log('Enum cleared.');
-			}
-		}
-		updateAnnotationTargetsDropdown();
-	}
-
-	//#region Update Ontology Action Tags and table
-
-	function escapeHTML(str) { // probably exists as a utility function somewhere already?
-		return String(str)
-			.replace(/&/g, '&amp;')
-			.replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-			.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-	}
-
-
-	function updateOntologyActionTag(item) {
-		let actionTagsArea = document.getElementById('field_annotation');
-		let field = $("#rome-field-choice").val();
-		let annotation = getOntologyAnnotationJsonObject() || {};
-		let itemCode = JSON.parse(item.value).code
-		if (annotation.dataElement) {
-			if (field == "dataElement") {
-				annotation.dataElement.coding = [... new Set((annotation.dataElement.coding || []).concat(itemCode))]; // append and remove duplicates
-			} else {
-				if (!annotation.dataElement.valueCodingMap) {
-					annotation.dataElement.valueCodingMap = {}
-				}
-				if (!annotation.dataElement.valueCodingMap[field]) {
-					annotation.dataElement.valueCodingMap[field] = { coding: [] }
-				}
-				annotation.dataElement.valueCodingMap[field].coding =
-					[... new Set((annotation.dataElement.valueCodingMap[field].coding).concat(itemCode))]
-			}
-		} else {
-			if (field == "dataElement") {
-				annotation.dataElement = { coding: [JSON.parse(item.value).code] }
-			} else {
-				annotation.dataElement = { coding: [], valueCodingMap: {} }
-				annotation.dataElement.valueCodingMap[field] = { coding: [JSON.parse(item.value).code] }
-			}
-		}
-		if (actionTagsArea.value.indexOf("@ONTOLOGY='") == -1) {
-			actionTagsArea.value += ` @ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`
-		} else {
-			actionTagsArea.value = actionTagsArea.value
-				.replace(/@ONTOLOGY='([^']*)'/,
-					`@ONTOLOGY='${JSON.stringify(annotation, null, 2)}'`);
-		}
-		updateAnnotationTable()
-	}
-
-	function isAnnotationEmpty(annotation) {
-		if (typeof annotation.dataElement !== 'object') return false;
-		const hasCoding = annotation.dataElement.coding
-			&& Array.isArray(annotation.dataElement.coding)
-			&& annotation.dataElement.coding.length > 0;
-		const hasUnit = annotation.dataElement.unit
-			&& annotation.dataElement.unit.coding
-			&& Array.isArray(annotation.dataElement.unit.coding)
-			&& annotation.dataElement.unit.coding.length > 0;
-		const hasValueCodingMap = annotation.dataElement.valueCodingMap
-			&& Object.keys(annotation.dataElement.valueCodingMap).length > 0;
-
-		return !(hasCoding || hasUnit || hasValueCodingMap);
-	}
-
-
-	function updateActionTag(newvalue) {
-
-		const $actionTagsArea = $('#field_annotation');
-		const annotation = getOntologyAnnotation();
-		const current = `${$actionTagsArea.val() ?? ''}`;
-
-		const replacement = isAnnotationEmpty(newvalue) ? '' : `${config.atName}=${JSON.stringify(newvalue, null, 2)}`;
-
-		if (annotation.usedFallback) {
-			// Add new
-			$actionTagsArea.val(
-				`${current}\n${replacement}`
-			);
-		}
-		else {
-			// Replace by adding from 0 to annotation.start, new action tag, then rest from current after annotation.end
-			$actionTagsArea.val(
-				`${current.slice(0, annotation.start)}${replacement}${current.slice(annotation.end)}`
-			)
-		}
-	}
-
-	function deleteOntologyAnnotation(system, code, field) {
-		let annotation = getOntologyAnnotationJsonObject();
-		if (field == "dataElement") {
-			let coding = annotation?.dataElement?.coding
-			if (coding) {
-				annotation.dataElement.coding = coding.filter(c => !(c.system == system && c.code == code))
-			}
-		} else {
-			let valueCodingMap = annotation.dataElement?.valueCodingMap
-			if (valueCodingMap && valueCodingMap[field] && valueCodingMap[field].coding) {
-				let coding = valueCodingMap[field].coding
-				annotation.dataElement.valueCodingMap[field].coding = coding.filter(c => !(c.system == system && c.code == code))
-			}
-		}
-		updateActionTag(annotation)
-		updateAnnotationTable()
-	}
-
-
-
-
-	/**
-	 * Extracts the JSON value after "@ONTOLOGY\s*=\s*" from a larger string.
-	 * Supports JSON objects `{...}` and arrays `[...]`.
-	 *
-	 * @param {string} text
-	 * @param {string} tag 
-	 * @returns {OntologyAnnotationJSON}
-	 */
-	function extractOntologyJson_DEPRECATED(text, tag = "@ONTOLOGY") {
-		if (typeof text !== "string") return null;
-
-		const tagIdx = text.indexOf(tag);
-		if (tagIdx === -1) return null;
-
-		let i = tagIdx + tag.length;
-		while (i < text.length && /\s/.test(text[i])) i++;
-		if (text[i] !== "=") return null;
-		i++;
-		while (i < text.length && /\s/.test(text[i])) i++;
-
-		const start = i;
-		const first = text[i];
-		if (first !== "{" && first !== "[") return null;
-
-		const stack = [];
-		let inString = false;
-		let escape = false;
-
-		const isOpen = (c) => c === "{" || c === "[";
-		const isClose = (c) => c === "}" || c === "]";
-		const matches = (open, close) =>
-			(open === "{" && close === "}") || (open === "[" && close === "]");
-
-		for (; i < text.length; i++) {
-			const ch = text[i];
-
-			if (inString) {
-				if (escape) escape = false;
-				else if (ch === "\\") escape = true;
-				else if (ch === '"') inString = false;
-				continue;
-			}
-
-			if (ch === '"') { inString = true; continue; }
-
-			if (isOpen(ch)) {
-				stack.push(ch);
-				continue;
-			}
-			if (isClose(ch)) {
-				const open = stack.pop();
-				if (!open || !matches(open, ch)) return null; // mismatched
-				if (stack.length === 0) {
-					const end = i + 1;
-					const jsonText = text.slice(start, end);
-					try {
-						return { jsonText, value: JSON.parse(jsonText), start, end };
-					} catch {
-						return null;
-					}
-				}
-			}
-		}
-
-		return null;
-	}
-
-
-
-
-
-
+	//#region Action Tag Parser and Annotation Accessor
 
 	/**
 	 * Create an ontology annotation parser with fixed options.
@@ -620,12 +1299,14 @@
 		return {
 			/**
 			 * Parse the LAST valid tag JSON object from the given text.
+			 * @param {string} rowId
 			 * @param {string} text
 			 * @returns {OntologyAnnotationParseResult}
 			 */
-			parse(text) {
+			parse(rowId, text) {
 				/** @type {OntologyAnnotationParseResult} */
 				const result = {
+					rowId: rowId,
 					// IMPORTANT: Do NOT run schema validation on the minimal annotation
 					json: getMinAnnotation(),
 					usedFallback: true,
@@ -635,7 +1316,8 @@
 					warnings: [],
 					text: '',
 					start: -1,
-					end: -1
+					end: -1,
+					originalText: text,
 				};
 
 				if (typeof text !== 'string' || text.length === 0) return result;
@@ -791,6 +1473,12 @@
 
 		//#region Helpers
 
+		/**
+		 * Scans text from opening `{` to matching `}` while respecting string escapes.
+		 * @param {string} s
+		 * @param {number} start
+		 * @returns {{ok:boolean, start?:number, end?:number, reason?:string}}
+		 */
 		function scanJsonObject(s, start) {
 			let depth = 0;
 			let inString = false;
@@ -822,6 +1510,11 @@
 			return { ok: false, reason: 'Bracket mismatch: unterminated JSON object (reached end of text)' };
 		}
 
+		/**
+		 * Computes an index of line-start offsets for fast index-to-line conversion.
+		 * @param {string} s
+		 * @returns {number[]}
+		 */
 		function computeLineStarts(s) {
 			const starts = [0];
 			for (let i = 0; i < s.length; i++) {
@@ -830,6 +1523,12 @@
 			return starts;
 		}
 
+		/**
+		 * Converts absolute character index to 1-based line number.
+		 * @param {number[]} starts
+		 * @param {number} pos
+		 * @returns {number}
+		 */
 		function indexToLine(starts, pos) {
 			let lo = 0, hi = starts.length - 1;
 			while (lo <= hi) {
@@ -840,10 +1539,20 @@
 			return Math.max(1, hi + 1);
 		}
 
+		/**
+		 * Tests whether one character is treated as parser whitespace.
+		 * @param {string} ch
+		 * @returns {boolean}
+		 */
 		function isWS(ch) {
 			return ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\f' || ch === '\v';
 		}
 
+		/**
+		 * Formats validator errors into a compact human-readable sentence.
+		 * @param {any[]} errors
+		 * @returns {string}
+		 */
 		function formatValidatorErrors(errors) {
 			if (!Array.isArray(errors) || errors.length === 0) return 'Unknown validation error';
 			return errors
@@ -855,52 +1564,49 @@
 		//#endregion
 	}
 
-
-
-
-
-
-
 	/**
 	 * Gets the contents of an element and extracts the ontology JSON.
-	 * @param {string} [field] - When editing matrix groups, the field name to get the annotations from.
-	 * @returns {Object}
+	 * @param {string} [rowId] - When editing matrix groups, the row id to get the annotations from.
+	 * @returns {OntologyAnnotationParseResult}
 	 */
-	function getOntologyAnnotationJsonObject(field = '') {
-		const result = getOntologyAnnotation(field);
-		return result.json;
-	}
-
-	/**
-	 * Gets the contents of an element and extracts the ontology JSON.
-	 * @param {string} [field] - When editing matrix groups, the field name to get the annotations from.
-	 * @returns {Object}
-	 */
-	function getOntologyAnnotation(field = '') {
-		const selector = designerState.isMatrix ? "TODO" : '#field_annotation';
-		const $el = $(selector);
+	function getOntologyAnnotation(rowId = '') {
+		let $el;
+		if (odState.editType === 'matrix') {
+			$el = odState.$dlg.find(`tr[data-rome-row-id="${rowId}"] .field_annotation_matrix`);
+		} else {
+			$el = $('#field_annotation');
+		}
 		let content = '';
 		if ($el.is('input, textarea')) {
 			content = String($el.val() ?? '');
 		} else {
 			content = $el.text();
 		}
-		const result = ontologyParser.parse(content);
-		log(`Parsed content of ${selector}:`, result);
+		const result = ontologyParser.parse(rowId, content);
+		log('Parsed annotation text:', result);
 		return result;
 	}
 
+	/**
+	 * Creates a minimal ontology annotation object and stamps current field type.
+	 * @returns {OntologyAnnotationJSON}
+	 */
 	function getMinimalOntologyAnnotation() {
 		/** @type {OntologyAnnotationJSON} */
 		const obj = JSON.parse(config.minimalAnnotation);
-		obj.dataElement.type = getFieldType();
 		return obj;
 	}
 
+	//#endregion Action Tag Parser and Annotation Accessor
+
+	/**
+	 * Returns current field names in context (single-field or all matrix row vars).
+	 * @returns {string[]}
+	 */
 	function getFieldNames() {
 		const fieldNames = [];
 		if (designerState.isMatrix) {
-			$('td.addFieldMatrixRowVar input').each(function () {
+			designerState.$dlg.find('input.field_name_matrix').each(function () {
 				const fieldName = `${$(this).val()}`.trim();
 				if (fieldName !== '') {
 					fieldNames.push(fieldName);
@@ -909,207 +1615,407 @@
 
 		}
 		else {
-			fieldNames.push(designerState.$dlg.find('input#field_name').val() ?? '??');
+			fieldNames.push(String(designerState.$dlg.find('input#field_name').val() ?? '??'));
 		}
 		return fieldNames;
 	}
 
+
+
+	/**
+	 * Gets the current field type.
+	 * @returns {string}
+	 */
+	function getFieldType() {
+		if (odState.editType === 'matrix') {
+			return odState.$dlg.find('select#field_type_matrix').val()?.toString() ?? '';
+		}
+		return $('select#field_type').val()?.toString() ?? '';
+	}
+
+	//#region Target Selection
+
+	/**
+	 * Renders add-target options and contextual warnings.
+	 * @returns {void}
+	 */
 	function updateAnnotationTargetsDropdown() {
-		// The target dropdown includes the field (or multiple fields in case of matrix groups)
-		// as well as choices in case of radio/dropdown/checkbox fields
-		// For any non-validated textbox field, a unit will be added
+		const $target = odState.$dlg.find('#rome-field-choice');
+		const previous = `${$target.val() ?? ''}`;
+		$target.html(odState.targetOptions.map(opt => {
+			const val = escapeHTML(opt.value);
+			const label = escapeHTML(opt.display);
+			return `<option value="${val}">${label}</option>`;
+		}).join(''));
+		if (odState.targetOptions.some(opt => opt.value === previous)) {
+			$target.val(previous);
+		}
+		applySelect2ToTargetSelects($target);
+	}
+
+	/**
+	 * Builds add-target dropdown options for current dialog mode.
+	 */
+	function buildTargetOptions() {
+		/** @type {ROME_TargetOption[]} */
 		const options = [];
-		// Field(s)
-		for (const fieldName of getFieldNames()) {
-			options.push({
-				type: 'dataElement',
-				id: fieldName,
-				label: fieldName
+		const choiceLabelMap = {};
+		const rowIdFieldMap = {};
+		if (odState.editType === 'matrix') {
+			// Fields
+			odState.$dlg.find('input.field_name_matrix').each(function() {
+				const fieldName = ($(this).val() ?? '').toString().trim();
+				if (fieldName === '') return;
+				const rowId = ensureMatrixRowId($(this).closest('tr'));
+				rowIdFieldMap[rowId] = fieldName;
+				options.push({
+					rowId: rowId,
+					value: `field:${rowId}`,
+					display: `Field - ${fieldName}`,
+					targetType: 'field'
+				});
+			});
+			// Choices
+			let pos = 0;
+			for (const choice of getChoiceOptions()) {
+				pos++;
+				options.push({
+					rowId: '',
+					value: `choice:${choice.code}`,
+					display: `[${choice.code}] - ${choice.label}`,
+					targetType: 'choice'
+				});
+				choiceLabelMap[choice.code] = {
+					label: choice.label,
+					pos: pos
+				};
+			}
+			// Unit
+			options.push({ rowId: '', value: 'unit', display: 'Unit', targetType: 'unit' });
+		}
+		else {
+			// Field
+			options.push({ rowId: '', value: 'field:', display: 'Field', targetType: 'field' });
+			// Choices
+			let pos = 0;
+			for (const choice of getChoiceOptions()) {
+				pos++;
+				options.push({ 
+					rowId: '',
+					value: `choice:${choice.code}`,
+					display: `[${choice.code}] - ${choice.label}`,
+					targetType: 'choice'
+				});
+				choiceLabelMap[choice.code] = { 
+					label: choice.label,
+					pos: pos
+				};
+			}
+			// Unit
+			options.push({ rowId: '', value: 'unit', display: 'Unit', targetType: 'unit' });
+		}
+		odState.targetOptions = options;
+		odState.choiceLabelMap = choiceLabelMap;
+		odState.rowIdFieldMap = rowIdFieldMap;
+		log('Build target options:', options, choiceLabelMap)
+		setShowUnitWarning();
+		updateAnnotationTargetsDropdown();
+		redrawAnnotationsTable();
+	}
+
+	/**
+	 * Checks if setting a unit annotations is sensible for the current field type/validation.
+	 */
+	function setShowUnitWarning() {
+		const fieldType = getFieldType();
+		const valType = `${odState.$dlg.find('#val_type, #val_type_matrix').first().val() ?? ''}`.toLowerCase();
+		if (['radio', 'select', 'checkbox'].includes(fieldType)) {
+			const nonNumericChoice = Object.keys(odState.choiceLabelMap).some(code => {
+				return code && !/^[-+]?\d+(\.\d+)?$/.test(code.trim());
+			});
+			odState.showUnitWarning = nonNumericChoice;
+			return;
+		}
+		const nonNumericValidators = ['email', 'alpha_only', 'letters_only', 'zipcode', 'phone'];
+		odState.showUnitWarning = nonNumericValidators.includes(valType);
+	}
+
+	/**
+	 * Returns parsed choice code/label options from current enum text.
+	 * @returns {{code:string, label:string}[]}
+	 */
+	function getChoiceOptions() {
+		let enumText = '';
+		if (odState.editType === 'field') {
+			if (odState.fieldType === 'truefalse') {
+				enumText = config.fixedEnums.truefalse;
+			}
+			else if (odState.fieldType === 'yesno') {
+				enumText = config.fixedEnums.yesno;
+			}
+			else {
+				enumText = String($('#element_enum').val() ?? '');
+			}
+		}
+		else {
+			enumText = String($('#element_enum_matrix').val() ?? '');
+		}
+		const out = [];
+		for (const line of enumText.split('\n')) {
+			if (!line.trim()) continue;
+			const [codeRaw, labelRaw] = line.split(',', 2);
+			const code = `${codeRaw || ''}`.trim();
+			if (code === '') continue;
+			out.push({ code, label: `${labelRaw || code}`.trim() || code });
+		}
+		return out;
+	}
+
+	//#endregion Target Selection
+
+
+
+
+
+
+
+
+	/**
+	 * Returns choice order metadata used for Target-column lexical sort keys.
+	 * @returns {{positions: Object<string, number>, width: number}}
+	 */
+	function getChoiceOrderMeta() {
+		const positions = {};
+		const choices = getChoiceOptions();
+		for (let i = 0; i < choices.length; i++) {
+			positions[choices[i].code] = i;
+		}
+		const width = String(Math.max(1, choices.length)).length;
+		return { positions, width };
+	}
+
+	/**
+	 * Returns rows that target missing choice codes.
+	 * @returns {AnnotationTableEntry[]}
+	 */
+	function getMissingChoiceTargetRows() {
+		return buildAnnotationTableEntries().filter(r => r.kind === 'choice' && r.choicePosition < 0);
+	}
+
+
+	/**
+	 * Flattens current draft annotation(s) into table rows for DataTables.
+	 * Treats field edit as matrix n=1 and aggregates unit/choice codings globally.
+	 * @returns {AnnotationTableEntry[]}
+	 */
+	function buildAnnotationTableEntries() {
+		/** @type {AnnotationTableEntry[]} */
+		const rows = [];
+		const choiceOrderMeta = getChoiceOrderMeta();
+		const makeCodingKey = (coding) =>
+			`${`${coding.system || ''}`.trim()}|${`${coding.code || ''}`.trim()}|${`${coding.display || ''}`.trim().toLowerCase()}`;
+		const makeAnnotation = (coding) => ({
+			system: `${coding.system || ''}`,
+			code: `${coding.code || ''}`,
+			display: `${coding.display || ''}`
+		});
+		const makeSortBy = (kind, fieldName = '', choiceCode = '', choicePosition = -1) => {
+			if (kind === 'field') return `A_${`${fieldName || ''}`.toLowerCase()}`;
+			if (kind === 'unit') return 'B';
+			if (choicePosition >= 0) {
+				return `C_${String(choicePosition + 1).padStart(choiceOrderMeta.width, '0')}`;
+			}
+			return `D_${`${choiceCode || ''}`.toLowerCase()}`;
+		};
+		const appendFieldRows = (annotation, fieldName) => {
+			const normalized = normalizeAnnotation(annotation);
+			for (const coding of normalized.dataElement.coding || []) {
+				rows.push({
+					kind: 'field',
+					fieldName: `${fieldName || ''}`,
+					choiceCode: '',
+					choicePosition: -1,
+					sortBy: makeSortBy('field', fieldName),
+					annotation: makeAnnotation(coding)
+				});
+			}
+		};
+		/** @type {Map<string, {system:string, code:string, display:string}>} */
+		const unitMap = new Map();
+		/** @type {Map<string, Map<string, {system:string, code:string, display:string}>>} */
+		const choiceMaps = new Map();
+		if (designerState.isMatrix) {
+			for (const rowId of matrixDraftState.rowOrder) {
+				const row = matrixDraftState.rows[rowId];
+				if (!row?.current) continue;
+				const fieldName = `${row.varName || rowId}`.trim();
+				appendFieldRows(row.current, fieldName);
+				const normalized = normalizeAnnotation(row.current);
+				for (const coding of normalized.dataElement.unit?.coding || []) {
+					unitMap.set(makeCodingKey(coding), makeAnnotation(coding));
+				}
+				for (const [choiceCode, bucket] of Object.entries(normalized.dataElement.valueCodingMap || {})) {
+					if (!choiceMaps.has(choiceCode)) {
+						choiceMaps.set(choiceCode, new Map());
+					}
+					for (const coding of bucket.coding || []) {
+						choiceMaps.get(choiceCode).set(makeCodingKey(coding), makeAnnotation(coding));
+					}
+				}
+			}
+		} else {
+			const normalized = normalizeAnnotation(getSingleDraftAnnotation());
+			const fieldName = `${getFieldNames()[0] || 'field'}`.trim();
+			appendFieldRows(normalized, fieldName);
+			for (const coding of normalized.dataElement.unit?.coding || []) {
+				unitMap.set(makeCodingKey(coding), makeAnnotation(coding));
+			}
+			for (const [choiceCode, bucket] of Object.entries(normalized.dataElement.valueCodingMap || {})) {
+				if (!choiceMaps.has(choiceCode)) {
+					choiceMaps.set(choiceCode, new Map());
+				}
+				for (const coding of bucket.coding || []) {
+					choiceMaps.get(choiceCode).set(makeCodingKey(coding), makeAnnotation(coding));
+				}
+			}
+		}
+		for (const annotation of unitMap.values()) {
+			rows.push({
+				kind: 'unit',
+				fieldName: '',
+				choiceCode: '',
+				choicePosition: -1,
+				sortBy: makeSortBy('unit'),
+				annotation
 			});
 		}
-		// Choices
-
-		let choices = [["dataElement", "Field"]];
-		let choicesDict = { "dataElement": true };
-		if (designerState.enum) {
-			for (const line of designerState.enum?.split("\n")) {
-				const [code, rest] = line.split(',', 2);
-				choices.push([code, rest]);
-				choicesDict[code] = true;
-				options.push({
-					type: 'choice',
-					id: code,
-					label: rest || '??'
+		for (const [choiceCode, codingMap] of choiceMaps.entries()) {
+			const pos = choiceOrderMeta.positions[choiceCode];
+			const choicePosition = typeof pos === 'number' ? pos : -1;
+			for (const annotation of codingMap.values()) {
+				rows.push({
+					kind: 'choice',
+					fieldName: '',
+					choiceCode,
+					choicePosition,
+					sortBy: makeSortBy('choice', '', choiceCode, choicePosition),
+					annotation
 				});
 			}
 		}
-
-		$("#rome-field-choice").html(choices.map(c => `<option value="${c[0]}">${c[1]}</option>`).join(""))
-
-		$(".rome-option-field").each(function (i, elem) {
-			let selected = elem.dataset.romeSelected
-			let system = elem.dataset.romeSystem
-			let code = elem.dataset.romeCode
-			let display = choices.length <= 1 ? 'display:"none"' : ''
-			let choiceError = ""
-			if (!choicesDict[selected]) {
-				choiceError = `<option value="${selected}" style="background-color: red;">❓❓ ${selected} ❓❓</option>`
-			}
-			elem.innerHTML = `<select ${display} class="form-select form-select-xs" id="rome-selectfield-${i}">` + choiceError +
-				choices.map(c => `<option value="${c[0]}" ${c[0] == selected ? 'selected' : ''}>${c[1]}</option>`).join("") +
-				`</select>`
-			$(elem).on('change', function (event) {
-				event.stopImmediatePropagation()
-				let annotation = getOntologyAnnotationJsonObject()
-				if (!annotation.dataElement) {
-					annotation.dataElement = { "coding": [] }
-				}
-				if (!annotation.dataElement.valueCodingMap) {
-					annotation.dataElement.valueCodingMap = {}
-				}
-				let items = annotation.dataElement.coding
-				let valueCodingMap = annotation.dataElement.valueCodingMap
-				let oldValue = selected
-				let newValue = event.target.value
-				console.log(`updating ${oldValue} to ${newValue} // ` + JSON.stringify(valueCodingMap, null, 2))
-
-				if (oldValue == "dataElement") {
-					annotation.dataElement.coding = items.filter(value => (!((value.system == system) && (value.code == code))))
-					if (!valueCodingMap[newValue]?.coding) {
-						valueCodingMap[newValue] = { "coding": [] }
-					}
-					valueCodingMap[newValue].coding = [... new Set((valueCodingMap[newValue].coding).concat({ "code": code, "system": system }))]
-				} else if (newValue == "dataElement") {
-					valueCodingMap[oldValue].coding = valueCodingMap[oldValue].coding.filter(value => (!((value.system == system) && (value.code == code))))
-					annotation.dataElement.coding = [... new Set((items).concat({ "code": code, "system": system }))]
-				} else {
-					if (!valueCodingMap[newValue]) {
-						valueCodingMap[newValue] = { "coding": [] }
-					}
-					valueCodingMap[newValue].coding = [... new Set((valueCodingMap[newValue].coding).concat({ "code": code, "system": system }))]
-					valueCodingMap[oldValue].coding = valueCodingMap[oldValue].coding.filter(value => (!((value.system == system) && (value.code == code))))
-				}
-				annotation.dataElement.valueCodingMap = valueCodingMap
-				updateActionTag(annotation)
-			})
-
-		})
+		return rows;
 	}
-
-	/**
-	 * Updates the annotation table using the ONTOLOGY action tag's JSON
-	 * @returns 
-	 */
-	function updateAnnotationTable() {
-		if (isExcludedCheckboxChecked()) return;
-		const annotation = getOntologyAnnotationJsonObject();
-		let items = annotation.dataElement?.coding
-		let valueCodingMap = annotation.dataElement?.valueCodingMap
-		let values = []
-		if (valueCodingMap) {
-			for (const [key, value] of Object.entries(valueCodingMap)) {
-				console.log("xUAT: Coding key " + key);
-				(value.coding || []).forEach(c => values = values.concat({ field: key, ...c }))
-			}
-		}
-		if (items.length == 0 && values.length == 0) {
-			$(".rome-edit-field-ui-list").hide()
-			$(".rome-edit-field-ui-list-empty").show()
-			return;
-		}
-		$(".rome-edit-field-ui-list-empty").hide()
-		let knownLinks = {
-			"http://snomed.info/sct": "https://bioportal.bioontology.org/ontologies/SNOMEDCT?p=classes&conceptid=",
-			"http://loinc.org": "https://loinc.org/"
-		}
-		let html = `<div id="rome-table-options-comment"></div><table style="margin-top: 12px">
-                  <thead>
-                    <tr><th>Ontology</th><th>Code</th><th>Display</th><th>Element</th><th>Action</th></tr>
-                  </thead>
-                  <tbody>` +
-			items.map((item, i) => `<tr>` +
-				[item.system,
-				(knownLinks[item.system] ? `<a target="_blank" href="${knownLinks[item.system]}${item.code}">${item.code}</a>` : item.code),
-				item.display].map((s) => `<td style="padding-right: 10px">${s ? s : '<i>?</i>'}</td>`).join("") +
-				`<td><span class="rome-option-field" data-rome-selected="dataElement" id="rome-option-field-${i}"><i>Field</i></span></td><td><span id="rome-delete-${i}"><i class="fa fa-trash"></i></span></td>
-                  </tr>`).join("") +
-			values.map((item, i) => `<tr>` +
-				[item.system,
-				(knownLinks[item.system] ? `<a target="_blank" href="${knownLinks[item.system]}${item.code}">${item.code}</a>` : item.code),
-				item.display].map((s) => `<td style="padding-right: 10px">${s}</td>`).join("") +
-				`<td><span class="rome-option-field" id="rome-option-field-${items.length + i}" data-rome-system="${item.system}" data-rome-code="${item.code}" data-rome-selected="${item.field}"></span></b></td><td><span id="rome-delete-field-${i}"><i class="fa fa-trash"></i></span></td>
-                  </tr>`).join("") +
-
-			`</tbody>
-       </table>`
-		$(".rome-edit-field-ui-list").html(html).show()
-		items.forEach((item, i) => $(`#rome-delete-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, 'dataElement')))
-		values.forEach((item, i) => $(`#rome-delete-field-${i}`).on('click', () => deleteOntologyAnnotation(item.system, item.code, item.field)))
-
-		updateAnnotationTargetsDropdown();
-	}
-
-	//#endregion    
-
-
-
 
 
 	/**
-	 * The throttle implementation from underscore.js
-	 * See https://stackoverflow.com/a/27078401
-	 * @param {function} func 
-	 * @param {Number} wait 
-	 * @param {Object} options 
-	 * @returns 
+	 * Initializes tooltips for unit warning icons inside annotation table.
+	 * @param {JQuery<HTMLElement>} $container
+	 * @returns {void}
 	 */
+	function initUnitWarningTooltips($container) {
+		if (typeof bootstrap === 'undefined' || !bootstrap?.Tooltip) return;
+		$container.find('.rome-unit-row-warning').each(function () {
+			new bootstrap.Tooltip(this, {
+				trigger: 'hover',
+				container: designerState.$dlg.get(0)
+			});
+		});
+	}
 
-	function throttle(func, wait, options) {
-		let context, args, result;
-		let timeout = null;
-		let previous = 0;
-		if (!options) options = {};
-		const later = function () {
-			previous = options.leading === false ? 0 : Date.now();
-			timeout = null;
-			result = func.apply(context, args);
-			if (!timeout) context = args = null;
-		};
-		return function () {
-			const now = Date.now();
-			if (!previous && options.leading === false) previous = now;
-			const remaining = wait - (now - previous);
-			context = this;
-			args = arguments;
-			if (remaining <= 0 || remaining > wait) {
-				if (timeout) {
-					clearTimeout(timeout);
-					timeout = null;
-				}
-				previous = now;
-				result = func.apply(context, args);
-				if (!timeout) context = args = null;
-			} else if (!timeout && options.trailing !== false) {
-				timeout = setTimeout(later, remaining);
+	/**
+	 * Resolves row data from a table control using DataTables row data first.
+	 * @param {HTMLElement} control
+	 * @returns {AnnotationTableEntry|null}
+	 */
+	function resolveRowDataFromTableControl(control) {
+		const $tr = $(control).closest('tr');
+		if (annotationTableState.dt && $tr.length > 0) {
+			const dtRow = annotationTableState.dt.row($tr);
+			const rowData = dtRow?.data();
+			if (rowData) return rowData;
+		}
+		const controlEntry = $(control).data('rome-entry');
+		if (controlEntry) return controlEntry;
+		const rowEntry = $tr.data('rome-entry');
+		return rowEntry || null;
+	}
+
+	/**
+	 * Returns the preferred Select2 dropdown parent for current dialog context.
+	 * @returns {JQuery<HTMLElement>|undefined}
+	 */
+	function getSelect2DropdownParent() {
+		const $dialog = designerState.$dlg?.closest('[role="dialog"]');
+		if ($dialog && $dialog.length > 0) return $dialog;
+		return designerState.$dlg;
+	}
+
+	/**
+	 * Applies select2 enhancement to one or more target select elements when available.
+	 * @param {JQuery<HTMLElement>} $selects
+	 * @returns {void}
+	 */
+	function applySelect2ToTargetSelects($selects) {
+		if (!$selects || $selects.length === 0) return;
+		if (typeof $.fn.select2 !== 'function') return;
+		const threshold = Number.parseInt(`${odState.minItemsForSelect2 ?? 7}`, 10);
+		const minItems = Number.isFinite(threshold) && threshold > 0 ? threshold : 7;
+		const effectiveCount = odState.targetOptions.length;
+		const showSearch = effectiveCount > minItems;
+		$selects.each(function () {
+			const $el = $(this);
+			const syncMissingClass = () => {
+				const $container = $el.next('.select2-container');
+				if ($container.length === 0) return;
+				$container.toggleClass('target-missing', $el.hasClass('target-missing'));
+			};
+			if ($el.hasClass('select2-hidden-accessible')) {
+				$el.select2('destroy');
 			}
-			return result;
-		};
-	};
+			$el.select2({
+				width: 'resolve',
+				dropdownParent: getSelect2DropdownParent(),
+				minimumResultsForSearch: showSearch ? 0 : Infinity
+			});
+			syncMissingClass();
+		});
+	}
+
+
 
 	//#region Error Handling
 
-	function showErrorBadge(errorMessage) {
+	/**
+	 * Shows or hides the search-error badge next to the search bar.
+	 * @param {string|false} errorMessage
+	 */
+	function showSearchErrorBadge(errorMessage) {
 		if (errorMessage) {
-			designerState.$dlg.find('#rome-edit-field-error')
-				.css('display', 'block')
-				.attr('data-bs-tooltip', 'hover')
-				.attr('title', errorMessage)
-				.tooltip('enable');
+			odState.$error
+			.css('display', 'block')
+			.attr('data-bs-tooltip', 'hover')
+			.attr('title', errorMessage)
+			.tooltip('enable');
 		}
 		else {
-			designerState.$dlg.find('#rome-edit-field-error')
-				.css('display', 'none')
-				.tooltip('disable');
+			odState.$error
+			.css('display', 'none')
+			.tooltip('disable');
+		}
+	}
+
+	/**
+	 * Shows or hides the JSON error overlay that blocks search/table controls.
+	 * @param {string|false} errorMessage
+	 */
+	function setJsonIssueOverlay(errorMessage) {
+		const $overlay = odState.$editor.find('.rome-json-error-overlay');
+		if ($overlay.length === 0) return;
+		if (errorMessage) {
+			$overlay.find('.rome-json-error-overlay-message').text(errorMessage);
+			$overlay.show();
+		} else {
+			$overlay.hide();
 		}
 	}
 
@@ -1136,36 +2042,50 @@
 		cache: new Map()          // cacheKey(term, sourceSet) -> snapshot
 	};
 
+	/**
+	 * Toggles search spinner and visual busy state on search input.
+	 * @param {boolean} state
+	 * @returns {void}
+	 */
 	function showSpinner(state) {
-		const $searchSpinner = designerState.$dlg.find('.rome-edit-field-ui-spinner');
-		$searchSpinner[state ? 'addClass' : 'removeClass']('busy');
-		designerState.$input[state ? 'addClass' : 'removeClass']('is-searching');
+		odState.$searchSpinner[state ? 'addClass' : 'removeClass']('busy');
+		odState.$search[state ? 'addClass' : 'removeClass']('is-searching');
 	}
 
-	function initializeSearchInput(selector) {
+	/**
+	 * Toggles a visual marker when the latest returned search result set is empty.
+	 * @param {boolean} state
+	 */
+	function showNoResultsState(state) {
+		odState.$search[state ? 'addClass' : 'removeClass']('is-no-results');
+	}
 
-		designerState.$input = designerState.$dlg.find(selector);
-		// Re-init safely if this input already had an autocomplete instance.
-		if (designerState.$input.data('ui-autocomplete')) {
-			designerState.$input.autocomplete('destroy');
+
+	/**
+	 * Initializes autocomplete search input for ontology lookup.
+	 */
+	function initSearchInput() {
+		// Init safely if this input already had an autocomplete instance.
+		if (odState.$search.data('ui-autocomplete')) {
+			odState.$search.autocomplete('destroy');
 		}
-		designerState.$input.off('.romeAutocomplete');
+		odState.$search.off('.ROME_autocomplete');
 
 		function raiseAutocompleteMenu() {
-			const ac = designerState.$input.data('ui-autocomplete');
+			const ac = odState.$search.data('ui-autocomplete');
 			const $menu = ac?.menu?.element;
 			if (!$menu || $menu.length === 0) return;
 
 			const baseZ = Number.parseInt(
-				designerState.$dlg.closest('[role="dialog"]').css('z-index') ?? '199',
+				odState.$dlg.closest('[role="dialog"]').css('z-index') ?? '199',
 				10
 			);
 			const zIndex = Number.isFinite(baseZ) ? baseZ + 2 : 201;
 			$menu.css('z-index', String(zIndex));
 		}
 
-		designerState.$input.autocomplete({
-			minLength: 2,
+		odState.$search.autocomplete({
+			minLength: config.minSearchLength ?? 2,
 			delay: 0, // we debounce manually
 			appendTo: 'body',
 			open: function () {
@@ -1174,12 +2094,14 @@
 			source: function (request, responseCb) {
 				const term = (request.term || '').trim();
 				if (term.length < 2) {
+					showNoResultsState(false);
 					responseCb([]);
 					return;
 				}
 
 				// Refresh path (used later for polling)
 				if (searchState.refreshing && term === searchState.term) {
+					showNoResultsState(searchState.items.length === 0);
 					responseCb(searchState.items); return;
 				}
 
@@ -1195,6 +2117,7 @@
 					searchState.pending = {}; // <-- never resume pending from cache
 					searchState.lastTermCompleted = !!snap.completed;
 
+					showNoResultsState(searchState.items.length === 0);
 					responseCb(searchState.items);
 
 					// If incomplete, re-issue search for missing sources
@@ -1211,6 +2134,7 @@
 				// If autocomplete is re-triggering with the same term (arrow keys, focus, etc.),
 				// do NOT re-query server. Serve cached items (even if empty).
 				if (term === searchState.term && searchState.lastTermCompleted) {
+					showNoResultsState(searchState.items.length === 0);
 					responseCb(searchState.items);
 					return;
 				}
@@ -1233,7 +2157,7 @@
 					.appendTo(ul);
 			};
 
-		designerState.$input.on('autocompleteselect.romeAutocomplete', function (e, ui) {
+		odState.$search.on('autocompleteselect.ROME_autocomplete', function (e, ui) {
 			if (searchState.debounceTimer) {
 				clearTimeout(searchState.debounceTimer);
 				searchState.debounceTimer = null;
@@ -1247,11 +2171,74 @@
 				type: h.type || null
 			});
 		});
+		odState.$search.on('keydown keyup', function (event) {
+			if (event.key === 'Enter') {
+				// Let jQuery UI autocomplete handle Enter, but block REDCap's parent dialog handlers.
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				return false;
+			}
+		});
+		odState.$search.on('input.ROME_autocomplete', function () {
+			if (selectionState.selected) {
+				setSelectedAnnotation(null);
+			}
+		});
 	}
 
+	/**
+	 * Sets current selected search annotation and refreshes Add UI affordances.
+	 * @param {SelectedAnnotationHit|null} annotation
+	 * @returns {void}
+	 */
 	function setSelectedAnnotation(annotation) {
-		// Dummy
-		log('Selected annotation:', annotation);
+		if (annotation) {
+			log( 'Annotation has been selected:', odState);
+		}
+		else if (odState.selected) {
+			log( 'Selected annotation has been cleared:', odState.selected);
+		}
+		odState.selected = annotation; 
+		refreshAddButtonState();
+	}
+
+	/**
+	 * Refreshes Add button state and details popover based on current selection state.
+	 */
+	function refreshAddButtonState() {
+		const hasSelection = odState.selected !== null;
+		odState.$add.prop('disabled', !hasSelection);
+		odState.$info.css('display', hasSelection ? 'inline-block' : 'none');
+		if (hasSelection) {
+			// Set focus to the Add button
+			setTimeout(() => odState.$add.trigger('focus'), 0);
+		}
+	}
+
+	/**
+	 * Builds selection details HTML shown in the add-selection popover.
+	 * @returns {string}
+	 */
+	function getSelectedAnnotationPopoverHtml() {
+		if (!odState.selected) return 'No selection made.';
+		const source = (config.sources || []).find(s => s.id === odState.selected.sourceId);
+		const sourceLabel = source?.label || odState.selected.sourceId || 'Unknown source';
+		const system = odState.selected.system || '?';
+		const code = odState.selected.code || '?';
+		const display = odState.selected.display || '';
+		const linkPrefix = config.knownLinks?.[system] || '';
+		const linkHtml = linkPrefix
+			? `<a target="_blank" href="${escapeHTML(linkPrefix + code)}">Open in browser</a>`
+			: '<span class="text-muted">No external link known for this system.</span>';
+		return `
+			<div class="rome-add-popover">
+				<div><b>Source:</b> ${escapeHTML(sourceLabel)}</div>
+				<div><b>System:</b> ${escapeHTML(system)}</div>
+				<div><b>Code:</b> ${escapeHTML(code)}</div>
+				<div><b>Display:</b> ${escapeHTML(display || '(none)')}</div>
+				<div>${linkHtml}</div>
+			</div>
+		`;
 	}
 
 	/**
@@ -1267,6 +2254,12 @@
 		return system;
 	}
 
+	/**
+	 * Queues a debounced search request for autocomplete.
+	 * @param {string} term
+	 * @param {(items: any[]) => void} responseCb
+	 * @returns {void}
+	 */
 	function queueSearch(term, responseCb) {
 		if (searchState.debounceTimer) {
 			clearTimeout(searchState.debounceTimer);
@@ -1277,6 +2270,12 @@
 		}, 200);
 	}
 
+	/**
+	 * Queues a partial refresh search for missing sources only.
+	 * @param {string} term
+	 * @param {string[]} sourceIds
+	 * @returns {void}
+	 */
 	function queueSearchMissing(term, sourceIds) {
 		// Reuse the same debounce timer
 		if (searchState.debounceTimer) clearTimeout(searchState.debounceTimer);
@@ -1286,15 +2285,27 @@
 		}, 50);
 	}
 
+	/**
+	 * Refreshes autocomplete dropdown with latest in-memory search items.
+	 * @param {string} term
+	 * @returns {void}
+	 */
 	function refreshDropdown(term) {
 		searchState.refreshing = true;
 		try {
-			designerState.$input.autocomplete('search', term);
+			odState.$search.autocomplete('search', term);
 		} finally {
 			searchState.refreshing = false;
 		}
 	}
 
+	/**
+	 * Executes search request and merges response into search state.
+	 * @param {string} term
+	 * @param {(items: any[]) => void|null} responseCb
+	 * @param {{sourceIds?: string[], merge?: boolean}=} opts
+	 * @returns {void}
+	 */
 	function startSearch(term, responseCb, opts) {
 		opts = opts || {};
 		const sourceIds = Array.isArray(opts.sourceIds) ? opts.sourceIds : null; // null => all
@@ -1305,7 +2316,8 @@
 			if (typeof responseCb === 'function') responseCb([]);
 			return;
 		}
-		showErrorBadge(false);
+		showNoResultsState(false);
+		showSearchErrorBadge(false);
 
 		// new query identity
 		searchState.rid += 1;
@@ -1387,6 +2399,7 @@
 					completed,
 					items: searchState.items
 				});
+				showNoResultsState(searchState.items.length === 0 && searchState.lastTermCompleted);
 
 				if (typeof responseCb === 'function') {
 					responseCb(searchState.items);
@@ -1424,13 +2437,18 @@
 				showSpinner(false);
 				// Report error
 				searchState.errorRaised = true;
-				showErrorBadge(`Search could not be performed. The server reported this error: ${error}`);
+				showSearchErrorBadge(`Search could not be performed. The server reported this error: ${error}`);
 			})
 			.always(() => {
 				searchState.xhr = null;
 			});
 	}
 
+	/**
+	 * Schedules follow-up poll for deferred source results.
+	 * @param {number} rid
+	 * @returns {void}
+	 */
 	function schedulePoll(rid) {
 		if (searchState.pollTimer) clearTimeout(searchState.pollTimer);
 
@@ -1441,6 +2459,11 @@
 		searchState.pollTimer = setTimeout(() => poll(rid), wait);
 	}
 
+	/**
+	 * Polls deferred search jobs and merges newly completed results.
+	 * @param {number} rid
+	 * @returns {void}
+	 */
 	function poll(rid) {
 		if (rid !== searchState.rid) return;
 		if (!Object.keys(searchState.pending).length) return;
@@ -1461,7 +2484,7 @@
 				// Errors? We show the error indicator with a generic "See console" and output 
 				// details to the console.
 				if (Object.keys(resp.errors || {}).length) {
-					showErrorBadge('Some errors were reported. See console for details.');
+					showSearchErrorBadge('Some errors were reported. See console for details.');
 					console.error('Error polling for search results:', resp.errors);
 				}
 
@@ -1502,6 +2525,11 @@
 			});
 	}
 
+	/**
+	 * Merges incremental search hits into existing per-source result buckets.
+	 * @param {Object<string, any[]>} newResultsBySource
+	 * @returns {void}
+	 */
 	function mergeIntoResultsBySource(newResultsBySource) {
 		if (!newResultsBySource || typeof newResultsBySource !== 'object') return;
 
@@ -1534,6 +2562,11 @@
 		}
 	}
 
+	/**
+	 * Builds de-duplication key for ontology hit objects.
+	 * @param {any} h
+	 * @returns {string}
+	 */
 	function hitKey(h) {
 		if (!h || typeof h !== 'object') return '';
 		const system = (h.system || '').trim();
@@ -1542,6 +2575,12 @@
 		return system + '|' + code;
 	}
 
+	/**
+	 * Converts grouped source results into sorted autocomplete items.
+	 * @param {Object<string, any[]>} resultsBySource
+	 * @param {string} term
+	 * @returns {any[]}
+	 */
 	function flattenResults(resultsBySource, term) {
 		const out = [];
 
@@ -1567,6 +2606,11 @@
 		return out;
 	}
 
+	/**
+	 * Escapes text for HTML-safe rendering.
+	 * @param {string} s
+	 * @returns {string}
+	 */
 	function escapeHtml(s) {
 		return String(s)
 			.replace(/&/g, '&amp;')
@@ -1576,6 +2620,11 @@
 			.replace(/'/g, '&#39;');
 	}
 
+	/**
+	 * Escapes regular-expression metacharacters.
+	 * @param {string} s
+	 * @returns {string}
+	 */
 	function escapeRegExp(s) {
 		return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
@@ -1583,6 +2632,12 @@
 	/**
 	 * Returns HTML with occurrences of term wrapped in <span class="rome-ac-hl">...</span>.
 	 * Safe: escapes input first, then injects spans on the escaped string.
+	 */
+	/**
+	 * Highlights search term occurrences in already escaped display text.
+	 * @param {string} text
+	 * @param {string} term
+	 * @returns {string}
 	 */
 	function highlightTermHtml(text, term) {
 		const t = (term || '').trim();
@@ -1593,6 +2648,10 @@
 		return escapedText.replace(re, (m) => `<span class="rome-ac-hl">${m}</span>`);
 	}
 
+	/**
+	 * Resets all active search jobs, timers, and error indicators.
+	 * @returns {void}
+	 */
 	function stopSearch() {
 		if (searchState.xhr) {
 			searchState.xhr.abort();
@@ -1605,36 +2664,53 @@
 		searchState.pending = {};
 		searchState.resultsBySource = {};
 		searchState.items = [];
+		setSelectedAnnotation(null);
 		showSpinner(false);
-		showErrorBadge(false);
+		showNoResultsState(false);
+		showSearchErrorBadge(false);
 	}
 
 	function resetSearchState() {
 		stopSearch();
-		designerState.$dlg.find('input[name="rome-em-fieldedit-search"]').val('');
+		odState.$search.val('');
 		searchState.term = '';
 		searchState.lastTerm = '';
 		searchState.lastTermCompleted = false;
 		searchState.debounceTimer = null;
+		setSelectedAnnotation(null);
 	}
 
 
+	/**
+	 * Produces stable cache-key fragment for chosen source id set.
+	 * @param {string[]} sourceIds
+	 * @returns {string}
+	 */
 	function sourceSetKey(sourceIds) {
 		// Sort a copy in order not to change the original
 		const sortedCopy = sourceIds.slice().sort();
 		return sortedCopy.join('|');
 	}
 
+	/**
+	 * Produces cache key for autocomplete snapshots.
+	 * @param {string} term
+	 * @param {string[]} sourceIds
+	 * @returns {string}
+	 */
 	function makeCacheKey(term, sourceIds) {
 		return `${term}::${sourceSetKey(sourceIds)}`;
 	}
 
+	/**
+	 * Returns list of source ids currently enabled for search.
+	 * @returns {string[]}
+	 */
 	function getDesiredSourceIds() {
 		// TODO: later: return subset chosen in UI
-		return config.sources.map(s => s.id);
+		return (config.sources || []).map(s => s.id);
 	}
 
-	//#endregion
-
+	//#endregion Search Implementation
 
 })();
