@@ -11,16 +11,26 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 /** @var OntologiesMadeEasyExternalModule $module */
 
+$context = defined('PROJECT_ID') ? 'project' : 'system';
 
-$canConfigure = $module->framework->getProjectSetting('can-configure') ?? false;
-$canConfigure = $canConfigure ? 'checked' : '';
+$canConfigure = $context === 'project' && ($module->framework->getProjectSetting('proj-can-configure') ?? false);
+$hasBioPortalToken = $module->isBioPortalAvailable();
+$allowBioPortal = $module->framework->getSystemSetting('sys-allow-rc-bioportal') ?? false;
+$isSuperuser = $module->framework->isSuperUser();
 
 ?>
 <div class="rome-plugin-page">
 	<h2>General Configuration (Admins Only)</h2>
+	<?php if ($context === 'project' && $isSuperuser): ?>
 	<div class="form-check form-switch">
-		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-can-configure" data-rome-setting="can-configure" <?= $canConfigure ?>>
+		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-can-configure" data-rome-setting="proj-can-configure" <?= $canConfigure ? 'checked' : '' ?>>
 		<label class="form-check-label" for="rome-set-can-configure">Allow access to this page for users with design rights in this project.</label>
+	</div>
+	<?php endif; ?>
+	<div class="form-check form-switch">
+		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-allow-rc-bioportal" data-rome-setting="sys-allow-rc-bioportal" <?= $allowBioPortal ? 'checked' : '' ?>>
+		<label class="form-check-label" for="rome-set-allow-rc-bioportal">Allow projects to use the built-in BioPortal to define custom sources.</label>
+		<span id="rome-rc-bioportal-status" class="badge <?= $hasBioPortalToken ? 'badge-success' : 'badge-danger' ?>"><?= $hasBioPortalToken ? 'AVAILABLE' : 'DISABLED or NO TOKEN SET' ?></span>
 	</div>
 	<p class="text-muted">
 		Configuration options (instance-wide) will appear here soon &hellip;

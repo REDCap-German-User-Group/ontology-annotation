@@ -352,8 +352,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 
 		$valid_settings = [
-			'discoverable' => [ 'requireProjectContext', 'requireDesignRights' ],
-			'can-configure' => [ 'requireProjectContext', 'requireSuperuser' ],
+			'proj-discoverable' => [ 'requireProjectContext', 'requireDesignRights' ],
+			'proj-can-configure' => [ 'requireProjectContext', 'requireSuperuser' ],
+			'sys-allow-rc-bioportal' => [ 'requireSuperuser' ],
 		];
 
 		$setting = $payload['setting'] ?? '';
@@ -374,8 +375,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				}
 			}
 		}
-		$this->framework->setProjectSetting($setting, $new_value, $this->project_id);
-		
+		if (substr($setting, 0, 4) === 'sys-') {
+			$this->framework->setSystemSetting($setting, $new_value);
+		} else if ($this->project_id !== null && substr($setting, 0, 5) === 'proj-') {
+			$this->framework->setProjectSetting($setting, $new_value, $this->project_id);
+		}
+		else {
+			$response['success'] = false;
+			$response['error'] = 'Invalid setting scope';
+		}
 		return $response;
 	}
 
@@ -736,6 +744,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 */
 	private function discoverOntologies($payload)
 	{
+		$discoverableSettingName = 'proj-discoverable';
 		// $sql = <<<SQL
 		// 	WITH
 		// 		-- all projects that have the module installed and metadata marked as 'discoverable'
@@ -816,7 +825,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			INNER JOIN redcap_external_module_settings exs
 				ON ex.external_module_id = exs.external_module_id
 				AND ex.directory_prefix = ?
-				AND exs.`key` = 'discoverable'
+				AND exs.`key` = ?
 				AND exs.`value` = 'true'
 			INNER JOIN redcap_projects rp
 				ON rp.project_id = exs.project_id
@@ -824,7 +833,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				ON rp.created_by = ru.ui_id;
 		SQL;
 		$start = microtime(true);
-		$q = $this->query($sql, [$this->PREFIX]);
+		$q = $this->query($sql, [$this->PREFIX, $discoverableSettingName]);
 		$projects = [];
 		while ($row = $q->fetch_assoc()) {
 			$projects[$row['project_id']] = [
@@ -865,7 +874,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					INNER JOIN redcap_external_module_settings exs
 						ON ex.external_module_id = exs.external_module_id
 						AND ex.directory_prefix = ?
-						AND exs.`key` = 'discoverable'
+						AND exs.`key` = ?
 						AND exs.`value` = 'true'
 					INNER JOIN redcap_metadata m
 						ON m.project_id = exs.project_id
@@ -876,7 +885,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		$fields = [];
 		$start = microtime(true);
-		$q = $this->query($sql, [$this->PREFIX]);
+		$q = $this->query($sql, [$this->PREFIX, $discoverableSettingName]);
 		while ($row = $q->fetch_assoc()) {
 			$fields[] = $row;
 		}

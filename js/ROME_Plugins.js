@@ -51,6 +51,7 @@
 					initDiscovery();
 					break;
 				case 'manage':
+				case 'configure':
 					initConfigPage(config.plugin);
 					break;
 			}

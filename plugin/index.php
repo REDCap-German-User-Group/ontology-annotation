@@ -57,7 +57,7 @@ $nav_tabs = [
 		"enabled" => $manage_enabled,
 	],
 	"configure" => [
-		"label" => "Configuration",
+		"label" => "Global Configuration",
 		"icon" => "fa-solid fa-gear",
 		"enabled" => $configure_enabled,
 	]
