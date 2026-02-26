@@ -59,7 +59,7 @@ h2 {
 .rome-plugin-page h3 {
     font-size: 14px;
     font-weight: bold;
-    margin: 1em 0 0 0;
+    margin: 2em 0 1em 0;
 	padding-bottom: .2em;
 	border-bottom: 1px solid #800000;
 }
@@ -74,14 +74,21 @@ h2 {
 	max-width: 350px;
 }
 .rome-sources-col-type {
-	width: 200px;
-	max-width: 200px;
+	width: 50px;
+	max-width: 50px;
 }
 .rome-sources-col-enabled {
+	width: 70px;
+	max-width: 70px;
+}
+.rome-sources-col-stats {
 	width: 80px;
 	max-width: 80px;
 }
 .rome-sources-col-actions {
 	width: 100px;
 	max-width: 100px;
+}
+.rome-config-block {
+	margin-left: .5em;
 }

@@ -8,58 +8,50 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 // - [ ] Add a nice configuration page that replaces the awkward module config dialog
 
 
+// Local = fa-database
+// Remote = fa-cloud
+// System = 
+
 /** @var OntologiesMadeEasyExternalModule $module */
 
 $discoverable = $module->framework->getProjectSetting('proj-discoverable') ?? false;
 
 ?>
 <div class="rome-plugin-page">
-	<h2>Manage Ontologies</h2>
-	<p class="text-muted">
-		Management options will appear here soon &hellip;
+	<h2>Manage ROME and Ontologies</h2>
+	<p>
+		Configure how ROME operates within this project and manage the ontology annotation sources available for use.
 	</p>
-	<div class="form-check form-switch">
-		<input class="form-check-input" type="checkbox" role="switch" id="rome-set-discoverable" data-rome-setting="proj-discoverable" <?= $discoverable ? 'checked' : '' ?>>
-		<label class="form-check-label" for="rome-set-discoverable">Make the metadata (annotated fields + contact data) from <b>this project</b> discoverable to other users.</label>
+	<div class="rome-config-block">
+		<div class="form-check form-switch">
+			<input class="form-check-input" type="checkbox" role="switch" id="rome-set-discoverable" data-rome-setting="proj-discoverable" <?= $discoverable ? 'checked' : '' ?>>
+			<label class="form-check-label" for="rome-set-discoverable">Make the metadata (annotated fields + contact data) from <b>this project</b> discoverable to other users.</label>
+		</div>
 	</div>
 	<p>
-		 Available ontologies for annotation are listed below. Each row in the tables represents one ontology source (local or remote) and may be enabled or disabled independently. By default, the title and description are taken from the source's <code>title</code> and <code>description</code> fields, when available, but overrides may be provided.
-	</p>
-	<h3><i class="fa-solid fa-database"></i> Local Annotation Sources</h3>
+		 Available ontologies for annotation are listed below. Each row in the tables represents one ontology source (local or remote) and may be enabled or disabled independently. <b>Local</b> ontology sources can be provided by uploading <i>FHIR Questionnaire</i> or <i>ROME Ontology Annotation</i> JSON files. These local sources are preprocessed by ROME to enable fast local search. <b>Remote</b> ontology sources are provided by external web services such as, e.g., <i>BioPortal</i> or <i>Snowstorm</i>. Additionally, sources can be added by picking from a list of preloaded/preconfigured <b>system</b> sources (added by the REDCap admin). 
 	<p>
-		Local ontology sources can be provided by uploading <b>FHIR Questionnaire</b> or <b>ROME Ontology Annotation</b> JSON files or by picking from a list of preloaded sources. These local sources are preprocessed by ROME to enable fast local search.
+		 By default, the title and description are taken from the source's <code>title</code> and <code>description</code> fields, when available, but overrides may be provided.
 	</p>
-	<p>
+	<div class="rome-config-block">
 		<button id="rome-add-local-source" class="btn btn-xs btn-success">
-			<i class="fa fa-plus"></i> Add a local source
+			<i class="fa-solid fa-database"></i> Add a local source
 		</button>
-	</p>
-	<table id="rome-local-sources" class="table table-sm table-striped align-middle rome-sources-table">
+		<button id="rome-add-remote-source" class="btn btn-xs btn-success ms-1">
+			<i class="fa-solid fa-cloud"></i> Add a remote source
+		</button>
+		<button id="rome-add-system-source" class="btn btn-xs btn-success ms-1">
+			<i class="fa-solid fa-hard-drive"></i> Add a system source
+		</button>
+	</div>
+	<h3><i class="fa-solid fa-folder"></i> Annotation Sources</h3>
+	<table id="rome-sources" class="table table-sm table-striped align-middle rome-sources-table">
 		<thead>
 			<tr>
-				<th class="rome-sources-col-title">Title / Description</th>
-				<th class="rome-sources-col-type">Type / Stats</th>
-				<th class="rome-sources-col-enabled">Enabled</th>
-				<th class="rome-sources-col-actions">Actions</th>
-			</tr>
-		</thead>
-		<tbody></tbody>
-	</table>
-	<h3 class="mt-5"><i class="fa-solid fa-cloud"></i> Remote Annotation Sources</h3>
-	<p>
-		Remote ontology sources are provided by external web services such as, e.g., <b>BioPortal</b> or <b>Snowstorm</b>. 
-	</p>
-	<p>
-		<button id="rome-add-remote-source" class="btn btn-xs btn-success">
-			<i class="fa fa-plus"></i> Add a remote source
-		</button>
-	</p>
-	<table id="rome-remote-sources" class="table table-sm table-striped align-middle rome-sources-table">
-		<thead>
-			<tr>
-				<th class="rome-sources-col-title">Title / Description</th>
 				<th class="rome-sources-col-type">Type</th>
 				<th class="rome-sources-col-enabled">Enabled</th>
+				<th class="rome-sources-col-title">Title / Description</th>
+				<th class="rome-sources-col-stats">Stats</th>
 				<th class="rome-sources-col-actions">Actions</th>
 			</tr>
 		</thead>
