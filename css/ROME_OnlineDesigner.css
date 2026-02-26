@@ -303,6 +303,9 @@
 #rome-annotation-table .rome-row-target {
 	min-width: 150px;
 }
+#rome-annotation-table tbody td {
+	padding: 2px;
+}
 #rome-search-bar .select2-container {
 	min-width: 180px;
 }
