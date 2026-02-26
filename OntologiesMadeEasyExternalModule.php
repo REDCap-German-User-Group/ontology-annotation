@@ -355,6 +355,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'proj-discoverable' => [ 'requireProjectContext', 'requireDesignRights' ],
 			'proj-can-configure' => [ 'requireProjectContext', 'requireSuperuser' ],
 			'sys-allow-rc-bioportal' => [ 'requireSuperuser' ],
+			'user-toggledarkmode' => [ 'requireProjectContext' ],
 		];
 
 		$setting = $payload['setting'] ?? '';
@@ -379,6 +380,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$this->framework->setSystemSetting($setting, $new_value);
 		} else if ($this->project_id !== null && substr($setting, 0, 5) === 'proj-') {
 			$this->framework->setProjectSetting($setting, $new_value, $this->project_id);
+		}
+		else if ($this->project_id !== null && defined('USERID') && substr($setting, 0, 5) === 'user-') {
+			$this->framework->setUserSetting($setting, $new_value, USERID);
 		}
 		else {
 			$response['success'] = false;

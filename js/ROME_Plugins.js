@@ -47,14 +47,23 @@
 		// Initalize based on plugin page
 		$(function () {
 			switch (config.plugin) {
+				case 'about':
+					break;
+				case 'annotate':
+					break;
 				case 'discover':
 					initDiscovery();
 					break;
-				case 'manage':
-				case 'configure':
-					initConfigPage(config.plugin);
+				case 'utilities':
 					break;
-			}
+				case 'export':
+					break;
+				case 'manage':
+					break;
+				case 'configure':
+					break;
+				}
+			initConfigSetters(config.plugin);
 			initialized = true;
 			log(`Initialized plugin page (${config.plugin})`, config);
 		});
@@ -64,7 +73,7 @@
 
 	//#region Manage / Configure
 
-	function initConfigPage(page) {
+	function initConfigSetters(page) {
 		$('.rome-plugin-page').on('change', '[data-rome-setting]', function (e) {
 			const $el = $(e.target);
 			const setting = $el.attr('data-rome-setting');
@@ -72,12 +81,24 @@
 			const value = $el.is(':checkbox') ? $el.is(':checked') : $el.val();
 			JSMO?.ajax('configure', { setting, value })
 			.then(function (response) {
-
 				log('Configuration updated', { setting, value, response });
+				postProcessConfigChange(setting, value, page);
 			}).catch(function (err) {
 				error('Error setting configuration', err);
 			});
 		});
+	}
+
+	/**
+	 * Post-process a configuration change.
+	 * @param {string} setting The setting that was changed
+	 * @param {any} value The new value of the setting
+	 * @param {string} page The current plugin page
+	 */
+	function postProcessConfigChange(setting, value, page) {
+		if (setting === 'user-toggledarkmode') {
+			location.reload();
+		}
 	}
 
 	//#endregion
