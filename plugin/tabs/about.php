@@ -2,6 +2,8 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+if (!defined('ROME_PLUGIN_PAGE')) exit;
+
 // TODOs
 // - [ ] Add a description of the module
 // - [ ] Add a link to the GitHub repository / Zenodo

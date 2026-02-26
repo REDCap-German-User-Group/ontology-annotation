@@ -2,6 +2,8 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+if (!defined('ROME_PLUGIN_PAGE')) exit;
+
 // TODOs
 // - [ ] Allow export of annotations of 
 //       - [ ] all forms

@@ -2,6 +2,8 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+if (!defined('ROME_PLUGIN_PAGE')) exit;
+
 // Plugin page to administrate the ROME module. Settings made here apply system-wide.
 // This page will only be shown if the module is designated to allow this from a project context.
 

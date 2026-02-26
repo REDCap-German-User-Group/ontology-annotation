@@ -64,7 +64,7 @@
 				case 'configure':
 					initSourcesManagement();
 					break;
-				}
+			}
 			initConfigSetters(config.page);
 			initialized = true;
 			log(`Initialized plugin page (${config.page})`, config);
@@ -82,12 +82,12 @@
 			if (!setting) return;
 			const value = $el.is(':checkbox') ? $el.is(':checked') : $el.val();
 			JSMO?.ajax('configure', { setting, value })
-			.then(function (response) {
-				postProcessConfigChange(setting, value);
-				log('Configuration updated', { setting, value, response });
-			}).catch(function (err) {
-				error('Error setting configuration', err);
-			});
+				.then(function (response) {
+					postProcessConfigChange(setting, value);
+					log('Configuration updated', { setting, value, response });
+				}).catch(function (err) {
+					error('Error setting configuration', err);
+				});
 		});
 	}
 
@@ -115,11 +115,191 @@
 
 	//#region Sources Management
 
+
+	const srcMgmt = {};
+
 	function initSourcesManagement() {
-	
-	
-	
+
+		srcMgmt.modalEl = document.getElementById('romeRemoteSourceModal');
+		srcMgmt.formEl = document.getElementById('romeRemoteSourceForm');
+		srcMgmt.titleEl = document.getElementById('romeRemoteSourceModalTitle');
+		srcMgmt.errEl = document.getElementById('romeRemoteSourceError');
+
+		srcMgmt.typeEl = document.getElementById('rome_remote_type');
+		srcMgmt.blockBio = document.getElementById('rome_remote_block_bioportal');
+		srcMgmt.blockSnow = document.getElementById('rome_remote_block_snowstorm');
+
+		srcMgmt.useRedcapTokenEl = document.getElementById('rome_bioportal_use_redcap_token');
+		srcMgmt.bioTokenWrapEl = document.getElementById('rome_bioportal_token_wrap');
+		srcMgmt.bioOntEl = document.getElementById('rome_bioportal_ontology');
+		srcMgmt.bioRefreshBtn = document.getElementById('rome_bioportal_refresh');
+
+		srcMgmt.snowAuthEl = document.getElementById('rome_snowstorm_auth_mode');
+		srcMgmt.snowBasicUserWrap = document.getElementById('rome_snowstorm_basic_user_wrap');
+		srcMgmt.snowBasicPassWrap = document.getElementById('rome_snowstorm_basic_pass_wrap');
+		srcMgmt.snowBearerWrap = document.getElementById('rome_snowstorm_bearer_wrap');
+
+		srcMgmt.addRemoteBtn = document.getElementById('rome-add-remote-source');
+		srcMgmt.bsModal = new bootstrap.Modal(srcMgmt.modalEl, { backdrop: 'static' });
+
+		function showError(msg) {
+			srcMgmt.errEl.textContent = msg;
+			srcMgmt.errEl.classList.remove('d-none');
+		}
+		function clearError() {
+			srcMgmt.errEl.textContent = '';
+			srcMgmt.errEl.classList.add('d-none');
+		}
+
+		function setType(type) {
+			if (type === 'snowstorm') {
+				srcMgmt.blockBio.classList.add('d-none');
+				srcMgmt.blockSnow.classList.remove('d-none');
+			} else {
+				srcMgmt.blockSnow.classList.add('d-none');
+				srcMgmt.blockBio.classList.remove('d-none');
+			}
+		}
+
+		function setSnowAuthMode(mode) {
+			srcMgmt.snowBasicUserWrap.classList.toggle('d-none', mode !== 'basic');
+			srcMgmt.snowBasicPassWrap.classList.toggle('d-none', mode !== 'basic');
+			srcMgmt.snowBearerWrap.classList.toggle('d-none', mode !== 'bearer');
+		}
+
+		function setBioTokenMode(useRedcapToken) {
+			srcMgmt.bioTokenWrapEl.classList.toggle('d-none', !!useRedcapToken);
+		}
+
+		async function loadBioportalOntologies({ forceRefresh = false } = {}) {
+			srcMgmt.bioOntEl.innerHTML = `<option value="">Loading…</option>`;
+			try {
+				const res = await JSMO.ajax('get-bioportal-ontologies', { forceRefresh });
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				const data = await res.json(); // expected: [{id, name}, ...]
+				const opts = ['<option value="">Select…</option>']
+					.concat(data.map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)}</option>`));
+				srcMgmt.bioOntEl.innerHTML = opts.join('');
+			} catch (e) {
+				srcMgmt.bioOntEl.innerHTML = `<option value="">(failed to load)</option>`;
+				showError(`BioPortal: failed to load ontology list (${e.message}).`);
+			}
+		}
+
+		// very small helper (avoid pulling in libs)
+		function escapeHtml(s) {
+			return String(s)
+				.replaceAll('&', '&amp;')
+				.replaceAll('<', '&lt;')
+				.replaceAll('>', '&gt;')
+				.replaceAll('"', '&quot;')
+				.replaceAll("'", '&#039;');
+		}
+
+		function resetFormForCreate() {
+			srcMgmt.formEl.reset();
+			$('#rome_source_id').val('');
+			clearError();
+
+			setType('bioportal');
+			setBioTokenMode(true);
+			setSnowAuthMode('none');
+
+			// Default title suggestion could be left blank, or set from type later.
+		}
+
+		// Public-ish API you can call from your table "Edit" button later
+		async function openRemoteSourceDialog(mode, sourceData) {
+			resetFormForCreate();
+
+			if (mode === 'edit' && sourceData) {
+				srcMgmt.titleEl.textContent = 'Edit remote source';
+				$('#rome_source_id').val(sourceData.id || '');
+				$('#rome_remote_type').val(sourceData.remote_type || 'bioportal');
+				$('#rome_title').val(sourceData.title || '');
+				$('#rome_description').val(sourceData.description || '');
+
+				setType(sourceData.remote_type || 'bioportal');
+
+				if (sourceData.remote_type === 'bioportal') {
+					srcMgmt.useRedcapTokenEl.checked = !!sourceData.bioportal_use_redcap_token;
+					setBioTokenMode(srcMgmt.useRedcapTokenEl.checked);
+					// Do NOT auto-fill secrets unless you explicitly want to.
+					await loadBioportalOntologies({ forceRefresh: false });
+					if (sourceData.bioportal_ontology) srcMgmt.bioOntEl.value = sourceData.bioportal_ontology;
+				} else {
+					$('#rome_snowstorm_base_url').val(sourceData.snowstorm_base_url || '');
+					$('#rome_snowstorm_branch').val(sourceData.snowstorm_branch || '');
+					srcMgmt.snowAuthEl.value = sourceData.snowstorm_auth_mode || 'none';
+					setSnowAuthMode(srcMgmt.snowAuthEl.value);
+				}
+			} else {
+				srcMgmt.titleEl.textContent = 'Add remote source';
+				await loadBioportalOntologies({ forceRefresh: false });
+			}
+
+			srcMgmt.bsModal.show();
+		};
+
+		// Wire events
+		srcMgmt.addRemoteBtn.addEventListener('click', () => {
+			openRemoteSourceDialog('create');
+		});
+
+		srcMgmt.typeEl.addEventListener('change', async () => {
+			clearError();
+			setType(srcMgmt.typeEl.value);
+			if (srcMgmt.typeEl.value === 'bioportal') {
+				await loadBioportalOntologies({ forceRefresh: false });
+			}
+		});
+
+		srcMgmt.useRedcapTokenEl.addEventListener('change', () => {
+			setBioTokenMode(srcMgmt.useRedcapTokenEl.checked);
+		});
+
+		srcMgmt.bioRefreshBtn.addEventListener('click', async () => {
+			clearError();
+			await loadBioportalOntologies({ forceRefresh: true });
+		});
+
+		srcMgmt.snowAuthEl.addEventListener('change', () => {
+			setSnowAuthMode(srcMgmt.snowAuthEl.value);
+		});
+
+		srcMgmt.formEl.addEventListener('submit', async (ev) => {
+			ev.preventDefault();
+			clearError();
+
+			// Bootstrap validation
+			if (!srcMgmt.formEl.checkValidity()) {
+				srcMgmt.formEl.classList.add('was-validated');
+				return;
+			}
+
+			const fd = new FormData(srcMgmt.formEl);
+			try {
+				const res = await JSMO.ajax('save_remote_source', fd);
+				// const data = await res.json(); // expected: { ok: true, source: {...} } or { ok: false, error: "..." }
+				// if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+				srcMgmt.bsModal.hide();
+
+				// You’ll plug this into your table refresh logic:
+				// - either re-render row from data.source
+				// - or do a full reload of sources table
+				refreshSourcesTable(res);
+			} catch (e) {
+				showError(e.message);
+			}
+		});
 	}
+
+	function refreshSourcesTable(src) {
+		log('Refreshing sources table', src);
+	}
+
+
 	//#endregion
 
 

@@ -4,6 +4,8 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 /** @var OntologiesMadeEasyExternalModule $module */
 
+if (!defined('ROME_PLUGIN_PAGE')) define('ROME_PLUGIN_PAGE', true);
+
 $ih = $module->getInjectionHelper();
 $ih->js("js/ConsoleDebugLogger.js");
 $ih->js("js/ROME_Plugins.js");
@@ -105,3 +107,9 @@ $config = $module->getPluginConfig($active_tab);
 		}
 	});
 </script>
+<?php
+
+// More page-specific includes
+if ($active_tab === 'manage' || $active_tab === 'configure') {
+	include __DIR__ . "/templates/remote-source-dialog.php";
+}

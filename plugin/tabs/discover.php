@@ -7,6 +7,8 @@ namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
 /** @var OntologiesMadeEasyExternalModule $module */
 
+if (!defined('ROME_PLUGIN_PAGE')) exit;
+
 $ih = $module->getInjectionHelper();
 
 // Inject additional CSS and JS files
