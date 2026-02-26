@@ -306,22 +306,25 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	#region Plugin Page Configuration
 
 	/**
-	 * Get the base config for the JS client on plugin pages
+	 * Get the config for the JS client on plugin pages
+	 * 
+	 * @param string $page
 	 * @return array 
 	 */
-	function get_plugin_base_config()
+	function getPluginConfig($page)
 	{
 		$pid = intval($this->framework->getProjectId());
 		if ($pid === 0) $pid = null;
-		$debug = $pid ? $this->getProjectSetting('javascript-debug') == true : $this->getSystemSetting("sys-javascript-debug") == true;
-		$js_base_config = [
+		$debug = $this->getSystemSetting('sys-javascript-debug') == true;
+		$jsConfig = [
 			'debug' => $debug,
 			'version' => $this->VERSION,
 			'moduleDisplayName' => $this->tt('module_name'),
 			'isAdmin' => $this->framework->isSuperUser(),
 			'pid' => $pid,
+			'page' => $page
 		];
-		return $js_base_config;
+		return $jsConfig;
 	}
 
 	#endregion
@@ -355,6 +358,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'proj-discoverable' => [ 'requireProjectContext', 'requireDesignRights' ],
 			'proj-can-configure' => [ 'requireProjectContext', 'requireSuperuser' ],
 			'sys-allow-rc-bioportal' => [ 'requireSuperuser' ],
+			'sys-javascript-debug' => [ 'requireSuperuser' ],
 			'user-toggledarkmode' => [ 'requireProjectContext' ],
 		];
 

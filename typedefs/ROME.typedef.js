@@ -16,8 +16,9 @@
  * @property {boolean=} isAdmin
  * @property {string=} moduleDisplayName
  * @property {Number=} pid
- * @property {string=} plugin
+ * @property {string=} page
  * @property {string=} version
+ * @property {SourceInfo[]=} sources
  */
 
 /**

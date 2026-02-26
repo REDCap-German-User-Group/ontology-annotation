@@ -31,6 +31,12 @@ $isSuperuser = $module->framework->isSuperUser();
 			<label class="form-check-label" for="rome-set-can-configure">Allow access to this page for users with design rights in this project.</label>
 		</div>
 		<?php endif; ?>
+		<?php if ($isSuperuser): ?>
+		<div class="form-check form-switch">
+			<input class="form-check-input" type="checkbox" role="switch" id="rome-set-js-debug" data-rome-setting="sys-javascript-debug" <?= $config['debug'] ? 'checked' : '' ?>>
+			<label class="form-check-label" for="rome-set-js-debug">Enable JavaScript debug output.</label>
+		</div>
+		<?php endif; ?>
 		<div class="form-check form-switch">
 			<input class="form-check-input" type="checkbox" role="switch" id="rome-set-allow-rc-bioportal" data-rome-setting="sys-allow-rc-bioportal" <?= $allowBioPortal ? 'checked' : '' ?>>
 			<label class="form-check-label" for="rome-set-allow-rc-bioportal">Allow projects to use the built-in BioPortal to define custom sources.</label>

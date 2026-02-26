@@ -26,11 +26,6 @@
 	],
 	"system-settings": [
 		{
-			"key": "sys-javascript-debug",
-			"name": "Output debug information to the browser console",
-			"type": "checkbox"
-		},
-		{
 			"key": "cache-config-note",
 			"name": "Background info on cache mechanism - see English.ini",
 			"tt_name": "conf_cache_config_note",
@@ -114,23 +109,6 @@
 		}
 	],
 	"project-settings": [
-		{
-			"key": "javascript-debug",
-			"name": "Output debug information to the browser console",
-			"type": "checkbox"
-		},
-		{
-			"key": "can-configure",
-			"name": "Enable system-wide module configuration to be accessible from this project (always enabled for REDCap admins)",
-
-			"type": "checkbox",
-			"super-users-only": true
-		},
-		{
-			"key": "discoverable",
-			"name": "Make the metadata (annotated fields + contact data) from this project discoverable to other users",
-			"type": "checkbox"
-		},
 		{
 			"key": "proj-fhir-sources-note",
 			"name": "Project-private FHIR Questionnaire sources - see English.ini",

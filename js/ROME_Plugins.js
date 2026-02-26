@@ -46,7 +46,7 @@
 
 		// Initalize based on plugin page
 		$(function () {
-			switch (config.plugin) {
+			switch (config.page) {
 				case 'about':
 					break;
 				case 'annotate':
@@ -59,13 +59,15 @@
 				case 'export':
 					break;
 				case 'manage':
+					initSourcesManagement();
 					break;
 				case 'configure':
+					initSourcesManagement();
 					break;
 				}
-			initConfigSetters(config.plugin);
+			initConfigSetters(config.page);
 			initialized = true;
-			log(`Initialized plugin page (${config.plugin})`, config);
+			log(`Initialized plugin page (${config.page})`, config);
 		});
 	}
 
@@ -81,8 +83,8 @@
 			const value = $el.is(':checkbox') ? $el.is(':checked') : $el.val();
 			JSMO?.ajax('configure', { setting, value })
 			.then(function (response) {
+				postProcessConfigChange(setting, value);
 				log('Configuration updated', { setting, value, response });
-				postProcessConfigChange(setting, value, page);
 			}).catch(function (err) {
 				error('Error setting configuration', err);
 			});
@@ -93,16 +95,32 @@
 	 * Post-process a configuration change.
 	 * @param {string} setting The setting that was changed
 	 * @param {any} value The new value of the setting
-	 * @param {string} page The current plugin page
 	 */
-	function postProcessConfigChange(setting, value, page) {
-		if (setting === 'user-toggledarkmode') {
-			location.reload();
+	function postProcessConfigChange(setting, value) {
+		switch (setting) {
+			case 'user-toggledarkmode':
+				location.reload();
+				break;
+			case 'sys-javascript-debug':
+				config.debug = value;
+				LOGGER.configure({
+					active: value
+				});
+				break;
 		}
 	}
 
 	//#endregion
 
+
+	//#region Sources Management
+
+	function initSourcesManagement() {
+	
+	
+	
+	}
+	//#endregion
 
 
 	//#region Discover

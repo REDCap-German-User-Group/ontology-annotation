@@ -8,13 +8,12 @@ $ih = $module->getInjectionHelper();
 $ih->js("js/ConsoleDebugLogger.js");
 $ih->js("js/ROME_Plugins.js");
 $ih->css("css/ROME.css");
-$config = $module->get_plugin_base_config();
 $module->framework->initializeJavascriptModuleObject();
 $jsmo_name = $module->framework->getJavascriptModuleObjectName();
 
 $user = $module->framework->getUser();
 if ($user == null) exit;
-$is_project = $config['pid'] !== null;
+$is_project = defined('PROJECT_ID') && PROJECT_ID !== null;
 
 $annotate_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
 $manage_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
@@ -71,7 +70,9 @@ $enabled_nav_tabs = array_filter($nav_tabs, function ($tab) {
 });
 // Set active tab
 $active_tab = array_key_exists($_GET['tab'], $enabled_nav_tabs) ? $_GET['tab'] : $default_tab;
-$config["plugin"] = $active_tab;
+// Get configuration for the tab
+$config = $module->getPluginConfig($active_tab);
+
 
 // Render page
 ?>
