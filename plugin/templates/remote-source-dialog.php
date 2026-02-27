@@ -6,14 +6,24 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 
 /** @var OntologiesMadeEasyExternalModule $module */
 
-
+$bpTokenMessage = 
+	$lang['system_config_398'] . ' <b>' . \BioPortal::getApiUrl() . '</b>. ' .
+	$lang['system_config_399'] . ' <a href="'.\BioPortal::$SIGNUP_URL.'" target="_blank" style="text-decoration:underline;">' . $lang['system_config_400'] . '</a>.<br>';
+$bp = $module->getBioPortalApiDetails();
+if ($bp['enabled']) {
+	$bpTokenMessage .= 
+		'Provide a token or <b>leave blank</b> to use the built-in BioPortal API token.';
+} else {
+	$bpTokenMessage .= 
+		'<span class="text-danger">' . $lang['system_config_401'] . '</span>';
+}
 ?>
 <!-- Add Remote Source -->
 <div class="modal fade" id="romeRemoteSourceModal" tabindex="-1" aria-hidden="true">
 	<div class="modal-dialog modal-lg modal-dialog-scrollable">
 		<div class="modal-content">
 			<div class="modal-header">
-				<h5 class="modal-title" id="romeRemoteSourceModalTitle">Add remote source</h5>
+				<h5 class="modal-title"><i class="fa-solid fa-cloud me-1"></i><span id="romeRemoteSourceModalTitle">Add/Edit remote source</span></h5>
 				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 			</div>
 
@@ -21,66 +31,56 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 				<div class="modal-body">
 					<input type="hidden" name="source_id" id="rome_source_id" value="">
 
-					<div class="alert alert-danger d-none" id="romeRemoteSourceError"></div>
+					<div class="red mb-3 d-none" id="romeRemoteSourceError"></div>
 
-					<div class="row g-3">
-						<div class="col-md-6">
-							<label class="form-label" for="rome_remote_type">Remote type</label>
-							<select class="form-select" name="remote_type" id="rome_remote_type" required>
+
+					<div class="mb-2 row">
+						<label class="col-sm-3 col-form-label" for="rome_title">Title <i>(optional)</i>:</label>
+						<div class="col-sm-9">
+							<input class="form-control form-control-sm" type="text" name="title" id="rome_title" required maxlength="120">
+						</div>
+					</div>
+
+					<div class="mb-2 row">
+						<label class="col-sm-3 col-form-label" for="rome_description">Description <i>(optional)</i>:</label>
+						<div class="col-sm-9">
+							<textarea class="form-control form-control-sm" name="description" id="rome_description" rows="3" maxlength="1000"></textarea>
+						</div>
+					</div>
+
+					<div class="mb-2 row">
+						<label class="col-sm-3 col-form-label col-form-label-sm" for="form-label" for="rome_remote_type">Remote type:</label>
+						<div class="col-sm-9">
+							<select class="form-select form-select-sm" name="remote_type" id="rome_remote_type" required>
 								<option value="bioportal">BioPortal</option>
 								<option value="snowstorm">Snowstorm</option>
 							</select>
 							<div class="invalid-feedback">Please choose a remote type.</div>
 						</div>
-
-						<!-- Common -->
-						<div class="col-md-6">
-							<label class="form-label" for="rome_title">Title</label>
-							<input class="form-control" type="text" name="title" id="rome_title" required maxlength="120">
-							<div class="invalid-feedback">Title is required.</div>
-						</div>
-
-						<div class="col-12">
-							<label class="form-label" for="rome_description">Description</label>
-							<textarea class="form-control" name="description" id="rome_description" rows="3" maxlength="1000"></textarea>
-						</div>
 					</div>
-
-					<hr class="my-3">
 
 					<!-- BioPortal block -->
 					<div id="rome_remote_block_bioportal">
-						<div class="row g-3">
-							<div class="col-12">
-								<div class="form-check form-switch">
-									<input class="form-check-input" type="checkbox" id="rome_bioportal_use_redcap_token" name="bioportal_use_redcap_token" checked>
-									<label class="form-check-label" for="rome_bioportal_use_redcap_token">
-										Use REDCap-stored BioPortal API token (if available)
-									</label>
-								</div>
+						<div class="mb-2 row g-3">
+							<label class="col-sm-3 col-form-label" for="rome_bioportal_token">BioPortal API token:</label>
+							<div class="col-sm-9" id="rome_bioportal_token_wrap">
+								<input class="form-control form-control-sm" type="password" name="bioportal_token" id="rome_bioportal_token" autocomplete="off">
 								<div class="form-text">
-									If not available, a dedicated token can be entered below.
+									<?= $bpTokenMessage ?>
 								</div>
 							</div>
+						</div>
 
-							<div class="col-12" id="rome_bioportal_token_wrap">
-								<label class="form-label" for="rome_bioportal_token">BioPortal API token</label>
-								<input class="form-control" type="password" name="bioportal_token" id="rome_bioportal_token" autocomplete="off">
-							</div>
-
-							<div class="col-12">
-								<label class="form-label" for="rome_bioportal_ontology">Ontology</label>
-								<div class="input-group">
-									<select class="form-select" name="bioportal_ontology" id="rome_bioportal_ontology" required>
-										<option value="">Loading…</option>
-									</select>
-									<button class="btn btn-outline-secondary" type="button" id="rome_bioportal_refresh">
-										Refresh
-									</button>
-								</div>
-								<div class="form-text">
-									Ontologies are fetched from BioPortal if not cached.
-								</div>
+						<div class="mb-2 row">
+							<label class="col-sm-3 col-form-label" for="rome_bioportal_ontology">Ontology:</label>
+							<div class="col-sm-9">
+								<select class="form-select form-select-sm rome_bioportal_ontologies" name="bioportal_ontology" id="rome_bioportal_ontology" required>
+									<option value="">Loading…</option>
+								</select>
+								<button class="btn btn-link btn-sm" type="button" id="rome_bioportal_refresh">
+									<span class="visually-hidden">Refresh</span>
+									<i class="fa-solid fa-arrows-rotate"></i>
+								</button>
 								<div class="invalid-feedback">Please select an ontology.</div>
 							</div>
 						</div>
@@ -88,56 +88,70 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 
 					<!-- Snowstorm block -->
 					<div id="rome_remote_block_snowstorm" class="d-none">
-						<div class="row g-3">
-							<div class="col-12">
-								<label class="form-label" for="rome_snowstorm_base_url">API base URL</label>
-								<input class="form-control" type="url" name="snowstorm_base_url" id="rome_snowstorm_base_url"
+						<div class="mb-2 row">
+							<label class="col-sm-3 col-form-label" for="rome_snowstorm_base_url">API base URL:</label>
+							<div class="col-sm-9">
+								<input class="form-control form-control-sm" type="url" name="snowstorm_base_url" id="rome_snowstorm_base_url"
 									placeholder="https://snowstorm.example.org">
 								<div class="form-text">
-									Base URL only (no trailing slash). You can proxy Snowstorm behind a gateway.
+									Base URL only (no trailing slash).
 								</div>
 							</div>
+						</div>
 
-							<div class="col-md-6">
-								<label class="form-label" for="rome_snowstorm_branch">Branch</label>
-								<input class="form-control" type="text" name="snowstorm_branch" id="rome_snowstorm_branch"
+						<div class="mb-2 row">
+
+							<label class="col-sm-3 col-form-label" for="rome_snowstorm_branch">Branch:</label>
+							<div class="col-sm-9">
+								<input class="form-control form-control-sm" type="text" name="snowstorm_branch" id="rome_snowstorm_branch"
 									placeholder="MAIN/SNOMEDCT-DE">
 							</div>
+						</div>
 
-							<div class="col-md-6">
-								<label class="form-label" for="rome_snowstorm_auth_mode">Auth mode</label>
-								<select class="form-select" name="snowstorm_auth_mode" id="rome_snowstorm_auth_mode">
+						<div class="mb-2 row">
+							<label class="col-sm-3 col-form-label" for="rome_snowstorm_auth_mode">Auth mode:</label>
+							<div class="col-sm-9">
+								<select class="form-select form-select-sm" name="snowstorm_auth_mode" id="rome_snowstorm_auth_mode">
 									<option value="none">None</option>
 									<option value="basic">Basic</option>
 									<option value="bearer">Bearer token</option>
 								</select>
-								<div class="form-text">
-									Many private deployments use Basic via Spring Security or a reverse proxy. :contentReference[oaicite:1]{index=1}
-								</div>
 							</div>
+						</div>
 
-							<div class="col-md-6 d-none" id="rome_snowstorm_basic_user_wrap">
-								<label class="form-label" for="rome_snowstorm_basic_user">Username</label>
+						<div class="mb-2 row d-none" id="rome_snowstorm_basic_user_wrap">
+
+							<label class="col-sm-3 col-form-label" for="rome_snowstorm_basic_user">Username:</label>
+							<div class="col-sm-9">
 								<input class="form-control" type="text" name="snowstorm_basic_user" id="rome_snowstorm_basic_user">
 							</div>
 
-							<div class="col-md-6 d-none" id="rome_snowstorm_basic_pass_wrap">
-								<label class="form-label" for="rome_snowstorm_basic_pass">Password</label>
+						</div>
+
+						<div class="mb-2 row d-none" id="rome_snowstorm_basic_pass_wrap">
+							<label class="col-sm-3 col-form-label" for="rome_snowstorm_basic_pass">Password:</label>
+							<div class="col-sm-9">
 								<input class="form-control" type="password" name="snowstorm_basic_pass" id="rome_snowstorm_basic_pass" autocomplete="off">
 							</div>
+						</div>
 
-							<div class="col-12 d-none" id="rome_snowstorm_bearer_wrap">
-								<label class="form-label" for="rome_snowstorm_bearer">Bearer token</label>
+						<div class="mb-2 row d-none" id="rome_snowstorm_bearer_wrap">
+							<label class="col-sm-3 col-form-label" for="rome_snowstorm_bearer">Bearer token:</label>
+							<div class="col-sm-9">
 								<input class="form-control" type="password" name="snowstorm_bearer" id="rome_snowstorm_bearer" autocomplete="off">
 							</div>
-
-							<div class="col-12">
-								<button class="btn btn-outline-secondary" type="button" id="rome_snowstorm_test">
+						</div>
+						<div class="mb-2 row">
+							<div class="col-sm-3"></div>
+							<div class="col-sm-9">
+								<button class="btn btn-outline-secondary btn-sm" type="button" id="rome_snowstorm_test">
 									Test connection
 								</button>
 								<span class="ms-2" id="rome_snowstorm_test_result"></span>
 							</div>
+
 						</div>
+
 					</div>
 
 				</div>

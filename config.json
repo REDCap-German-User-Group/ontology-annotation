@@ -162,7 +162,8 @@
 		"set-matrix-exclusion",
 		"refresh-exclusions",
 		"discover",
-		"configure"
+		"configure",
+		"get-bioportal-ontologies"
 	],
 	"no-csrf-pages": [
         "ajax/search",

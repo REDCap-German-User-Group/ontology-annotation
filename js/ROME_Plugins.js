@@ -129,8 +129,6 @@
 		srcMgmt.blockBio = document.getElementById('rome_remote_block_bioportal');
 		srcMgmt.blockSnow = document.getElementById('rome_remote_block_snowstorm');
 
-		srcMgmt.useRedcapTokenEl = document.getElementById('rome_bioportal_use_redcap_token');
-		srcMgmt.bioTokenWrapEl = document.getElementById('rome_bioportal_token_wrap');
 		srcMgmt.bioOntEl = document.getElementById('rome_bioportal_ontology');
 		srcMgmt.bioRefreshBtn = document.getElementById('rome_bioportal_refresh');
 
@@ -167,23 +165,61 @@
 			srcMgmt.snowBearerWrap.classList.toggle('d-none', mode !== 'bearer');
 		}
 
-		function setBioTokenMode(useRedcapToken) {
-			srcMgmt.bioTokenWrapEl.classList.toggle('d-none', !!useRedcapToken);
-		}
 
 		async function loadBioportalOntologies({ forceRefresh = false } = {}) {
+			if (srcMgmt.ontologiesLoaded && !forceRefresh) return;
 			srcMgmt.bioOntEl.innerHTML = `<option value="">Loading…</option>`;
 			try {
 				const res = await JSMO.ajax('get-bioportal-ontologies', { forceRefresh });
-				if (!res.ok) throw new Error(`HTTP ${res.status}`);
-				const data = await res.json(); // expected: [{id, name}, ...]
-				const opts = ['<option value="">Select…</option>']
-					.concat(data.map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)}</option>`));
-				srcMgmt.bioOntEl.innerHTML = opts.join('');
+				log('Loaded bioportal ontologies', res);
+				const placeholder = res.ontologies.length === 0
+					? 'Provide a token and refresh'
+					: 'Select an ontology ...';
+				srcMgmt.bioOntEl.disabled = res.ontologies.length === 0;
+				const select2Data = res.ontologies.map(o => ({
+					id: o['@id'],          // stable unique value
+					text: o.name,          // fallback
+					acronym: o.acronym,
+					name: o.name
+				}));
+				srcMgmt.ontologiesLoaded = res.ontologies.length > 0;
+				if (srcMgmt.ontologiesLoaded) {
+					$(srcMgmt.bioRefreshBtn).remove();
+				}
+				$(srcMgmt.bioOntEl).select2({
+					width: '80%',
+					dropdownParent: srcMgmt.modalEl,
+					data: select2Data,
+					templateResult: formatOntology,
+					templateSelection: formatOntology,
+					placeholder: placeholder,
+					allowClear: true
+				});
 			} catch (e) {
 				srcMgmt.bioOntEl.innerHTML = `<option value="">(failed to load)</option>`;
+				srcMgmt.bioOntEl.disabled = true;
 				showError(`BioPortal: failed to load ontology list (${e.message}).`);
 			}
+		}
+
+		function formatOntology(data) {
+			// Placeholder / loading entry
+			if (!data.id) return data.text;
+
+			const $container = $('<span>');
+
+			$('<b>')
+				.text(data.acronym || '')
+				.appendTo($container);
+
+			$container.prepend('[');
+			$container.append('] ');
+
+			$('<span>')
+				.text(data.name || data.text || '')
+				.appendTo($container);
+
+			return $container;
 		}
 
 		// very small helper (avoid pulling in libs)
@@ -202,7 +238,6 @@
 			clearError();
 
 			setType('bioportal');
-			setBioTokenMode(true);
 			setSnowAuthMode('none');
 
 			// Default title suggestion could be left blank, or set from type later.
@@ -222,9 +257,6 @@
 				setType(sourceData.remote_type || 'bioportal');
 
 				if (sourceData.remote_type === 'bioportal') {
-					srcMgmt.useRedcapTokenEl.checked = !!sourceData.bioportal_use_redcap_token;
-					setBioTokenMode(srcMgmt.useRedcapTokenEl.checked);
-					// Do NOT auto-fill secrets unless you explicitly want to.
 					await loadBioportalOntologies({ forceRefresh: false });
 					if (sourceData.bioportal_ontology) srcMgmt.bioOntEl.value = sourceData.bioportal_ontology;
 				} else {
@@ -252,10 +284,6 @@
 			if (srcMgmt.typeEl.value === 'bioportal') {
 				await loadBioportalOntologies({ forceRefresh: false });
 			}
-		});
-
-		srcMgmt.useRedcapTokenEl.addEventListener('change', () => {
-			setBioTokenMode(srcMgmt.useRedcapTokenEl.checked);
 		});
 
 		srcMgmt.bioRefreshBtn.addEventListener('click', async () => {

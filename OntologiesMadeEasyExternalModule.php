@@ -297,6 +297,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return $this->discoverOntologies($payload);
 			case 'configure':
 				return $this->setConfigFromPluginPage($payload);
+			case 'get-bioportal-ontologies':
+				return $this->getBioPortalOntologies($payload);
 		}
 	}
 
@@ -1961,6 +1963,19 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 		return $details;
 	}
+
+
+	function getBioPortalOntologies($payload) {
+		$bp = $this->getBioPortalApiDetails();
+
+		$list = empty($bp['ontology_list']) ? [] : json_decode($bp['ontology_list'], true);
+		
+		return [
+			'rc_enabled' => $bp['enabled'],
+			'ontologies' => $list,
+		];
+	}
+
 
 	/**
 	 * BioPortal search across multiple ontologies (acronyms).
