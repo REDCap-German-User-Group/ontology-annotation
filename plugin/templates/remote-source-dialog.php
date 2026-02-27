@@ -23,7 +23,7 @@ if ($bp['enabled']) {
 	<div class="modal-dialog modal-lg modal-dialog-scrollable">
 		<div class="modal-content">
 			<div class="modal-header">
-				<h5 class="modal-title"><i class="fa-solid fa-cloud me-1"></i><span id="romeRemoteSourceModalTitle">Add/Edit remote source</span></h5>
+				<h5 class="modal-title"><i class="fa-solid fa-cloud me-2"></i><span id="romeRemoteSourceModalTitle">Add/Edit a remote source</span></h5>
 				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 			</div>
 

@@ -248,7 +248,7 @@
 			resetFormForCreate();
 
 			if (mode === 'edit' && sourceData) {
-				srcMgmt.titleEl.textContent = 'Edit remote source';
+				srcMgmt.titleEl.textContent = 'Edit a remote source';
 				$('#rome_source_id').val(sourceData.id || '');
 				$('#rome_remote_type').val(sourceData.remote_type || 'bioportal');
 				$('#rome_title').val(sourceData.title || '');
@@ -266,7 +266,7 @@
 					setSnowAuthMode(srcMgmt.snowAuthEl.value);
 				}
 			} else {
-				srcMgmt.titleEl.textContent = 'Add remote source';
+				srcMgmt.titleEl.textContent = 'Add a remote source';
 				await loadBioportalOntologies({ forceRefresh: false });
 			}
 
