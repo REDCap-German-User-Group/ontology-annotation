@@ -130,12 +130,14 @@
 		srcMgmt.blockSnow = document.getElementById('rome_remote_block_snowstorm');
 
 		srcMgmt.bioOntEl = document.getElementById('rome_bioportal_ontology');
+		srcMgmt.bioOntTokenEl = document.getElementById('rome_bioportal_token');
 		srcMgmt.bioRefreshBtn = document.getElementById('rome_bioportal_refresh');
 
 		srcMgmt.snowAuthEl = document.getElementById('rome_snowstorm_auth_mode');
 		srcMgmt.snowBasicUserWrap = document.getElementById('rome_snowstorm_basic_user_wrap');
 		srcMgmt.snowBasicPassWrap = document.getElementById('rome_snowstorm_basic_pass_wrap');
 		srcMgmt.snowBearerWrap = document.getElementById('rome_snowstorm_bearer_wrap');
+		srcMgmt.snowTestBtn = document.getElementById('rome_snowstorm_test');
 
 		srcMgmt.addRemoteBtn = document.getElementById('rome-add-remote-source');
 		srcMgmt.bsModal = new bootstrap.Modal(srcMgmt.modalEl, { backdrop: 'static' });
@@ -170,8 +172,12 @@
 			if (srcMgmt.ontologiesLoaded && !forceRefresh) return;
 			srcMgmt.bioOntEl.innerHTML = `<option value="">Loading…</option>`;
 			try {
-				const res = await JSMO.ajax('get-bioportal-ontologies', { forceRefresh });
+				const res = await JSMO.ajax('get-bioportal-ontologies', { 
+					forceRefresh: forceRefresh,
+					token: srcMgmt.bioOntTokenEl.value ?? null
+				});
 				log('Loaded bioportal ontologies', res);
+				if (res.error) throw res.error;
 				const placeholder = res.ontologies.length === 0
 					? 'Provide a token and refresh'
 					: 'Select an ontology ...';
@@ -222,7 +228,6 @@
 			return $container;
 		}
 
-		// very small helper (avoid pulling in libs)
 		function escapeHtml(s) {
 			return String(s)
 				.replaceAll('&', '&amp;')
@@ -239,11 +244,8 @@
 
 			setType('bioportal');
 			setSnowAuthMode('none');
-
-			// Default title suggestion could be left blank, or set from type later.
 		}
 
-		// Public-ish API you can call from your table "Edit" button later
 		async function openRemoteSourceDialog(mode, sourceData) {
 			resetFormForCreate();
 
@@ -295,32 +297,74 @@
 			setSnowAuthMode(srcMgmt.snowAuthEl.value);
 		});
 
+		srcMgmt.snowTestBtn.addEventListener('click', async () => {
+			srcMgmt.snowTestBtn.enabled = false;
+			await snowstormTestConnection();
+			srcMgmt.snowTestBtn.enabled = true;
+		});
+
 		srcMgmt.formEl.addEventListener('submit', async (ev) => {
 			ev.preventDefault();
 			clearError();
 
-			// Bootstrap validation
-			if (!srcMgmt.formEl.checkValidity()) {
-				srcMgmt.formEl.classList.add('was-validated');
+
+			// Assemble payload
+			const type = srcMgmt.typeEl.value;
+			const payload = {
+				title: `${srcMgmt.titleEl.value}`.trim(),
+				description: `${srcMgmt.descriptionEl.value}`.trim(),
+				type: type
+			};
+			if (type === 'snowstorm') {
+				payload.ss_baseurl = `${$('#rome_snowstorm_base_url').val() ?? ''}`.trim();
+				payload.ss_branch = `${$('#rome_snowstorm_branch').val() ?? ''}`.trim();
+				payload.ss_auth = `${$('#rome_snowstorm_auth_mode').val() ?? ''}`.trim();
+				payload.ss_username = `${$('#rome_snowstorm_basic_user').val() ?? ''}`.trim();
+				payload.ss_password = `${$('#rome_snowstorm_basic_pass').val() ?? ''}`.trim();
+				payload.ss_token = `${$('#rome_snowstorm_bearer').val() ?? ''}`.trim();
+			}
+			else if (type === 'bioportal') {
+				payload.bp_token = `${$('#rome_bioportal_token').val() ?? ''}`.trim();
+				payload.bp_ontology = `${$('#rome_bioportal_ontology').val() ?? ''}`.trim();
+			}
+			// TODO: Validate payload
+			if (payload.type === 'bioportal') {
+
+			}
+			else if (payload.type === 'snowstorm') {
+
+			}
+			else {
+				showError('Invalid source type');
 				return;
 			}
 
-			const fd = new FormData(srcMgmt.formEl);
+			// Save
 			try {
-				const res = await JSMO.ajax('save_remote_source', fd);
-				// const data = await res.json(); // expected: { ok: true, source: {...} } or { ok: false, error: "..." }
-				// if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-
+				$('#romeRemoteSourceSaveBtn').prop('disabled', true);
+				const res = await JSMO.ajax('save-remote-source', payload);
 				srcMgmt.bsModal.hide();
-
-				// You’ll plug this into your table refresh logic:
-				// - either re-render row from data.source
-				// - or do a full reload of sources table
 				refreshSourcesTable(res);
 			} catch (e) {
 				showError(e.message);
+			} finally {
+				$('#romeRemoteSourceSaveBtn').prop('disabled', false);
 			}
 		});
+	}
+
+	async function snowstormTestConnection() {
+		const payload = {};
+		payload.ss_baseurl = `${$('#rome_snowstorm_base_url').val() ?? ''}`.trim();
+		payload.ss_branch = `${$('#rome_snowstorm_branch').val() ?? ''}`.trim();
+		payload.ss_auth = `${$('#rome_snowstorm_auth_mode').val() ?? ''}`.trim();
+		payload.ss_username = `${$('#rome_snowstorm_basic_user').val() ?? ''}`.trim();
+		payload.ss_password = `${$('#rome_snowstorm_basic_pass').val() ?? ''}`.trim();
+		payload.ss_token = `${$('#rome_snowstorm_bearer').val() ?? ''}`.trim();
+
+
+		const res = await JSMO.ajax('snowstorm-test-connection', payload);
+		
 	}
 
 	function refreshSourcesTable(src) {

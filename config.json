@@ -163,7 +163,9 @@
 		"refresh-exclusions",
 		"discover",
 		"configure",
-		"get-bioportal-ontologies"
+		"get-bioportal-ontologies",
+		"snowstorm-test-connection",
+		"save-remote-source"
 	],
 	"no-csrf-pages": [
         "ajax/search",

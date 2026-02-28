@@ -2,6 +2,7 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+use BioPortal;
 use Exception;
 use InvalidArgumentException;
 use Project;
@@ -299,6 +300,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return $this->setConfigFromPluginPage($payload);
 			case 'get-bioportal-ontologies':
 				return $this->getBioPortalOntologies($payload);
+			case 'snowstorm-test-connection':
+				return $this->testSnowstormConnection($payload);
 		}
 	}
 
@@ -1966,13 +1969,62 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 
 	function getBioPortalOntologies($payload) {
+		$token = $payload['token'] ?? null;
 		$bp = $this->getBioPortalApiDetails();
-
-		$list = empty($bp['ontology_list']) ? [] : json_decode($bp['ontology_list'], true);
-		
-		return [
+		// We will NOT fetch the list of ontologies if REDCap already has a cached list
+		if (!empty($bp['ontology_list'])) return [
 			'rc_enabled' => $bp['enabled'],
-			'ontologies' => $list,
+			'ontologies' =>	json_decode($bp['ontology_list'], true)
+		];
+		if (empty($token)) return [
+			'rc_enabled' => $bp['enabled'],
+			'ontologies' => []
+		];
+		// Get the list of ontologies from BioPortal using the provided token
+		try {
+			return [
+				'rc_enabled' => $bp['enabled'],
+				'ontologies' => $this->fetchBioPortalOntologies($token),
+			];
+		}
+		catch (Exception $e) {
+			return [
+				'rc_enabled' => $bp['enabled'],
+				'ontologies' => [],
+				'error' => $e->getMessage(),
+			];
+		}
+	}
+
+	private function fetchBioPortalOntologies($token) {
+		$url = BioPortal::getApiUrl() . 'ontologies?include=name,acronym&display_links=false&display_context=false&format=json&apikey=' . $token;
+		// Call the URL
+		$jsonString = http_get($url);
+		// Parse the JSON into an array
+		$list = json_decode($jsonString, true);
+		if (isset($list['error'])) throw new Exception($list['error']);
+		if (!is_array($list)) throw new Exception("Failed to obtain data from BioPortal.");
+		// Save the JSON in the config table
+		$GLOBAL['bioportal_ontology_list'] = $jsonString;
+		$GLOBAL['bioportal_ontology_list_cache_time'] = TODAY;
+		$sql = "UPDATE redcap_config SET `value` = ? WHERE field_name = 'bioportal_ontology_list'";
+		db_query($sql, [$jsonString]);
+		$sql = "UPDATE redcap_config SET `value` = ? WHERE field_name = 'bioportal_ontology_list_cache_time'";
+		db_query($sql, [TODAY]);
+		return $list;
+	}
+
+	private function testSnowstormConnection($payload) {
+		
+		// TODO: Implement a Snowstorm check that connects to the GET /branches endpoint
+		// and retrieves the available branches.
+		// payload contains ss_baseurl, ss_auth (the auth method, which is one of 'none', 'basic', 
+		// or 'token'), ss_username, ss_password, ss_token
+		// Return an array similar to this one:
+		return [
+			'success' => true,
+			'branches' => [],
+			'error' => 'Any error message giving some details',
 		];
 	}
 

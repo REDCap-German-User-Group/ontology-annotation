@@ -37,7 +37,7 @@ if ($bp['enabled']) {
 					<div class="mb-2 row">
 						<label class="col-sm-3 col-form-label" for="rome_title">Title <i>(optional)</i>:</label>
 						<div class="col-sm-9">
-							<input class="form-control form-control-sm" type="text" name="title" id="rome_title" required maxlength="120">
+							<input class="form-control form-control-sm" type="text" name="title" id="rome_title" maxlength="120">
 						</div>
 					</div>
 
