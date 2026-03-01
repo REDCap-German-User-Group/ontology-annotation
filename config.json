@@ -164,7 +164,7 @@
 		"discover",
 		"configure",
 		"get-bioportal-ontologies",
-		"snowstorm-test-connection",
+		"get-snowstorm-branches",
 		"save-remote-source"
 	],
 	"no-csrf-pages": [

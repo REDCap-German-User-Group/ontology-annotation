@@ -300,8 +300,18 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return $this->setConfigFromPluginPage($payload);
 			case 'get-bioportal-ontologies':
 				return $this->getBioPortalOntologies($payload);
-			case 'snowstorm-test-connection':
-				return $this->testSnowstormConnection($payload);
+			case 'get-snowstorm-branches':
+				return $this->getSnowstormBranches($payload);
+			case 'save-remote-source':
+				try {
+					return $this->saveRemoteSource($payload);
+				}
+				catch (Throwable $e) {
+					return [
+						'error' => $e->getMessage()
+					];
+				}
+				break;
 		}
 	}
 
@@ -1936,6 +1946,19 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 
+	private function saveRemoteSource($payload) {
+		$type = $payload['type'];
+		if (!in_array($type, ['bioportal', 'snowstorm'], true)) {
+			throw new Exception('Invalid type');
+		}
+
+
+		return [
+			'error' => 'Not implemented',
+		];
+	}
+
+
 	#region BioPortal
 
 	function isBioPortalAvailable()
@@ -2014,20 +2037,119 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $list;
 	}
 
-	private function testSnowstormConnection($payload) {
-		
-		// TODO: Implement a Snowstorm check that connects to the GET /branches endpoint
-		// and retrieves the available branches.
-		// payload contains ss_baseurl, ss_auth (the auth method, which is one of 'none', 'basic', 
-		// or 'token'), ss_username, ss_password, ss_token
-		// Return an array similar to this one:
+	private function getSnowstormBranches($payload) {
+		$baseUrl = trim((string)($payload['ss_baseurl'] ?? ''));
+		if ($baseUrl === '') {
+			return [
+				'success' => false,
+				'branches' => [],
+				'error' => 'Snowstorm base URL is required.',
+			];
+		}
+
+		$auth = strtolower(trim((string)($payload['ss_auth'] ?? 'none')));
+		if (!in_array($auth, ['none', 'basic', 'token'], true)) $auth = 'none';
+
+		$headers = [
+			'Accept: application/json',
+			'User-Agent: ' . $this->getUserAgentString(),
+		];
+		$curlUserPwd = null;
+
+		if ($auth === 'basic') {
+			$username = (string)($payload['ss_username'] ?? '');
+			$password = (string)($payload['ss_password'] ?? '');
+			if ($username === '' || $password === '') {
+				return [
+					'success' => false,
+					'branches' => [],
+					'error' => 'Snowstorm basic auth requires username and password.',
+				];
+			}
+			$curlUserPwd = $username . ':' . $password;
+		} elseif ($auth === 'token') {
+			$token = trim((string)($payload['ss_token'] ?? ''));
+			if ($token === '') {
+				return [
+					'success' => false,
+					'branches' => [],
+					'error' => 'Snowstorm token auth requires a token.',
+				];
+			}
+			if (stripos($token, 'Bearer ') !== 0) $token = 'Bearer ' . $token;
+			$headers[] = 'Authorization: ' . $token;
+		}
+
+		$url = rtrim($baseUrl, '/') . '/branches';
+
+		$ch = curl_init($url);
+		if ($ch === false) {
+			return [
+				'success' => false,
+				'branches' => [],
+				'error' => 'Failed to initialize Snowstorm request.',
+			];
+		}
+
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_HTTPGET, true);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+		if ($curlUserPwd !== null) curl_setopt($ch, CURLOPT_USERPWD, $curlUserPwd);
+
+		$body = curl_exec($ch);
+		$httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		$curlErr = curl_error($ch);
+
+		if ($body === false) {
+			return [
+				'success' => false,
+				'branches' => [],
+				'error' => 'Snowstorm request failed: ' . ($curlErr !== '' ? $curlErr : 'unknown cURL error'),
+			];
+		}
+
+		$data = json_decode($body, true);
+		if (!is_array($data)) {
+			return [
+				'success' => false,
+				'branches' => [],
+				'error' => 'Snowstorm response was not valid JSON.',
+			];
+		}
+
+		if ($httpCode < 200 || $httpCode >= 300) {
+			$msg = '';
+			if (isset($data['message']) && is_string($data['message'])) $msg = trim($data['message']);
+			if ($msg === '' && isset($data['error']) && is_string($data['error'])) $msg = trim($data['error']);
+			if ($msg === '') $msg = 'HTTP ' . $httpCode;
+			return [
+				'success' => false,
+				'branches' => [],
+				'error' => 'Snowstorm returned an error: ' . $msg,
+			];
+		}
+
+		$rawBranches = [];
+		if (isset($data['items']) && is_array($data['items'])) $rawBranches = $data['items'];
+		elseif (array_keys($data) === range(0, count($data) - 1)) $rawBranches = $data;
+
+		$branches = [];
+		foreach ($rawBranches as $item) {
+			if (!is_array($item)) continue;
+			$name = isset($item['name']) && is_string($item['name']) ? trim($item['name']) : '';
+			if ($name === '' && isset($item['path']) && is_string($item['path'])) $name = trim($item['path']);
+			if ($name !== '') $branches[] = $name;
+		}
+		$branches = array_values(array_unique($branches));
+
 		return [
 			'success' => true,
-			'branches' => [],
-			'error' => 'Any error message giving some details',
+			'branches' => $branches,
+			'error' => null,
 		];
 	}
-
 
 	/**
 	 * BioPortal search across multiple ontologies (acronyms).

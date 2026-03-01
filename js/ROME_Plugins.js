@@ -115,96 +115,104 @@
 
 	//#region Sources Management
 
-
-	const srcMgmt = {};
-
 	function initSourcesManagement() {
 
-		srcMgmt.modalEl = document.getElementById('romeRemoteSourceModal');
-		srcMgmt.formEl = document.getElementById('romeRemoteSourceForm');
-		srcMgmt.titleEl = document.getElementById('romeRemoteSourceModalTitle');
-		srcMgmt.errEl = document.getElementById('romeRemoteSourceError');
+		let ontologiesLoaded = false;
 
-		srcMgmt.typeEl = document.getElementById('rome_remote_type');
-		srcMgmt.blockBio = document.getElementById('rome_remote_block_bioportal');
-		srcMgmt.blockSnow = document.getElementById('rome_remote_block_snowstorm');
+		const $modalEl = $('#romeRemoteSourceModal');
+		const $titleEl = $('#romeRemoteSourceModalTitle');
+		const $errEl = $('#romeRemoteSourceError');
 
-		srcMgmt.bioOntEl = document.getElementById('rome_bioportal_ontology');
-		srcMgmt.bioOntTokenEl = document.getElementById('rome_bioportal_token');
-		srcMgmt.bioRefreshBtn = document.getElementById('rome_bioportal_refresh');
+		const $typeEl = $('#rome_remote_type');
+		const $blockBio = $('#rome_remote_block_bioportal');
+		const $blockSnow = $('#rome_remote_block_snowstorm');
 
-		srcMgmt.snowAuthEl = document.getElementById('rome_snowstorm_auth_mode');
-		srcMgmt.snowBasicUserWrap = document.getElementById('rome_snowstorm_basic_user_wrap');
-		srcMgmt.snowBasicPassWrap = document.getElementById('rome_snowstorm_basic_pass_wrap');
-		srcMgmt.snowBearerWrap = document.getElementById('rome_snowstorm_bearer_wrap');
-		srcMgmt.snowTestBtn = document.getElementById('rome_snowstorm_test');
+		const $bioOntEl = $('#rome_bioportal_ontology');
+		const $bioOntTokenEl = $('#rome_bioportal_token');
+		const $bioRefreshBtn = $('#rome_bioportal_refresh');
 
-		srcMgmt.addRemoteBtn = document.getElementById('rome-add-remote-source');
-		srcMgmt.bsModal = new bootstrap.Modal(srcMgmt.modalEl, { backdrop: 'static' });
+		const $snowAuthEl = $('#rome_snowstorm_auth_mode');
+		const $snowBasicUserWrap = $('#rome_snowstorm_basic_user_wrap');
+		const $snowBasicPassWrap = $('#rome_snowstorm_basic_pass_wrap');
+		const $snowBearerWrap = $('#rome_snowstorm_bearer_wrap');
+		const $snowRefreshBtn = $('#rome_snowstorm_branch_refresh');
+		const $snowBranchesEl = $('#rome_snowstorm_branches');
+
+		const bsModal = new bootstrap.Modal($modalEl.get(0), { backdrop: 'static' });
+
+		$modalEl.on('hide.bs.modal', function () {
+			$(document.activeElement).trigger('blur');
+		});
 
 		function showError(msg) {
-			srcMgmt.errEl.textContent = msg;
-			srcMgmt.errEl.classList.remove('d-none');
+			$errEl.text(msg);
+			$errEl.removeClass('d-none');
 		}
 		function clearError() {
-			srcMgmt.errEl.textContent = '';
-			srcMgmt.errEl.classList.add('d-none');
+			$errEl.text('');
+			$errEl.addClass('d-none');
 		}
 
 		function setType(type) {
 			if (type === 'snowstorm') {
-				srcMgmt.blockBio.classList.add('d-none');
-				srcMgmt.blockSnow.classList.remove('d-none');
+				$blockBio.addClass('d-none');
+				$blockSnow.removeClass('d-none');
 			} else {
-				srcMgmt.blockSnow.classList.add('d-none');
-				srcMgmt.blockBio.classList.remove('d-none');
+				$blockSnow.addClass('d-none');
+				$blockBio.removeClass('d-none');
 			}
 		}
 
-		function setSnowAuthMode(mode) {
-			srcMgmt.snowBasicUserWrap.classList.toggle('d-none', mode !== 'basic');
-			srcMgmt.snowBasicPassWrap.classList.toggle('d-none', mode !== 'basic');
-			srcMgmt.snowBearerWrap.classList.toggle('d-none', mode !== 'bearer');
+		function setSnowAuthMode(dataOrMode) {
+			const mode = typeof dataOrMode === 'string' ? dataOrMode : dataOrMode.snowstorm_auth_mode;
+			if (typeof dataOrMode === 'object') {
+				$('#rome_snowstorm_basic_user').val(dataOrMode.snowstorm_basic_user ?? '');
+				$('#rome_snowstorm_basic_pass').val(dataOrMode.snowstorm_basic_pass ?? '');
+				$('#rome_snowstorm_bearer_token').val(dataOrMode.snowstorm_bearer_token ?? '');
+			}
+			$snowBasicUserWrap.toggleClass('d-none', mode !== 'basic');
+			$snowBasicPassWrap.toggleClass('d-none', mode !== 'basic');
+			$snowBearerWrap.toggleClass('d-none', mode !== 'bearer');
 		}
 
 
 		async function loadBioportalOntologies({ forceRefresh = false } = {}) {
-			if (srcMgmt.ontologiesLoaded && !forceRefresh) return;
-			srcMgmt.bioOntEl.innerHTML = `<option value="">Loading…</option>`;
+			if (ontologiesLoaded && !forceRefresh) return;
+			$bioOntEl.html('<option value="">Loading…</option>');
 			try {
 				const res = await JSMO.ajax('get-bioportal-ontologies', { 
 					forceRefresh: forceRefresh,
-					token: srcMgmt.bioOntTokenEl.value ?? null
+					token: $bioOntTokenEl.val() ?? null
 				});
 				log('Loaded bioportal ontologies', res);
 				if (res.error) throw res.error;
 				const placeholder = res.ontologies.length === 0
 					? 'Provide a token and refresh'
 					: 'Select an ontology ...';
-				srcMgmt.bioOntEl.disabled = res.ontologies.length === 0;
+				$bioOntEl.prop('disabled', res.ontologies.length === 0);
 				const select2Data = res.ontologies.map(o => ({
 					id: o['@id'],          // stable unique value
 					text: o.name,          // fallback
 					acronym: o.acronym,
 					name: o.name
 				}));
-				srcMgmt.ontologiesLoaded = res.ontologies.length > 0;
-				if (srcMgmt.ontologiesLoaded) {
-					$(srcMgmt.bioRefreshBtn).remove();
+				ontologiesLoaded = res.ontologies.length > 0;
+				if (ontologiesLoaded) {
+					$bioRefreshBtn.remove();
 				}
-				$(srcMgmt.bioOntEl).select2({
+				$bioOntEl.select2({
 					width: '80%',
-					dropdownParent: srcMgmt.modalEl,
+					dropdownParent: $modalEl[0],
 					data: select2Data,
 					templateResult: formatOntology,
 					templateSelection: formatOntology,
 					placeholder: placeholder,
-					allowClear: true
+					allowClear: false
 				});
 			} catch (e) {
-				srcMgmt.bioOntEl.innerHTML = `<option value="">(failed to load)</option>`;
-				srcMgmt.bioOntEl.disabled = true;
-				showError(`BioPortal: failed to load ontology list (${e.message}).`);
+				$bioOntEl.html(`<option value="">(failed to load)</option>`);
+				$bioOntEl.prop('disabled', true);
+				showError(`BioPortal: failed to load ontology list (${e}).`);
 			}
 		}
 
@@ -228,29 +236,26 @@
 			return $container;
 		}
 
-		function escapeHtml(s) {
-			return String(s)
-				.replaceAll('&', '&amp;')
-				.replaceAll('<', '&lt;')
-				.replaceAll('>', '&gt;')
-				.replaceAll('"', '&quot;')
-				.replaceAll("'", '&#039;');
-		}
-
 		function resetFormForCreate() {
-			srcMgmt.formEl.reset();
+			$modalEl.find('[data-rome-reset]').each(function() {
+				const $this = $(this);
+				$this.val($this.attr('data-rome-reset')).trigger('change');
+			});
+			$snowBranchesEl.html('').trigger('change');
+			$($bioOntEl).val('').trigger('change');
+
 			$('#rome_source_id').val('');
 			clearError();
 
 			setType('bioportal');
-			setSnowAuthMode('none');
+			setSnowAuthMode({ snowstorm_auth_mode: 'none'});
 		}
 
 		async function openRemoteSourceDialog(mode, sourceData) {
 			resetFormForCreate();
 
 			if (mode === 'edit' && sourceData) {
-				srcMgmt.titleEl.textContent = 'Edit a remote source';
+				$titleEl.text('Edit a remote source');
 				$('#rome_source_id').val(sourceData.id || '');
 				$('#rome_remote_type').val(sourceData.remote_type || 'bioportal');
 				$('#rome_title').val(sourceData.title || '');
@@ -260,59 +265,58 @@
 
 				if (sourceData.remote_type === 'bioportal') {
 					await loadBioportalOntologies({ forceRefresh: false });
-					if (sourceData.bioportal_ontology) srcMgmt.bioOntEl.value = sourceData.bioportal_ontology;
+					if (sourceData.bioportal_ontology) $bioOntEl.val(sourceData.bioportal_ontology).trigger('change');
 				} else {
 					$('#rome_snowstorm_base_url').val(sourceData.snowstorm_base_url || '');
-					$('#rome_snowstorm_branch').val(sourceData.snowstorm_branch || '');
-					srcMgmt.snowAuthEl.value = sourceData.snowstorm_auth_mode || 'none';
-					setSnowAuthMode(srcMgmt.snowAuthEl.value);
+					$('#rome_snowstorm_branch').val(sourceData.snowstorm_branch || '').trigger('change');
+					$snowAuthEl.val(sourceData.snowstorm_auth_mode || 'none');
+					setSnowAuthMode(sourceData);
 				}
 			} else {
-				srcMgmt.titleEl.textContent = 'Add a remote source';
+				$titleEl.text('Add a remote source');
 				await loadBioportalOntologies({ forceRefresh: false });
 			}
 
-			srcMgmt.bsModal.show();
+			bsModal.show();
 		};
 
 		// Wire events
-		srcMgmt.addRemoteBtn.addEventListener('click', () => {
+		$('#rome-add-remote-source').on('click', () => {
 			openRemoteSourceDialog('create');
 		});
 
-		srcMgmt.typeEl.addEventListener('change', async () => {
+		$typeEl.on('change', async () => {
 			clearError();
-			setType(srcMgmt.typeEl.value);
-			if (srcMgmt.typeEl.value === 'bioportal') {
+			setType($typeEl.val());
+			if ($typeEl.val() === 'bioportal') {
 				await loadBioportalOntologies({ forceRefresh: false });
 			}
 		});
 
-		srcMgmt.bioRefreshBtn.addEventListener('click', async () => {
+		$bioRefreshBtn.on('click', async () => {
 			clearError();
 			await loadBioportalOntologies({ forceRefresh: true });
 		});
 
-		srcMgmt.snowAuthEl.addEventListener('change', () => {
-			setSnowAuthMode(srcMgmt.snowAuthEl.value);
+		$snowAuthEl.on('change', () => {
+			setSnowAuthMode(`${$snowAuthEl.val()}`);
 		});
 
-		srcMgmt.snowTestBtn.addEventListener('click', async () => {
-			srcMgmt.snowTestBtn.enabled = false;
-			await snowstormTestConnection();
-			srcMgmt.snowTestBtn.enabled = true;
+		$snowRefreshBtn.on('click', async () => {
+			clearError();
+			await loadSnowStormBranches();
 		});
 
-		srcMgmt.formEl.addEventListener('submit', async (ev) => {
+		// Save
+		$('#romeRemoteSourceSaveBtn').on('click', async function(ev) {
 			ev.preventDefault();
 			clearError();
 
-
 			// Assemble payload
-			const type = srcMgmt.typeEl.value;
+			const type = `${$typeEl.val()}`;
 			const payload = {
-				title: `${srcMgmt.titleEl.value}`.trim(),
-				description: `${srcMgmt.descriptionEl.value}`.trim(),
+				title: `${$('#rome_title').val()}`.trim(),
+				description: `${$('#rome_description').val()}`.trim(),
 				type: type
 			};
 			if (type === 'snowstorm') {
@@ -343,29 +347,68 @@
 			try {
 				$('#romeRemoteSourceSaveBtn').prop('disabled', true);
 				const res = await JSMO.ajax('save-remote-source', payload);
-				srcMgmt.bsModal.hide();
+				if (res.error) throw `Failed to save remote source: ${res.error}`;
+				$(document.activeElement).trigger('blur');
+				bsModal.hide();
 				refreshSourcesTable(res);
-			} catch (e) {
-				showError(e.message);
-			} finally {
+			}
+			catch (e) {
+				showError(`${e}`);
+			}
+			finally {
 				$('#romeRemoteSourceSaveBtn').prop('disabled', false);
 			}
 		});
+
+
+		async function loadSnowStormBranches() {
+
+			$snowBranchesEl.html(`<option value="">Loading…</option>`);
+			$snowRefreshBtn.prop('disabled', true);
+
+			const payload = {};
+			payload.ss_baseurl = `${$('#rome_snowstorm_base_url').val() ?? ''}`.trim();
+			payload.ss_branch = `${$('#rome_snowstorm_branch').val() ?? ''}`.trim();
+			payload.ss_auth = `${$('#rome_snowstorm_auth_mode').val() ?? ''}`.trim();
+			payload.ss_username = `${$('#rome_snowstorm_basic_user').val() ?? ''}`.trim();
+			payload.ss_password = `${$('#rome_snowstorm_basic_pass').val() ?? ''}`.trim();
+			payload.ss_token = `${$('#rome_snowstorm_bearer').val() ?? ''}`.trim();
+
+			try {
+				const res = await JSMO.ajax('get-snowstorm-branches', payload);
+				log('Loaded Snowstorm branches', res);
+				if (res.error) throw res.error;
+				const placeholder = res.branches.length === 0
+					? 'Refresh to load branches ...'
+					: 'Select a branch ...';
+				$snowBranchesEl.prop('disabled', res.branches.length === 0);
+				const select2Data = res.branches.map(o => ({
+					id: o,
+					text: o
+				}));
+				$snowBranchesEl.select2({
+					width: '80%',
+					dropdownParent: $modalEl[0],
+					data: select2Data,
+					placeholder: placeholder,
+					allowClear: true
+				});
+				if (select2Data.length > 0) {
+					$snowBranchesEl.val(select2Data[0].id).trigger('change');
+				}
+			} catch (e) {
+				$snowBranchesEl.html(`<option value="">(failed to load)</option>`);
+				showError(`Snowstorm: failed to load branches (${e}).`);
+			} finally {
+				$snowRefreshBtn.prop('disabled', false);
+			}
+		}
+
 	}
 
-	async function snowstormTestConnection() {
-		const payload = {};
-		payload.ss_baseurl = `${$('#rome_snowstorm_base_url').val() ?? ''}`.trim();
-		payload.ss_branch = `${$('#rome_snowstorm_branch').val() ?? ''}`.trim();
-		payload.ss_auth = `${$('#rome_snowstorm_auth_mode').val() ?? ''}`.trim();
-		payload.ss_username = `${$('#rome_snowstorm_basic_user').val() ?? ''}`.trim();
-		payload.ss_password = `${$('#rome_snowstorm_basic_pass').val() ?? ''}`.trim();
-		payload.ss_token = `${$('#rome_snowstorm_bearer').val() ?? ''}`.trim();
 
 
-		const res = await JSMO.ajax('snowstorm-test-connection', payload);
-		
-	}
+
 
 	function refreshSourcesTable(src) {
 		log('Refreshing sources table', src);
