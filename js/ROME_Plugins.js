@@ -118,6 +118,7 @@
 	function initSourcesManagement() {
 
 		let ontologiesLoaded = false;
+		let rcBioPortalTokenAvailable = false;
 
 		const $modalEl = $('#romeRemoteSourceModal');
 		const $titleEl = $('#romeRemoteSourceModalTitle');
@@ -199,6 +200,7 @@
 				ontologiesLoaded = res.ontologies.length > 0;
 				if (ontologiesLoaded) {
 					$bioRefreshBtn.remove();
+					rcBioPortalTokenAvailable = res.rc_enabled;
 				}
 				$bioOntEl.select2({
 					width: '80%',
@@ -321,7 +323,7 @@
 			};
 			if (type === 'snowstorm') {
 				payload.ss_baseurl = `${$('#rome_snowstorm_base_url').val() ?? ''}`.trim();
-				payload.ss_branch = `${$('#rome_snowstorm_branch').val() ?? ''}`.trim();
+				payload.ss_branch = $('#rome_snowstorm_branches').val() ?? '';
 				payload.ss_auth = `${$('#rome_snowstorm_auth_mode').val() ?? ''}`.trim();
 				payload.ss_username = `${$('#rome_snowstorm_basic_user').val() ?? ''}`.trim();
 				payload.ss_password = `${$('#rome_snowstorm_basic_pass').val() ?? ''}`.trim();
@@ -331,12 +333,37 @@
 				payload.bp_token = `${$('#rome_bioportal_token').val() ?? ''}`.trim();
 				payload.bp_ontology = `${$('#rome_bioportal_ontology').val() ?? ''}`.trim();
 			}
-			// TODO: Validate payload
 			if (payload.type === 'bioportal') {
-
+				if (!payload.bp_ontology) {
+					showError('Ontology is required');
+					return;
+				}
+				if (!rcBioPortalTokenAvailable && !payload.bp_token) {
+					showError('BioPortal token is required');
+					return;
+				}
 			}
 			else if (payload.type === 'snowstorm') {
-
+				if (!payload.ss_baseurl) {
+					showError('Snowstorm API base URL is required');
+					return;
+				}
+				if (!payload.ss_branch) {
+					showError('Snowstorm branch is required');
+					return;
+				}
+				if (payload.ss_auth === 'basic') {
+					if (!payload.ss_username || !payload.ss_password) {
+						showError('Snowstorm username and password are required for basic auth');
+						return;
+					}
+				}
+				else if (payload.ss_auth === 'bearer') {
+					if (!payload.ss_token) {
+						showError('Snowstorm bearer token is required');
+						return;
+					}
+				}
 			}
 			else {
 				showError('Invalid source type');
