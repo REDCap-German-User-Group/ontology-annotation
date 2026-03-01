@@ -10,7 +10,8 @@ $bpTokenMessage =
 	$lang['system_config_398'] . ' <b>' . \BioPortal::getApiUrl() . '</b>. ' .
 	$lang['system_config_399'] . ' <a href="' . \BioPortal::$SIGNUP_URL . '" target="_blank" style="text-decoration:underline;">' . $lang['system_config_400'] . '</a>.<br>';
 $bp = $module->getBioPortalApiDetails();
-if ($bp['enabled']) {
+$allowRcBioPortal = (defined('PROJECT_ID') && !PROJECT_ID) || ($module->framework->getSystemSetting('sys-allow-rc-bioportal') === true);
+if ($bp['enabled'] && $allowRcBioPortal) {
 	$bpTokenMessage .=
 		'Provide a token or <b>leave blank</b> to use the built-in BioPortal API token.';
 } else {
@@ -47,7 +48,7 @@ if ($bp['enabled']) {
 				</div>
 
 				<div class="mb-2 row">
-					<label class="col-sm-3 col-form-label col-form-label-sm" for="form-label" for="rome_remote_type">Remote type:</label>
+					<label class="col-sm-3 col-form-label" for="rome_remote_type">Remote type:</label>
 					<div class="col-sm-9">
 						<select class="form-select form-select-sm" name="remote_type" id="rome_remote_type" required>
 							<option value="bioportal">BioPortal</option>

@@ -92,3 +92,38 @@ h2 {
 .rome-config-block {
 	margin-left: .5em;
 }
+
+
+#rome-file-drop-area {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 35px;
+    margin: 0;
+    border: 1px dashed #ccc;
+    border-radius: 3px;
+    transition: 0.2s;
+    cursor: pointer;
+    font-size: 15px;
+    color: #888;
+    background-color: #fff;
+}
+#rome-file-drop-area em {
+	color: var(--bs-primary);
+	font-style: normal;
+
+}
+#rome-file-drop-message {
+    text-align: center;
+    width: 100%;
+}
+.rome-file-drop-file-input {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 100%;
+    cursor: pointer;
+    opacity: 0;
+}

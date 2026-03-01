@@ -59,10 +59,12 @@
 				case 'export':
 					break;
 				case 'manage':
-					initSourcesManagement();
+					initRemoteSourcesManagement();
+					initLocalSourcesManagement();
 					break;
 				case 'configure':
-					initSourcesManagement();
+					initRemoteSourcesManagement();
+					initLocalSourcesManagement();
 					break;
 			}
 			initConfigSetters(config.page);
@@ -115,7 +117,7 @@
 
 	//#region Sources Management
 
-	function initSourcesManagement() {
+	function initRemoteSourcesManagement() {
 
 		let ontologiesLoaded = false;
 		let rcBioPortalTokenAvailable = false;
@@ -433,6 +435,90 @@
 
 	}
 
+
+	function initLocalSourcesManagement() {
+
+		const $modalEl = $('#romeLocalSourceModal');
+		const $titleEl = $('#romeLocalSourceModalTitle');
+		const $errEl = $('#romeLocalSourceError');
+
+		const bsModal = new bootstrap.Modal($modalEl.get(0), { backdrop: 'static' });
+
+		$modalEl.on('hide.bs.modal', function () {
+			$(document.activeElement).trigger('blur');
+		});
+
+		function showError(msg) {
+			$errEl.text(msg);
+			$errEl.removeClass('d-none');
+		}
+
+		function clearError() {
+			$errEl.text('');
+			$errEl.addClass('d-none');
+		}
+
+		function resetFormForCreate() {
+			$modalEl.find('[data-rome-reset]').each(function() {
+				const $this = $(this);
+				$this.val($this.attr('data-rome-reset')).trigger('change');
+			});
+
+			$('#rome_local_source_id').val('');
+			clearError();
+		}
+
+		async function openLocalSourceDialog(mode, sourceData) {
+			resetFormForCreate();
+			if (mode === 'edit' && sourceData) {
+				$titleEl.text('Edit a local source');
+				$('#rome_local_source_id').val(sourceData.id || '');
+				$('#rome_local_title').val(sourceData.title || '');
+				$('#rome_local_description').val(sourceData.description || '');
+			} else {
+				$titleEl.text('Add a local source');
+			}
+			bsModal.show();
+		};
+
+		// Wire events
+		$('#rome-add-local-source').on('click', () => {
+			openLocalSourceDialog('create');
+		});
+
+		// Save
+		$('#romeLocalSourceSaveBtn').on('click', async function(ev) {
+			ev.preventDefault();
+			clearError();
+
+			// Assemble payload
+			const payload = {
+				title: `${$('#rome_local_title').val()}`.trim(),
+				description: `${$('#rome_local_description').val()}`.trim(),
+				file: $('#rome_local_file').val()
+			};
+			// Validation
+			if (!payload.file) {
+				showError('A file is required');
+				return;
+			}
+
+			// Save
+			try {
+				$('#romeLocalSourceSaveBtn').prop('disabled', true);
+				const res = await JSMO.ajax('save-local-source', payload);
+				if (res.error) throw `Failed to save local source: ${res.error}`;
+				bsModal.hide();
+				refreshSourcesTable(res);
+			}
+			catch (e) {
+				showError(`${e}`);
+			}
+			finally {
+				$('#romeLocalSourceSaveBtn').prop('disabled', false);
+			}
+		});
+	}
 
 
 

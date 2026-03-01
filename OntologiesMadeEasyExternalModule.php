@@ -312,6 +312,16 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					];
 				}
 				break;
+			case 'save-local-source':
+				try {
+					return $this->saveLocalSource($payload);
+				}
+				catch (Throwable $e) {
+					return [
+						'error' => $e->getMessage()
+					];
+				}
+				break;
 		}
 	}
 
@@ -1958,6 +1968,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 	}
 
+	private function saveLocalSource($payload) {
+
+		return [
+			'error' => 'Not implemented',
+		];
+	}
+
 
 	#region BioPortal
 
@@ -1994,25 +2011,30 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	function getBioPortalOntologies($payload) {
 		$token = $payload['token'] ?? null;
 		$bp = $this->getBioPortalApiDetails();
+		$rc_enabled = $bp['enabled'];
+		if ($this->project_id) {
+			$rc_enabled = $rc_enabled && $this->framework->getSystemSetting("sys-allow-rc-bioportal");
+		}
+
 		// We will NOT fetch the list of ontologies if REDCap already has a cached list
 		if (!empty($bp['ontology_list'])) return [
-			'rc_enabled' => $bp['enabled'],
+			'rc_enabled' => $rc_enabled,
 			'ontologies' =>	json_decode($bp['ontology_list'], true)
 		];
 		if (empty($token)) return [
-			'rc_enabled' => $bp['enabled'],
+			'rc_enabled' => $rc_enabled,
 			'ontologies' => []
 		];
 		// Get the list of ontologies from BioPortal using the provided token
 		try {
 			return [
-				'rc_enabled' => $bp['enabled'],
+				'rc_enabled' => $rc_enabled,
 				'ontologies' => $this->fetchBioPortalOntologies($token),
 			];
 		}
 		catch (Exception $e) {
 			return [
-				'rc_enabled' => $bp['enabled'],
+				'rc_enabled' => $rc_enabled,
 				'ontologies' => [],
 				'error' => $e->getMessage(),
 			];

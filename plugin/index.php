@@ -112,4 +112,5 @@ $config = $module->getPluginConfig($active_tab);
 // More page-specific includes
 if ($active_tab === 'manage' || $active_tab === 'configure') {
 	include __DIR__ . "/templates/remote-source-dialog.php";
+	include __DIR__ . "/templates/local-source-dialog.php";
 }
