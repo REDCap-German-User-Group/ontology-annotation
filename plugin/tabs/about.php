@@ -14,6 +14,13 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 
 ?>
 <div class="rome-plugin-page">
+
+	<?php if ($rome_cache_status !== 'ok'): ?>
+	<p class="red">
+		<b>ROME setup has not been completed yet.</b> Please contact your REDCap administrator and have them configure the module in Control Center using the module configuration dialog.
+	</p>
+	<?php endif; ?>
+
 	<h2>What is ROME?</h2>
 	<p class="text-muted">
 		About content &hellip;

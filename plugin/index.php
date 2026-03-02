@@ -15,7 +15,9 @@ $jsmo_name = $module->framework->getJavascriptModuleObjectName();
 
 $user = $module->framework->getUser();
 if ($user == null) exit;
-$is_project = defined('PROJECT_ID') && PROJECT_ID !== null;
+
+$is_project = $module->initProject(defined('PROJECT_ID') ? PROJECT_ID : null);
+$module->initConfig();
 
 $annotate_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
 $manage_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
@@ -75,17 +77,26 @@ $active_tab = array_key_exists($_GET['tab'], $enabled_nav_tabs) ? $_GET['tab'] :
 // Get configuration for the tab
 $config = $module->getPluginConfig($active_tab);
 
+// Check if cache config is configured
+$rome_cache_status = 'ok';
+if (!$module->checkCacheConfigured()) {
+	$active_tab = 'about';
+	$rome_cache_status = 'not-configured';
+}
 
 // Render page
 ?>
+
 <h1 class="projhdr">
 	<i class="fa-solid fa-tags"></i> ROME: REDCap Ontology Annotations Made Easy
 </h1>
+
 <p>
 	ROME is a REDCap external module that facilitates adding and editing ontology
 	annotations to data elements in a project and searching for annotations accross multiple
 	projects on a REDCap instance.
 </p>
+
 <div id="sub-nav" class="d-sm-block mb-3">
 	<ul>
 		<?php foreach ($enabled_nav_tabs as $tab => $tab_info): ?>
@@ -97,9 +108,12 @@ $config = $module->getPluginConfig($active_tab);
 		<?php endforeach; ?>
 	</ul>
 </div>
+
 <div id="rome-tab">
 	<?php include __DIR__ . "/tabs/{$active_tab}.php"; ?>
 </div>
+
+<?php if ($active_tab !== 'about'): ?>
 <script>
 	$(function() {
 		if (window.DE_RUB_ROME && window.DE_RUB_ROME.init) {
@@ -107,6 +121,8 @@ $config = $module->getPluginConfig($active_tab);
 		}
 	});
 </script>
+<?php endif; ?>
+
 <?php
 
 // More page-specific includes

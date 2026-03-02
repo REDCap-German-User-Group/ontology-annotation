@@ -74,6 +74,15 @@ interface LocalSourceIndexBuilder
 	 * @return BuildResult
 	 */
 	public function buildFromDocId(int $docId, array $options = []): BuildResult;
+
+	/**
+	 * Build a search payload from a JSON string.
+	 *
+	 * @param string $jsonString JSON string.
+	 * @param array $options Builder-specific options (kept for forward compatibility).
+	 * @return BuildResult
+	 */
+	public function buildFromJsonString(string $jsonString, array $options = []): BuildResult;
 }
 
 /**
@@ -99,6 +108,20 @@ final class DummyIndexBuilder implements LocalSourceIndexBuilder
 		$payload = [
 			'kind' => 'dummy',
 			'doc_id' => $docId,
+			'data' => 'TEST',
+		];
+
+		return new BuildResult('fhir_questionnaire', 1, $payload);
+	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function buildFromJsonString(string $jsonString, array $options = []): BuildResult
+	{
+		$payload = [
+			'kind' => 'dummy',
+			'json_string' => $jsonString,
 			'data' => 'TEST',
 		];
 

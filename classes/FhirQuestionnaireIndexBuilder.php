@@ -45,7 +45,13 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 	public function buildFromDocId(int $docId, array $options = []): BuildResult
 	{
 		list($mimeType, $docName, $fileContent) = \REDCap::getFile($docId);
-		$data = json_decode($fileContent, true);
+
+		return $this->buildFromJsonString($fileContent, $options);
+	}
+
+	public function buildFromJsonString(string $jsonString, array $options = []): BuildResult
+	{
+		$data = json_decode($jsonString, true);
 		if (!is_array($data)) {
 			throw new RuntimeException('Invalid JSON in Questionnaire file.');
 		}

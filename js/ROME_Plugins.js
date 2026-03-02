@@ -441,6 +441,9 @@
 		const $modalEl = $('#romeLocalSourceModal');
 		const $titleEl = $('#romeLocalSourceModalTitle');
 		const $errEl = $('#romeLocalSourceError');
+		let localSourceFileContent = '';
+		let localSourceFileName = '';
+		
 
 		const bsModal = new bootstrap.Modal($modalEl.get(0), { backdrop: 'static' });
 
@@ -465,6 +468,10 @@
 			});
 
 			$('#rome_local_source_id').val('');
+			$('#rome-file-input').val('');
+			localSourceFileContent = '';
+			localSourceFileName = '';
+			$('#rome-file-info').text('No file selected. Please upload a file.');
 			clearError();
 		}
 
@@ -486,6 +493,43 @@
 			openLocalSourceDialog('create');
 		});
 
+		$('#rome-file-input').on('change', async function(ev) {
+			// Get file info
+			const $fi = $(this);
+			const files = $fi.prop('files');
+			if (!files || ((files?.length ?? 0) === 0)) {
+				localSourceFileContent = '';
+				localSourceFileName = '';
+				$('#rome-file-info').text('No file selected. Please upload a file.');
+				return;
+			}
+
+			$fi.prop('disabled', true);
+			const file = files[0];
+			try {
+				const fileText = await file.text();
+				const json = JSON.parse(fileText);
+				$('#rome-title-from-file').text(json.title ?? '');
+				$('#rome-description-from-file').text(json.description ?? '');
+				localSourceFileContent = fileText;
+				localSourceFileName = file.name;
+				$('#rome-file-info').text(localSourceFileName)
+					.append(`<i class="fa-solid fa-check text-success ms-2"></i>`);
+				
+				clearError();
+			} catch (e) {
+				localSourceFileContent = '';
+				localSourceFileName = '';
+				$fi.val('');
+				$('#rome-file-info').text('Invalid JSON file. Please upload a valid JSON file.')
+					.append(`<i class="fa-solid fa-circle-xmark text-danger ms-2"></i>`);
+				showError('Uploaded file is not valid JSON.');
+			}
+			finally {
+				$fi.prop('disabled', false);
+			}
+		});
+
 		// Save
 		$('#romeLocalSourceSaveBtn').on('click', async function(ev) {
 			ev.preventDefault();
@@ -495,16 +539,19 @@
 			const payload = {
 				title: `${$('#rome_local_title').val()}`.trim(),
 				description: `${$('#rome_local_description').val()}`.trim(),
-				file: $('#rome_local_file').val()
+				fileContent: localSourceFileContent,
+				fileName: localSourceFileName,
+				context: config.page
 			};
 			// Validation
-			if (!payload.file) {
+			if (payload.fileContent === '' || payload.fileName === '') {
 				showError('A file is required');
 				return;
 			}
 
 			// Save
 			try {
+				$modalEl.find('input, textarea').prop('disabled', true);
 				$('#romeLocalSourceSaveBtn').prop('disabled', true);
 				const res = await JSMO.ajax('save-local-source', payload);
 				if (res.error) throw `Failed to save local source: ${res.error}`;
@@ -515,6 +562,7 @@
 				showError(`${e}`);
 			}
 			finally {
+				$modalEl.find('input, textarea').prop('disabled', false);
 				$('#romeLocalSourceSaveBtn').prop('disabled', false);
 			}
 		});

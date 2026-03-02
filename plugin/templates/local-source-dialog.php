@@ -22,16 +22,18 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 
 
 				<div class="mb-2 row">
-					<label class="col-sm-3 col-form-label" for="rome_local_title">Title <i>(optional)</i>:</label>
+					<label class="col-sm-3 col-form-label" for="rome_local_title">Title override <i>(optional)</i>:</label>
 					<div class="col-sm-9">
-						<input class="form-control form-control-sm" data-rome-reset="" type="text" name="title" id="rome_local_title" maxlength="120">
+						<input class="form-control form-control-sm" data-rome-reset="" type="text" name="title" id="rome_local_title">
+						<div class="rome-title-from-file" id="rome-title-from-file"></div>
 					</div>
 				</div>
 
 				<div class="mb-2 row">
-					<label class="col-sm-3 col-form-label" for="rome_local_description">Description <i>(optional)</i>:</label>
+					<label class="col-sm-3 col-form-label" for="rome_local_description">Description override <i>(optional)</i>:</label>
 					<div class="col-sm-9">
-						<textarea class="form-control form-control-sm" data-rome-reset="" name="description" id="rome_local_description" rows="3" maxlength="1000"></textarea>
+						<textarea class="form-control form-control-sm" data-rome-reset="" name="description" id="rome_local_description" rows="4"></textarea>
+						<div class="rome-description-from-file" id="rome-description-from-file"></div>
 					</div>
 				</div>
 

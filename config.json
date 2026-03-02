@@ -165,7 +165,8 @@
 		"configure",
 		"get-bioportal-ontologies",
 		"get-snowstorm-branches",
-		"save-remote-source"
+		"save-remote-source",
+		"save-local-source"
 	],
 	"no-csrf-pages": [
         "ajax/search",

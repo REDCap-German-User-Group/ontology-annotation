@@ -1007,15 +1007,16 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	/**
 	 * Makes the internal project structure accessible to the module
 	 * @param string|int $project_id 
-	 * @return void 
+	 * @return bool 
 	 */
 	function initProject($project_id)
 	{
-		if ($project_id === null) return;
+		if ($project_id === null) return false;
 		if ($this->proj == null) {
 			$this->proj = new \Project($project_id);
 			$this->project_id = $project_id;
 		}
+		return $project_id !== null;
 	}
 
 	/**
@@ -1025,6 +1026,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	function initConfig()
 	{
 		if ($this->config_initialized) return;
+
+		$project_id = defined('PROJECT_ID') ? PROJECT_ID : $this->framework->getProjectId();
+		$this->initProject($project_id);
 
 		// System-only settings
 		if ($this->project_id === null) {
@@ -1042,7 +1046,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 
-	private function checkCacheConfigured()
+	function checkCacheConfigured()
 	{
 		if (empty($this->cache_backend)) return false;
 		if ($this->cache_backend === "db") {
@@ -1441,6 +1445,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return [
 			'id' => 'src_' . $hex,
 			'uuid' => $uuid,
+			'hex' => $hex
 		];
 	}
 
@@ -1747,6 +1752,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	function getCache()
 	{
+		$this->initConfig();
 		// Check that cache backend config is available
 		if (!$this->checkCacheConfigured()) return null;
 
@@ -1968,11 +1974,288 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 	}
 
+	function canConfigure() {
+		$user = $this->framework->getUser();
+		if ($user == null) return false;
+		if ($user->isSuperUser()) return true;
+		if ($this->project_id != null && $user->hasDesignRights($this->project_id)) return true;
+		return false;
+	}
+
 	private function saveLocalSource($payload) {
 
-		return [
-			'error' => 'Not implemented',
+		try {
+			// Validate
+			// If context is 'configure', the user must be a superuser or
+			// a project designer and the project must be allowed to use
+			// the configure page
+			if ($payload['context'] === 'configure' && !$this->canConfigure()) {
+				throw new Exception('Not permitted to add local sources outside a project context.');
+			}
+
+			// id must be null (new source) or have a valid local source prefix (proj or sys)
+			$id = $payload['id'] ?? null;
+			if (!
+				($id === null || 
+				 strpos($id, 'sys-ls_') === 0 || 
+				 strpos($id, 'proj-ls_') === 0
+				)
+			) {
+				throw new Exception('Invalid id');
+			}
+			// New entries must have a file
+			if ($id === null) {
+				if ($payload['fileName'] === '' || trim($payload['fileContent']) === '') {
+					throw new Exception('Invalid or empty file');
+				}
+				// File content must be valid JSON
+				$json = json_decode(
+					$payload['fileContent'],
+					true,
+					512,
+					JSON_THROW_ON_ERROR
+				);
+				$kind = $this->mapLocalResourceKind($json['resourceType'] ?? null);
+				$builders = $this->getLocalResourceBuilders($kind);
+				if (count($builders) === 0) {
+					throw new Exception('Incompatible file type (no builder found)');
+				}
+				$result = $builders[0]->buildFromJsonString($payload['fileContent'], []);
+				// Do not save files with 0 counts
+				if ($result->itemCount === 0) {
+					throw new Exception('Invalid file (no items)');
+				}
+				// Check cache
+				$cache = $this->getCache();
+				if ($cache === null) {
+					throw new Exception('Failed to access cache.');
+				}
+				// Save file (always compress)
+				$filePath = $this->framework->createTempFile();
+				$compressed = gzencode($payload['fileContent'], 9);
+				file_put_contents($filePath, $compressed);
+				$docId = \REDCap::storeFile($filePath, $this->project_id, $payload['fileName'].'.gz');
+				// Generate new ids
+				$ids = $this->generateSourceId();
+				$setting_key =($payload['context'] === 'configure' ? 'sys-ls_' : 'proj-ls_') . $ids['hex'];
+				$metaId = $ids['id'];
+				$metaUuid = $ids['uuid'];
+				// Save to cache
+				// Cache key: versioned by doc_id.
+				// Format: idx:<src_id>:<doc_id>
+				$cacheKey = "idx:" . $metaId . ":" . $docId;
+				// Store payload. TTL=0 means "never expires" (safe due to doc_id versioning).
+				$ttl = 0;
+				$cache->setPayload($cacheKey, $result->payload, $ttl, [
+					'kind' => $result->kind,
+					'id' => $metaId,
+					'uuid' => $metaUuid,
+					'doc_id' => $docId,
+				]);
+				// Validate code systems in use
+				$system_counts = $result->payload['system_counts'] ?? [];
+				if (!is_array($system_counts)) $system_counts = [];
+				// Resolve title and description
+				$srcTitle = $result->payload['title'] ?? null;
+				$srcDesc = $result->payload['description'] ?? null;
+				$resolvedTitle = strlen(trim($payload['title'])) > 0 ? trim($payload['title']) : $srcTitle;
+				$resolvedDesc = strlen($payload['description']) > 0 ? $payload['description'] : $srcDesc;
+				// Generate metadata
+				$meta = [
+					'v' => 1,
+					'id' => $metaId,
+					'uuid' => $metaUuid,
+					'doc_id' => $docId,
+					'kind' => $result->kind,
+					'title' => $srcTitle,
+					'title_resolved' => $resolvedTitle,
+					'description' => $srcDesc,
+					'description_resolved' => $resolvedDesc,
+					'item_count' => (int)$result->itemCount,
+					'system_counts' => $system_counts,
+					'url' => (string)($result->payload['url'] ?? ''),
+					'built_at' => date('c'),
+				];
+				// Store metadata
+				$metaJson = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+				if ($payload['context'] === 'configure') {
+					$this->framework->setSystemSetting($setting_key, $metaJson);
+				}
+				else {
+					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
+				}
+
+			}
+			// Existing entries must have a an existing docId or a replacement file
+			else {
+				// TODO
+			}
+
+			return [
+				'success' => true,
+				'meta' => $meta,
+			];
+		}
+		catch (Throwable $e) {
+			return [
+				'error' => $e->getMessage(),
+			];
+		}
+	}
+
+	function mapLocalResourceKind($kind) {
+		switch ($kind) {
+			case 'Questionnaire': return 'fhir_questionnaire';
+		}
+		return null;
+	}
+
+	private function getLocalResourceBuilders($kind = null, $first_only = false): array
+	{
+		require_once __DIR__ . '/classes/CacheBuilder.php';
+		require_once __DIR__ . '/classes/FhirQuestionnaireIndexBuilder.php';
+
+		// Builders
+		$builders = [
+			new FhirQuestionnaireIndexBuilder(),
 		];
+
+		if ($kind === null) return $builders;
+
+		// Select compatible builders
+		$valid_builders = [];
+		foreach ($builders as $b) {
+			if ($b instanceof LocalSourceIndexBuilder && $b->supports($kind)) {
+				$valid_builders[] = $b;
+				if ($first_only) break;
+			}
+		}
+		return $valid_builders;
+	}
+
+
+	private function addOrUpdateLocalSource($source) 
+	{
+
+		$this->initProject(defined('PROJECT_ID') ? PROJECT_ID : null);
+		$this->initConfig();
+		$cache = $this->getCache();
+		if ($cache === null) {
+			throw new Exception("Cache is not configured.");
+		}
+
+		$builders = $this->getLocalResourceBuilders();
+
+		throw new Exception("Not implemented");
+
+
+		// Load repeatable sources.
+		$settingKeyPrefix = $project_id === null ? 'sys-' : 'proj-';
+		$settingKey = $settingKeyPrefix . 'fhir-source';
+		$entries = $this->framework->getSubSettings($settingKey, $project_id);
+		if (!is_array($entries)) $entries = [];
+
+		$changed_entries = [];
+		$warnings = [];
+		$errors = [];
+
+		foreach ($entries as $repeatIdx => $entry) {
+			if (!is_array($entry)) continue;
+			// Skip first entry if it's empty.
+			if (
+				$repeatIdx == 0 && empty($entry[$settingKeyPrefix . 'fhir-file']) &&
+				empty($entry[$settingKeyPrefix . 'fhir-metadata'])
+			) continue;
+
+			$titleOverride = $entry[$settingKeyPrefix . 'fhir-title'] ?? '';
+			$descOverride = $entry[$settingKeyPrefix . 'fhir-desc'] ?? '';
+			$titleOverride = is_string($titleOverride) ? trim($titleOverride) : '';
+			$descOverride  = is_string($descOverride) ? trim($descOverride) : '';
+
+			// Ensure build + metadata sync.
+			$opts = [
+				'kind' => 'fhir_questionnaire', // May need to add autodetection (Questionnaire and ROME-specific "ROME_Annotation")
+				'doc_id_key' => $settingKeyPrefix . 'fhir-file',
+				'meta_key' => $settingKeyPrefix . 'fhir-metadata',
+				'title_key' => $settingKeyPrefix . 'fhir-title',
+				'desc_key' => $settingKeyPrefix . 'fhir-desc',
+				'active_key' => $settingKeyPrefix . 'fhir-active',
+				'resolved_title' => $titleOverride,
+				'resolved_desc' => $descOverride,
+				'fallback_title' => 'Untitled',
+				'fallback_desc' => '',
+				'cache_ttl' => 0, // safe due to doc_id versioning
+				'is_system' => $project_id === null,
+				'repeat_idx' => $repeatIdx,
+			];
+			$res = $this->ensureBuiltAndMetadata(
+				$cache,
+				$builders,
+				$entry,
+				$opts
+			);
+
+			foreach ($res['warnings'] as $w) $warnings[] = $w;
+			foreach ($res['errors'] as $e) $errors[] = $e;
+
+			$newEntry = $res['updated_entry'];
+
+			// Persist only if metadata changed (we only mutate fhir-metadata).
+			$metadataKey = $settingKeyPrefix . 'fhir-metadata';
+			if (($newEntry[$metadataKey] ?? null) !== ($entry[$metadataKey] ?? null)) {
+				$changed_entries[$repeatIdx] = $newEntry;
+			} else {
+				// If source is to be deactivated, only update active status.
+				if ($newEntry[$settingKeyPrefix . 'active'] !== $entry[$settingKeyPrefix . 'active']) {
+					$changed_entries[$repeatIdx] = [
+						$settingKeyPrefix . 'active' => $newEntry[$settingKeyPrefix . 'active']
+					];
+				}
+			}
+		}
+
+		// Write back updated repeatable setting if needed.
+		if (count($changed_entries)) {
+			// Full per key arrays must be written. Therefore, we need to transform them first
+			$firstChangedEntry = $changed_entries[array_key_first($changed_entries)] ?? [];
+			$valuesByKey = [];
+			foreach ($entries as $idx => $entry) {
+				foreach ($firstChangedEntry as $key => $value) {
+					if (array_key_exists($idx, $changed_entries)) {
+						// Use changed value
+						$value = $changed_entries[$idx][$key];
+					}
+					$valuesByKey[$key][$idx] = $value;
+				}
+			}
+			// Now write back the changed entries
+			foreach ($valuesByKey as $key => $values) {
+				if ($project_id === null) {
+					$this->framework->setSystemSetting($key, $values);
+				} else {
+					$this->framework->setProjectSetting($key, $values, $project_id);
+				}
+			}
+			// Set log message
+			$log_msg = 'FHIR source build complete';
+		}
+
+		// Log warnings / errors
+		if (!empty($errors) || !empty($warnings)) {
+			$log_msg = 'FHIR source build issues:' . count($errors) . ' errors, ' . count($warnings) . ' warnings';
+
+			$this->log($log_msg, [
+				'errors' => json_encode(
+					$errors,
+					JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+				),
+				'warnings' => json_encode(
+					$warnings,
+					JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+				),
+			]);
+		}
+
 	}
 
 

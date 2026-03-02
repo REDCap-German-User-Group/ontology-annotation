@@ -12,6 +12,23 @@
 	color: black;
 }
 
+#rome-tab {
+	clear: both;
+}
+
+.rome-title-from-file, 
+.rome-description-from-file {
+	font-size: 11px;
+	line-height: 14px;
+	color: #999;
+	font-style: italic;
+	margin: .3em;
+	max-height: 42px;
+	overflow-y: auto;
+	white-space: pre;
+}
+
+
 .rome-plugin-page {
 	max-width: 900px;
 }
