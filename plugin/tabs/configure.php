@@ -22,7 +22,7 @@ $isSuperuser = $module->framework->isSuperUser();
 
 ?>
 <div class="rome-plugin-page">
-	<h2>General Configuration (Admins Only)</h2>
+	<h2>General Configuration</h2>
 	<p>
 		Define system-wide behavior of ROME and manage the ontology annotation sources available to projects on this REDCap instance.
 	</p>
@@ -30,13 +30,17 @@ $isSuperuser = $module->framework->isSuperUser();
 		<?php if ($context === 'project' && $isSuperuser): ?>
 		<div class="form-check form-switch">
 			<input class="form-check-input" type="checkbox" role="switch" id="rome-set-can-configure" data-rome-setting="proj-can-configure" <?= $canConfigure ? 'checked' : '' ?>>
-			<label class="form-check-label" for="rome-set-can-configure">Allow access to this page for users with design rights in this project.</label>
+			<label class="form-check-label" for="rome-set-can-configure">Allow access to this page for users with design rights in this project. <code>[Admin only]</code></label>
 		</div>
 		<?php endif; ?>
 		<?php if ($isSuperuser): ?>
 		<div class="form-check form-switch">
 			<input class="form-check-input" type="checkbox" role="switch" id="rome-set-js-debug" data-rome-setting="sys-javascript-debug" <?= $config['debug'] ? 'checked' : '' ?>>
-			<label class="form-check-label" for="rome-set-js-debug">Enable JavaScript debug output.</label>
+			<label class="form-check-label" for="rome-set-js-debug">Enable JavaScript debug output.
+				<?php if ($context === 'project'): ?>
+				<code>[Admin only]</code>
+				<?php endif; ?>
+			</label>
 		</div>
 		<?php endif; ?>
 		<div class="form-check form-switch">
