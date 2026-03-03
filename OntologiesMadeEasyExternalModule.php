@@ -322,6 +322,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					];
 				}
 				break;
+			case 'toggle-source-enabled':
+				return $this->toggleSourceEnabled($payload);
+			case 'delete-source':
+				return $this->deleteSource($payload);
 		}
 	}
 
@@ -1039,11 +1043,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	/**
 	 * Makes the internal project structure accessible to the module
-	 * @param string|int $project_id 
+	 * @param string|int|bool $project_id 
 	 * @return bool 
 	 */
-	function initProject($project_id)
+	function initProject($project_id = false)
 	{
+		if ($project_id === false) {
+			$project_id = defined('PROJECT_ID') ? PROJECT_ID : $this->framework->getProjectId();
+		}
 		if ($project_id === null) return false;
 		if ($this->proj == null) {
 			$this->proj = new \Project($project_id);
@@ -1125,7 +1132,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				]
 			],
 		];
-		return json_encode($minimal, JSON_UNESCAPED_UNICODE);
+		return $this->romeJsonEncode($minimal);
 	}
 
 	function getKnownLinks()
@@ -1766,7 +1773,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		// Write back metadata JSON into entry (caller persists settings).
 		if (is_array($meta)) {
-			$entry[$metaKey] = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+			$entry[$metaKey] = $this->romeJsonEncode($meta);
 			if ($entry[$metaKey] === false) {
 				// Should be rare; keep old metaJson if encoding fails.
 				$entry[$metaKey] = $metaJson;
@@ -2015,7 +2022,39 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return false;
 	}
 
-	private function saveLocalSource($payload) {
+	private function toggleSourceEnabled($payload) 
+	{
+		$key = $payload['key'] ?? null;
+		if (strpos(	$key, 'sys-') === 0) {
+			if (!$this->canConfigure()) {
+				return [
+					'error' => 'You do not have permission to configure this source.',
+				];
+			}
+			$source = json_decode($this->framework->getSystemSetting($key) ?? '', true);
+		}
+		else {
+			$source = json_decode($this->framework->getProjectSetting($key, $this->project_id) ?? '', true);
+		}
+		if ($key === null || !is_array($source)) {
+			return [
+				'error' => 'Missing or invalid key. The source may have been deleted. Please refresh the page.',
+			];
+		}
+		$source['enabled'] = !$source['enabled'];
+		if (strpos(	$key, 'sys-') === 0) {
+			$this->framework->setSystemSetting($key, $this->romeJsonEncode($source));
+		}
+		else {
+			$this->framework->setProjectSetting($key, $this->project_id, $this->romeJsonEncode($source));
+		}
+		return [
+			'source' => $source,
+		];
+	}
+
+	private function saveLocalSource($payload): array
+	{
 
 		try {
 			// Validate
@@ -2114,7 +2153,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'enabled' => true,
 				];
 				// Store metadata
-				$metaJson = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+				$metaJson = $this->romeJsonEncode($meta);
 				if ($payload['context'] === 'configure') {
 					$this->framework->setSystemSetting($setting_key, $metaJson);
 				}
@@ -2281,14 +2320,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$log_msg = 'FHIR source build issues:' . count($errors) . ' errors, ' . count($warnings) . ' warnings';
 
 			$this->log($log_msg, [
-				'errors' => json_encode(
-					$errors,
-					JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-				),
-				'warnings' => json_encode(
-					$warnings,
-					JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-				),
+				'errors' => $this->romeJsonEncode($errors),
+				'warnings' => $this->romeJsonEncode($warnings),
 			]);
 		}
 
@@ -2784,6 +2817,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	function getUserAgentString()
 	{
 		return 'ROME-REDCap-EM (BioPortal search, experimental)';
+	}
+
+	function romeJsonEncode($data)
+	{
+		return json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 	}
 
 	#region Crons

@@ -721,25 +721,71 @@
 		}
 		//#endregion DataTable
 	
-		// Events
+		//#region Events
 		$table.off('click change').on('click change', '[data-action]', function (e) {
 			const $el = $(this);
 			const action = $el.attr('data-action');
 			if (action == 'toggle-enabled' && e.type === 'click') return;
 			const key = $el.attr('data-source');
-			log('Source action',  { action, key });
+			log('Source action', { action, key });
 
-			// TODO - act
+			switch (action) {
+				case 'edit':
+					editSource(key);
+					break;
+				case 'delete':
+					deleteSource(key);
+					break;
+				case 'toggle-enabled':
+					toggleSourceEnabled(key, $el);
+					break;
+				default:
+					warn('Unknown action', action);
+					break;
+			}
 		});
+
+		async function toggleSourceEnabled(key, $btn) {
+			const toState = $btn.prop('disabled', true).is(':checked');
+			try {
+				const res = await JSMO.ajax('toggle-source-enabled', { 
+					key: key, 
+					enabled: toState,
+					context: config.page
+				});
+				if (res.error) {
+					throw res.error;
+				}
+				refreshSourcesTable(res.source);
+			}
+			catch (err) {
+				showToast('ERROR', err, 'error');
+				refreshSourcesTable();
+			}
+			finally {
+				$btn.prop('disabled', false);
+			}
+		}
+
+		async function editSource(key) {
+			
+		}
+
+		async function deleteSource(key) {
+			
+		}
+		//#endregion Events
 	}
 
 
 
-	function refreshSourcesTable(source) {
+	function refreshSourcesTable(source = null) {
 		// Remove existing entry from config.sources (identify by key)
-		config.sources = config.sources.filter(s => s.key !== source.key);
-		config.sources.push(source);
-		log('Refreshing sources table', source);
+		if (source && typeof source.key === 'string') {
+			config.sources = config.sources.filter(s => s.key !== source.key);
+			config.sources.push(source);
+		}
+		log('Refreshing sources table', config.sources);
 		dtInstance.clear().rows.add(config.sources).draw();
 	}
 

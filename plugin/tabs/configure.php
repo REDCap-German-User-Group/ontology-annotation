@@ -22,7 +22,7 @@ $isSuperuser = $module->framework->isSuperUser();
 
 ?>
 <div class="rome-plugin-page">
-	<h2>General Configuration</h2>
+	<h2>Configure ROME (System-wide Options)</h2>
 	<p>
 		Define system-wide behavior of ROME and manage the ontology annotation sources available to projects on this REDCap instance.
 	</p>
@@ -49,13 +49,13 @@ $isSuperuser = $module->framework->isSuperUser();
 			<span id="rome-rc-bioportal-status" class="badge <?= $hasBioPortalToken ? 'badge-success' : 'badge-danger' ?>"><?= $hasBioPortalToken ? 'AVAILABLE' : 'DISABLED or NO TOKEN SET' ?></span>
 		</div>
 	</div>
+
+	<h3><i class="fa-solid fa-folder"></i> System-wide Annotation Sources</h3>
 	<p>
 		 <b>Local</b> or <b>remote</b> ontology sources can be added here. These preloaded or preconfigured sources will be available in projects when enabled.
-	</p>
-	<p>
 		 By default, the title and description are taken from the source's <code>title</code> and <code>description</code> fields, when available, but overrides may be provided.
 	</p>
-	<div class="rome-config-block">
+	<div class="rome-config-block mb-3">
 		<button id="rome-add-local-source" class="btn btn-xs btn-success">
 			<i class="fa-solid fa-database"></i> Add a local source
 		</button>
@@ -63,7 +63,6 @@ $isSuperuser = $module->framework->isSuperUser();
 			<i class="fa-solid fa-cloud"></i> Add a remote source
 		</button>
 	</div>
-	<h3><i class="fa-solid fa-folder"></i> Annotation Sources</h3>
 	<table id="rome-sources" class="table table-sm table-hover align-middle rome-sources-table">
 		<thead>
 			<tr>
