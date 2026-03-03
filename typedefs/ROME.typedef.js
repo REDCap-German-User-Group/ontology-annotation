@@ -95,11 +95,17 @@
 /**
  * @typedef {Object} SourceInfo
  * @property {string=} id
- * @property {string=} label
- * @property {string=} desc
- * @property {string=} hint
- * @property {Number=} count
- * @property {Object<string, Number>=} systems
+ * @property {string} key
+ * @property {string=} title
+ * @property {string=} title_resolved
+ * @property {string=} description
+ * @property {string=} description_resolved
+ * @property {string=} kind
+ * @property {string=} type
+ * @property {string=} url
+ * @property {Number=} item_count
+ * @property {Object<string, Number>=} system_counts
+ * @property {boolean} enabled
  */
 
 /**

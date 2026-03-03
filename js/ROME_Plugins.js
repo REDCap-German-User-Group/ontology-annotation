@@ -29,6 +29,9 @@
 	/** @type {JavascriptModuleObject|null} */
 	let JSMO = null;
 
+	/** @type {Object} */
+	let dtInstance;
+
 	/**
 	 * Implements the public init method.
 	 * @param {ROMEPluginConfig=} config_data
@@ -61,10 +64,12 @@
 				case 'manage':
 					initRemoteSourcesManagement();
 					initLocalSourcesManagement();
+					initSourcesTable();
 					break;
 				case 'configure':
 					initRemoteSourcesManagement();
 					initLocalSourcesManagement();
+					initSourcesTable();
 					break;
 			}
 			initConfigSetters(config.page);
@@ -183,7 +188,7 @@
 			if (ontologiesLoaded && !forceRefresh) return;
 			$bioOntEl.html('<option value="">Loading…</option>');
 			try {
-				const res = await JSMO.ajax('get-bioportal-ontologies', { 
+				const res = await JSMO.ajax('get-bioportal-ontologies', {
 					forceRefresh: forceRefresh,
 					token: $bioOntTokenEl.val() ?? null
 				});
@@ -241,7 +246,7 @@
 		}
 
 		function resetFormForCreate() {
-			$modalEl.find('[data-rome-reset]').each(function() {
+			$modalEl.find('[data-rome-reset]').each(function () {
 				const $this = $(this);
 				$this.val($this.attr('data-rome-reset')).trigger('change');
 			});
@@ -252,7 +257,7 @@
 			clearError();
 
 			setType('bioportal');
-			setSnowAuthMode({ snowstorm_auth_mode: 'none'});
+			setSnowAuthMode({ snowstorm_auth_mode: 'none' });
 		}
 
 		async function openRemoteSourceDialog(mode, sourceData) {
@@ -312,7 +317,7 @@
 		});
 
 		// Save
-		$('#romeRemoteSourceSaveBtn').on('click', async function(ev) {
+		$('#romeRemoteSourceSaveBtn').on('click', async function (ev) {
 			ev.preventDefault();
 			clearError();
 
@@ -443,7 +448,7 @@
 		const $errEl = $('#romeLocalSourceError');
 		let localSourceFileContent = '';
 		let localSourceFileName = '';
-		
+
 
 		const bsModal = new bootstrap.Modal($modalEl.get(0), { backdrop: 'static' });
 
@@ -462,7 +467,7 @@
 		}
 
 		function resetFormForCreate() {
-			$modalEl.find('[data-rome-reset]').each(function() {
+			$modalEl.find('[data-rome-reset]').each(function () {
 				const $this = $(this);
 				$this.val($this.attr('data-rome-reset')).trigger('change');
 			});
@@ -493,7 +498,7 @@
 			openLocalSourceDialog('create');
 		});
 
-		$('#rome-file-input').on('change', async function(ev) {
+		$('#rome-file-input').on('change', async function (ev) {
 			// Get file info
 			const $fi = $(this);
 			const files = $fi.prop('files');
@@ -515,7 +520,7 @@
 				localSourceFileName = file.name;
 				$('#rome-file-info').text(localSourceFileName)
 					.append(`<i class="fa-solid fa-check text-success ms-2"></i>`);
-				
+
 				clearError();
 			} catch (e) {
 				localSourceFileContent = '';
@@ -531,7 +536,7 @@
 		});
 
 		// Save
-		$('#romeLocalSourceSaveBtn').on('click', async function(ev) {
+		$('#romeLocalSourceSaveBtn').on('click', async function (ev) {
 			ev.preventDefault();
 			clearError();
 
@@ -568,11 +573,171 @@
 		});
 	}
 
+	function initSourcesTable() {
+
+		const data = config.sources ?? [];
+		const $table = $('#rome-sources');
+		const adv = data.length > 10;
+
+		//#region Datatable
+		dtInstance = $table.DataTable({
+			autoWidth: true,
+			data: data,
+			columns: [
+				{
+					data: null,
+					render: (_data, type, row) => {
+						if (type === 'sort' || type === 'type') {
+							return row.type;
+						}
+						return renderTypeColumn(row);
+					}
+				},
+				{
+					data: null,
+					render: (_data, type, row) => {
+						if (type === 'sort' || type === 'type') {
+							return row.enabled ? 'enabled' : 'disabled';
+						}
+						return renderEnabledColumn(row);
+					}
+				},
+				{
+					data: null,
+					render: (_data, type, row) => {
+						if (type === 'sort' || type === 'type') {
+							return `${row.title_resolved} ${row.description_resolved}`;
+						}
+						return renderTitleColumn(row);
+					}
+				},
+				{
+					data: null,
+					searchable: false,
+					render: (_data, type, row) => {
+						if (type === 'sort' || type === 'type') {
+							return row?.item_count ?? 0;
+						}
+						return renderStatsColumn(row);
+					} 
+				},
+				{
+					data: null,
+					orderable: false,
+					searchable: false,
+					render: (_data, _type, row) => renderActionColumn(row)
+				}
+			],
+			language: {
+				emptyTable: 'No sources found.'
+			},
+			paging: adv,
+			searching: adv,
+			info: adv,
+			lengthChange: false,
+			pageLength: 10,
+			order: [[2, 'asc']],
+			createdRow: (rowEl, rowData) => {
+				$(rowEl).data('source-entry', rowData);
+			}
+		});
+
+
+		/**
+		 * Renders "Type" column cell content.
+		 * @param {Object} row
+		 * @returns {string}
+		 */
+		function renderTypeColumn(row) {
+			let s = '';
+			if (row.type === 'local') {
+				s = '<i class="fa-solid fa-database text-muted"></i>';
+			}
+			else {
+				s = '<i class="fa-solid fa-cloud text-muted"></i>';
+			}
+			if (row?.kind === 'fhir_questionnaire') {
+				s += '<i class="fa-solid fa-fire fa-sm ms-1 text-warning"></i>';
+			}
+			return s;
+		}
+
+		/**
+		 * Renders "Enabled" column cell content.
+		 * @param {Object} row
+		 * @returns {string}
+		 */
+		function renderEnabledColumn(row) {
+			const enabled = (row?.enabled ?? false) === true;
+			return `
+				<div class="form-check form-switch text-success">
+					<input class="form-check-input" type="checkbox" role="switch" data-source="${row.key}" data-action="toggle-enabled" ${enabled ? 'checked' : ''}></input>
+				</div>`;
+		}
+
+		/**
+		 * Renders "Title/Description" column cell content.
+		 * @param {Object} row
+		 * @returns {string}
+		 */
+		function renderTitleColumn(row) {
+			return `
+				<div class="rome-source-title">${escapeHTML(row.title_resolved)}</div>
+				<div class="rome-source-description">${escapeHTML(row.description_resolved)}</div>
+			`;
+		}
+
+		/**
+		 * Renders "Stats" column cell content.
+		 * @param {Object} row
+		 * @returns {string}
+		 */
+		function renderStatsColumn(row) {
+			let s = '';
+			if (row.item_count) {
+				s += `Items: ${row.item_count}`
+			}
+			if (typeof row.system_counts === 'object') {
+				s += `<br/>Systems: ${Object.keys(row.system_counts).length}`;
+			}
+			return `<div class="rome-source-stats">${s ? s : '&mdash;'}</div>`;
+		}
+
+		/**
+		 * Renders "Action" column cell content.
+		 * @param {Object} row
+		 * @returns {string}
+		 */
+		function renderActionColumn(row) {
+			const delBtn = `
+				<button type="button" class="btn btn-sm btn-link text-danger p-0" title="Delete this source" data-source="${row.key}" data-action="delete"><i class="fa fa-trash-alt"></i></button>`;
+			const editBtn = `
+				<button type="button" class="btn btn-sm btn-link text-secondary p-0 me-2" title="Edit this source" data-source="${row.key}" data-action="edit"><i class="fa fa-pencil"></i></button>`;
+			
+			return editBtn + delBtn;
+		}
+		//#endregion DataTable
+	
+		// Events
+		$table.off('click change').on('click change', '[data-action]', function (e) {
+			const $el = $(this);
+			const action = $el.attr('data-action');
+			if (action == 'toggle-enabled' && e.type === 'click') return;
+			const key = $el.attr('data-source');
+			log('Source action',  { action, key });
+
+			// TODO - act
+		});
+	}
 
 
 
-	function refreshSourcesTable(src) {
-		log('Refreshing sources table', src);
+	function refreshSourcesTable(source) {
+		// Remove existing entry from config.sources (identify by key)
+		config.sources = config.sources.filter(s => s.key !== source.key);
+		config.sources.push(source);
+		log('Refreshing sources table', source);
+		dtInstance.clear().rows.add(config.sources).draw();
 	}
 
 
@@ -688,6 +853,18 @@
 		}
 		// @ts-ignore
 		return obj;
+	}
+
+	/**
+	 * Escapes text for safe HTML rendering.
+	 * @param {string} str
+	 * @returns {string}
+	 */
+	function escapeHTML(str) {
+		return String(str)
+			.replace(/&/g, '&amp;')
+			.replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+			.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 	}
 
 	//#endregion

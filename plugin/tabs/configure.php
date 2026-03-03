@@ -64,7 +64,7 @@ $isSuperuser = $module->framework->isSuperUser();
 		</button>
 	</div>
 	<h3><i class="fa-solid fa-folder"></i> Annotation Sources</h3>
-	<table id="rome-sources" class="table table-sm table-striped align-middle rome-sources-table">
+	<table id="rome-sources" class="table table-sm table-hover align-middle rome-sources-table">
 		<thead>
 			<tr>
 				<th class="rome-sources-col-type">Type</th>

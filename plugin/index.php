@@ -74,7 +74,7 @@ $enabled_nav_tabs = array_filter($nav_tabs, function ($tab) {
 });
 // Set active tab
 $active_tab = array_key_exists($_GET['tab'], $enabled_nav_tabs) ? $_GET['tab'] : $default_tab;
-// Get configuration for the tab
+// Get JavaScriptconfiguration for the tab
 $config = $module->getPluginConfig($active_tab);
 
 // Check if cache config is configured

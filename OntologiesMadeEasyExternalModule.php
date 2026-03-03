@@ -349,7 +349,39 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'pid' => $pid,
 			'page' => $page
 		];
+
+		if ($page === 'configure') {
+			$jsConfig['sources'] = $this->getSystemSources();
+		}
+
 		return $jsConfig;
+	}
+
+
+	/**
+	 * Gets all system sources
+	 * @return array 
+	 */
+	function getSystemSources(): array
+	{
+		$settings = $this->framework->getSystemSettings();
+		$sources = [];
+		foreach ($settings as $key => $value) {
+			if (
+				strpos($key, 'sys-ls_') === 0 ||
+				strpos($key, 'sys-rs_') === 0
+			) {
+				$source = json_decode($value['system_value'], true);
+				if (!is_array($source)) continue;
+				// We don't want to leak the doc_id to the client
+				unset($source['doc_id']);
+				// Add key
+				$source['key'] = $key;
+				$source['type'] = strpos($key, 'sys-ls_') === 0 ? 'local' : 'remote';
+				$sources[] = $source;
+			}
+		}
+		return $sources;
 	}
 
 	#endregion
@@ -2074,7 +2106,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'item_count' => (int)$result->itemCount,
 					'system_counts' => $system_counts,
 					'url' => (string)($result->payload['url'] ?? ''),
-					'built_at' => date('c'),
+					'built_at' =>  (new \DateTimeImmutable(
+							'now',
+							new \DateTimeZone('UTC'))
+						)->format('Y-m-d\TH:i:s\Z'),
+					'enabled' => true,
 				];
 				// Store metadata
 				$metaJson = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -2084,7 +2120,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				else {
 					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
 				}
-
 			}
 			// Existing entries must have a an existing docId or a replacement file
 			else {
