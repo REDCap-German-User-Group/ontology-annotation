@@ -410,7 +410,7 @@
 				if (res.error) throw `Failed to save remote source: ${res.error}`;
 				$(document.activeElement).trigger('blur');
 				bsModal.hide();
-				refreshSourcesTable(res);
+				refreshSourcesTable(res.source);
 			}
 			catch (e) {
 				showError(`${e}`);
@@ -587,7 +587,7 @@
 				const res = await JSMO.ajax('save-local-source', payload);
 				if (res.error) throw `Failed to save local source: ${res.error}`;
 				bsModal.hide();
-				refreshSourcesTable(res);
+				refreshSourcesTable(res.source);
 			}
 			catch (e) {
 				showError(`${e}`);
@@ -760,7 +760,7 @@
 					editSource(key);
 					break;
 				case 'delete':
-					deleteSource(key);
+					deleteSource(key, $el);
 					break;
 				case 'toggle-enabled':
 					toggleSourceEnabled(key, $el);
@@ -779,9 +779,7 @@
 					enabled: toState,
 					context: config.page
 				});
-				if (res.error) {
-					throw res.error;
-				}
+				if (res.error) throw res.error;
 				refreshSourcesTable(res.source);
 			}
 			catch (err) {
@@ -797,8 +795,20 @@
 			
 		}
 
-		async function deleteSource(key) {
-			
+		async function deleteSource(key, $btn) {
+			try {
+				$btn.prop('disabled', true);
+				const res = await JSMO.ajax('delete-source', { key });
+				if (res.error) throw res.error;
+				config.sources = config.sources.filter(s => s.key !== key);
+				refreshSourcesTable();
+			}
+			catch (err) {
+				showToast('ERROR', err, 'error');
+			}
+			finally {
+				$btn.prop('disabled', false);
+			}
 		}
 		//#endregion Events
 	}

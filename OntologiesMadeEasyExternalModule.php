@@ -2061,6 +2061,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					}
 					$acronym = trim($payload['bp_ontology']);
 					$meta['title'] = 'BioPortal:' . $acronym;
+					$bp = $this->getBioPortalApiDetails();
+					$bp_ontologies = json_decode($bp['ontology_list'], true);
+					$bp_ontology = array_find($bp_ontologies, function ($o) use ($acronym) {
+						return $o['acronym'] === $acronym;
+					});
+					$meta['description'] = 'Search via BioPortal: ' . $bp_ontology['name'];
 					$meta['acronym'] = $acronym;
 					$token = trim($payload['bp_token'] ?? '');
 					$meta['credentials'] = $this->encryptCredentials($token);
@@ -2089,12 +2095,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					}
 					$meta['credentials'] = $this->encryptCredentials($creds);
 					$meta['title'] = 'Snowstorm:' . $meta['branch'];
+					$meta['description'] = 'Search SNOMED CT via Snowstorm at ' . $meta['baseurl'];
 				}
 				// Title and description overrides
 				$title = trim($payload['title'] ?? '');
 				$meta['title_resolved'] = $title === '' ? $meta['title'] : $title;
-				$meta['description'] = '';
-				$meta['description_resolved'] = trim($payload['description'] ?? '');
+				$description = trim($payload['description'] ?? '');
+				$meta['description_resolved'] = $description === '' ? $meta['description'] : $description;
 				// Store metadata
 				$metaJson = $this->romeJsonEncode($meta);
 				if ($payload['context'] === 'configure') {
@@ -2106,20 +2113,21 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				// Existing entries must have a valid id and type
 
 			}
-		} catch (Throwable $e) {
+
+
+
+			$type = 'remote';
+			$from_system = false; // TODO
+
+			return [
+				'source' => $this->prepSourceForClient($meta, $setting_key, $type, $from_system),
+			];
+		} 
+		catch (Throwable $e) {
 			return [
 				'error' => $e->getMessage(),
 			];
 		}
-
-
-
-
-
-
-		return [
-			'error' => 'Not implemented',
-		];
 	}
 
 
@@ -2206,6 +2214,46 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$source = $this->prepSourceForClient($source, $key, $type, $from_system);
 		return [
 			'source' => $source,
+		];
+	}
+
+	private function deleteSource($payload): array
+	{
+		$key = trim($payload['key'] ?? '');
+		$source = null;
+		if ($key !== '') {
+			if (strpos($key, 'sys-') === 0) {
+				$source = json_decode($this->framework->getSystemSetting($key) ?? '', true);
+				$project_id = null;
+			}
+			else if (strpos($key, 'proj-') === 0) {
+				$source = json_decode($this->framework->getProjectSetting($key, $this->project_id) ?? '', true);
+				$project_id = $this->project_id;
+			}
+		}
+		if (!is_array($source)) {
+			return [
+				'error' => 'Missing or invalid key. The source may have been deleted. Please refresh the page.',
+			];
+		}
+		// Delete it
+		$doc_id = intval($source['doc_id'] ?? 0);
+		if ($doc_id > 0) {
+			$deleted = \Files::deleteFileByDocId($doc_id, $project_id);
+		}
+		if (strpos($key, 'sys-') === 0) {
+			$this->framework->removeSystemSetting($key);
+		}
+		else {
+			$this->framework->removeProjectSetting($key, $project_id);
+		}
+		$logMsg = strip_tags("Delete source $key: {$source['title_resolved']}");
+		$this->framework->log($logMsg, [
+			'project_id' => $project_id,
+		]);
+
+		return [
+			'deleted' => $key,
 		];
 	}
 
@@ -2319,11 +2367,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				// TODO
 			}
 
+			$type = 'local';
+			$from_system = false; // TODO
+
 			return [
-				'success' => true,
-				'meta' => $meta,
+				'source' => $this->prepSourceForClient($meta, $setting_key, $type, $from_system),
 			];
-		} catch (Throwable $e) {
+		} 
+		catch (Throwable $e) {
 			return [
 				'error' => $e->getMessage(),
 			];
