@@ -796,6 +796,20 @@
 		}
 
 		async function deleteSource(key, $btn) {
+
+			const source = config.sources.find(s => s.key === key);
+			const sourceTitle = source?.title_resolved ?? '(unnamed source)';
+			const confirmed = await confirmModal({
+				title: 'DELETE',
+				message: `Are you sure you want to delete this source?<br><br><strong>${escapeHTML(sourceTitle)}</strong>`,
+				cancelLabel: 'Cancel',
+				cancelClass: 'btn-secondary',
+				confirmLabel: 'Delete',
+				confirmClass: 'btn-danger'
+			});
+
+			if (!confirmed) return;
+
 			try {
 				$btn.prop('disabled', true);
 				const res = await JSMO.ajax('delete-source', { key });
@@ -917,6 +931,68 @@
 
 
 	//#region Misc Helpers
+
+	/**
+	 * Show an awaitable Bootstrap 5 confirmation modal.
+	 * @param {{
+	 *   title?: string,
+	 *   message?: string,
+	 *   cancelLabel?: string,
+	 *   cancelClass?: string,
+	 *   confirmLabel?: string,
+	 *   confirmClass?: string
+	 * }} opts
+	 * @returns {Promise<boolean>} Resolves true when confirmed, false otherwise
+	 */
+	function confirmModal(opts = {}) {
+		const {
+			title = 'Confirm',
+			message = 'Are you sure?',
+			cancelLabel = 'Cancel',
+			cancelClass = 'btn-secondary',
+			confirmLabel = 'Confirm',
+			confirmClass = 'btn-primary'
+		} = opts;
+
+		const modalId = `romeConfirmModal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+		const modalHtml = `
+			<div class="modal fade modal-md" id="${modalId}" tabindex="-1" aria-hidden="true">
+				<div class="modal-dialog">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h5 class="modal-title">${escapeHTML(title)}</h5>
+							<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+						</div>
+						<div class="modal-body">${message}</div>
+						<div class="modal-footer">
+							<button type="button" class="btn ${escapeHTML(cancelClass)}" data-bs-dismiss="modal">${escapeHTML(cancelLabel)}</button>
+							<button type="button" class="btn ${escapeHTML(confirmClass)}" data-rome-action="confirm">${escapeHTML(confirmLabel)}</button>
+						</div>
+					</div>
+				</div>
+			</div>`;
+
+		return new Promise((resolve) => {
+			$('body').append(modalHtml);
+			const $modal = $(`#${modalId}`);
+			const bsModal = new bootstrap.Modal($modal.get(0), { backdrop: 'static' });
+			let confirmed = false;
+			$modal.find('[data-rome-action="confirm"]').on('click', function () {
+				confirmed = true;
+				bsModal.hide();
+			});
+			$modal.on('hide.bs.modal', function () {
+				$(document.activeElement).trigger('blur');
+			});
+			$modal.on('hidden.bs.modal', function () {
+
+				bsModal.dispose();
+				$modal.remove();
+				resolve(confirmed);
+			});
+			bsModal.show();
+		});
+	}
 
 	/**
 	 * Resolve a global object by dotted name, e.g.
