@@ -117,7 +117,7 @@ if (!$module->checkCacheConfigured()) {
 <script>
 	$(function() {
 		if (window.DE_RUB_ROME && window.DE_RUB_ROME.init) {
-			window.DE_RUB_ROME.init(<?= json_encode($config); ?>, <?= $jsmo_name ?>);
+			window.DE_RUB_ROME.init(<?= $module->romeJsonEncode($config); ?>, <?= $jsmo_name ?>);
 		}
 	});
 </script>

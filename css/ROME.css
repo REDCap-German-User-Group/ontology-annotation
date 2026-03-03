@@ -176,3 +176,8 @@ h2 {
 	font-style: italic;
 	color: var(--bs-secondary);
 }
+
+.rome-bioportal-token-group {
+	display: flex;
+	white-space: nowrap;
+}

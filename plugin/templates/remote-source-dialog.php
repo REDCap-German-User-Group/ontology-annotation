@@ -7,6 +7,7 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 /** @var OntologiesMadeEasyExternalModule $module */
 
 $bpTokenMessage =
+	'<b class="text-danger">Note: The token entered above will never be displayed again.</b><br>' .
 	$lang['system_config_398'] . ' <b>' . \BioPortal::getApiUrl() . '</b>. ' .
 	$lang['system_config_399'] . ' <a href="' . \BioPortal::$SIGNUP_URL . '" target="_blank" style="text-decoration:underline;">' . $lang['system_config_400'] . '</a>.<br>';
 $bp = $module->getBioPortalApiDetails();
@@ -63,7 +64,10 @@ if ($bp['enabled'] && $allowRcBioPortal) {
 					<div class="mb-2 row g-3">
 						<label class="col-sm-3 col-form-label" for="rome_bioportal_token">BioPortal API token:</label>
 						<div class="col-sm-9" id="rome_bioportal_token_wrap">
-							<input class="form-control form-control-sm" type="password" data-rome-reset="" name="bioportal_token" id="rome_bioportal_token" autocomplete="off">
+							<div class="rome-bioportal-token-group">
+								<input class="form-control form-control-sm" type="text" data-rome-reset="" name="bioportal_token" id="rome_bioportal_token" autocomplete="off">
+								<button class="btn btn-link btn-xs ms-2" type="button" id="rome_bioportal_token_test">Test API token</button>
+							</div>
 							<div class="form-text">
 								<?= $bpTokenMessage ?>
 							</div>
@@ -121,14 +125,16 @@ if ($bp['enabled'] && $allowRcBioPortal) {
 					<div class="mb-2 row d-none" id="rome_snowstorm_basic_pass_wrap">
 						<label class="col-sm-3 col-form-label" for="rome_snowstorm_basic_pass">Password:</label>
 						<div class="col-sm-9">
-							<input class="form-control" type="password" data-rome-reset="" name="snowstorm_basic_pass" id="rome_snowstorm_basic_pass" autocomplete="off">
+							<input class="form-control" type="text" data-rome-reset="" name="snowstorm_basic_pass" id="rome_snowstorm_basic_pass" autocomplete="off">
+							<b class="form-text text-danger">Note: The credentials entered above will never be displayed again.</b>
 						</div>
 					</div>
 
 					<div class="mb-2 row d-none" id="rome_snowstorm_bearer_wrap">
 						<label class="col-sm-3 col-form-label" for="rome_snowstorm_bearer">Bearer token:</label>
 						<div class="col-sm-9">
-							<input class="form-control" type="password" data-rome-reset="" name="snowstorm_bearer" id="rome_snowstorm_bearer" autocomplete="off">
+							<input class="form-control" type="text" data-rome-reset="" name="snowstorm_bearer" id="rome_snowstorm_bearer" autocomplete="off">
+							<b class="form-text text-danger">Note: The token entered above will never be displayed again.</b>
 						</div>
 					</div>
 

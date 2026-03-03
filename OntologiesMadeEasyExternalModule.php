@@ -266,14 +266,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$log_msg = 'FHIR source build issues:' . count($errors) . ' errors, ' . count($warnings) . ' warnings';
 
 			$this->log($log_msg, [
-				'errors' => json_encode(
-					$errors,
-					JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-				),
-				'warnings' => json_encode(
-					$warnings,
-					JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-				),
+				'errors' => $this->romeJsonEncode($errors),
+				'warnings' => $this->romeJsonEncode($warnings),
 			]);
 		}
 	}
@@ -300,13 +294,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return $this->setConfigFromPluginPage($payload);
 			case 'get-bioportal-ontologies':
 				return $this->getBioPortalOntologies($payload);
+			case 'test-bioportal-token':
+				return $this->testBioPortalApiToken($payload);
 			case 'get-snowstorm-branches':
 				return $this->getSnowstormBranches($payload);
 			case 'save-remote-source':
 				try {
 					return $this->saveRemoteSource($payload);
-				}
-				catch (Throwable $e) {
+				} catch (Throwable $e) {
 					return [
 						'error' => $e->getMessage()
 					];
@@ -315,8 +310,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			case 'save-local-source':
 				try {
 					return $this->saveLocalSource($payload);
-				}
-				catch (Throwable $e) {
+				} catch (Throwable $e) {
 					return [
 						'error' => $e->getMessage()
 					];
@@ -361,6 +355,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $jsConfig;
 	}
 
+	#endregion
+
+	#region Prepare Sources for Client Use
 
 	/**
 	 * Gets all system sources
@@ -377,51 +374,65 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			) {
 				$source = json_decode($value['system_value'], true);
 				if (!is_array($source)) continue;
-				// We don't want to leak the doc_id to the client
-				unset($source['doc_id']);
-				// Add key
-				$source['key'] = $key;
-				$source['type'] = strpos($key, 'sys-ls_') === 0 ? 'local' : 'remote';
-				$source['from_system'] = false;
+				$source = $this->prepSourceForClient(
+					$source,
+					$key,
+					strpos($key, 'sys-ls_') === 0 ? 'local' : 'remote',
+					false
+				);
 				$sources[] = $source;
 			}
 		}
 		return $sources;
 	}
 
+	function prepSourceForClient($source, $key, $type, $from_system)
+	{
+		$source['key'] = $key;
+		$source['type'] = $type;
+		$source['from_system'] = $from_system;
+		// We don't want to leak the doc_id to the client
+		unset($source['doc_id']);
+		return $source;
+	}
+
 	#endregion
 
 	#region Set Configuration from plugin pages
 
-	private function requireProjectContext() {
+	private function requireProjectContext()
+	{
 		return $this->project_id !== null;
 	}
 
-	private function requireDesignRights() {
+	private function requireDesignRights()
+	{
 		if (!$this->requireProjectContext()) return false;
 		if (!defined('USERID')) return false;
 		$user = $this->framework->getUser(USERID);
 		return $user->hasDesignRights($this->project_id);
 	}
 
-	private function requireSuperuser() {
+	private function requireSuperuser()
+	{
 		if (!defined('USERID')) return false;
 		$user = $this->framework->getUser(USERID);
 		return $user->isSuperUser();
 	}
 
-	private function setConfigFromPluginPage($payload) {
+	private function setConfigFromPluginPage($payload)
+	{
 		$response = [
 			'success' => true,
 			'error' => null,
 		];
 
 		$valid_settings = [
-			'proj-discoverable' => [ 'requireProjectContext', 'requireDesignRights' ],
-			'proj-can-configure' => [ 'requireProjectContext', 'requireSuperuser' ],
-			'sys-allow-rc-bioportal' => [ 'requireSuperuser' ],
-			'sys-javascript-debug' => [ 'requireSuperuser' ],
-			'user-toggledarkmode' => [ 'requireProjectContext' ],
+			'proj-discoverable' => ['requireProjectContext', 'requireDesignRights'],
+			'proj-can-configure' => ['requireProjectContext', 'requireSuperuser'],
+			'sys-allow-rc-bioportal' => ['requireSuperuser'],
+			'sys-javascript-debug' => ['requireSuperuser'],
+			'user-toggledarkmode' => ['requireProjectContext'],
 		];
 
 		$setting = $payload['setting'] ?? '';
@@ -446,11 +457,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$this->framework->setSystemSetting($setting, $new_value);
 		} else if ($this->project_id !== null && substr($setting, 0, 5) === 'proj-') {
 			$this->framework->setProjectSetting($setting, $new_value, $this->project_id);
-		}
-		else if ($this->project_id !== null && defined('USERID') && substr($setting, 0, 5) === 'user-') {
+		} else if ($this->project_id !== null && defined('USERID') && substr($setting, 0, 5) === 'user-') {
 			$this->framework->setUserSetting($setting, $new_value, USERID);
-		}
-		else {
+		} else {
 			$response['success'] = false;
 			$response['error'] = 'Invalid setting scope';
 		}
@@ -516,13 +525,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$ih->js('js/WatchTargets.js');
 		$ih->js('js/ROME_OnlineDesigner.js');
 		$ih->css('css/ROME_OnlineDesigner.css');
-		echo RCView::script(self::NS_PREFIX . self::EM_NAME . '.init(' . json_encode($config) . ", $jsmo_name);");
+		echo RCView::script(self::NS_PREFIX . self::EM_NAME . '.init(' . $this->romeJsonEncode($config) . ", $jsmo_name);");
 	}
 
-	private function getFixedEnums() {
+	private function getFixedEnums()
+	{
 		return [
-			'truefalse' => "1, ".\RCView::getLangStringByKey('design_186')."\n0, ".\RCView::getLangStringByKey('design_187'),
-			'yesno' => "1, ".\RCView::getLangStringByKey('design_100')."\n0, ".\RCView::getLangStringByKey('design_99'),
+			'truefalse' => "1, " . \RCView::getLangStringByKey('design_186') . "\n0, " . \RCView::getLangStringByKey('design_187'),
+			'yesno' => "1, " . \RCView::getLangStringByKey('design_100') . "\n0, " . \RCView::getLangStringByKey('design_99'),
 		];
 	}
 
@@ -546,7 +556,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 							</label>
 						</div>
 						<div class="rome-em-exclude-matrix">
-							<label  class="form-check-label ms-1 rome-em-matrix-exclude">
+							<label class="form-check-label ms-1 rome-em-matrix-exclude">
 								<input type="checkbox" class="form-check-input ms-3 rome-em-exclude">
 								<?= $this->tt('fieldedit_12') ?>
 							</label>
@@ -637,7 +647,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	private function store_excluded_fields($excluded)
 	{
 		if (!is_array($excluded)) $excluded = [];
-		$this->framework->setProjectSetting(self::STORE_EXCLUSIONS, json_encode($excluded));
+		$this->framework->setProjectSetting(
+			self::STORE_EXCLUSIONS,
+			$this->romeJsonEncode($excluded)
+		);
 	}
 
 	private function set_matrix_exclusion($args)
@@ -717,7 +730,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 								substr($display_item, $pos + $term_length);
 						}
 						$result[] = [
-							'value' => json_encode($current_item),
+							'value' => $this->romeJsonEncode($current_item),
 							'label' => $current_item['text'],
 							'display' => "<b>$title</b>: " . $display_item
 						];
@@ -768,7 +781,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'<span class="rome-edit-field-ui-search-match">' . substr($display_item, $pos, $term_length) . '</span>' .
 					substr($display_item, $pos + $term_length);
 				$result[] = [
-					'value' => json_encode(['code' => ['system' => $ontology_system, 'code' => $val, 'display' => $label]]),
+					'value' => $this->romeJsonEncode(['code' => ['system' => $ontology_system, 'code' => $val, 'display' => $label]]),
 					'label' => $label,
 					'display' => '<b>' . $ontology_acronym . '</b>: ' . $display_item,
 				];
@@ -965,13 +978,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		$parser = $this->createOntologyAnnotationParser([
 			'tag' => '@ONTOLOGY',
-			'getMinAnnotation' => function() { return json_decode($this->getMinimalAnnotationJSON(), true); },
+			'getMinAnnotation' => function () {
+				return json_decode($this->getMinimalAnnotationJSON(), true);
+			},
 			'validate' => null,
 		]);
 		$start = microtime(true);
 		$annotations = [];
 		foreach ($fields as $field) {
-			$r = $parser->parse('@ONTOLOGY='.$field['ontology_json']);
+			$r = $parser->parse('@ONTOLOGY=' . $field['ontology_json']);
 			if (!$r['error']) {
 				foreach ($r['json']['dataElement']['coding'] as $coding) {
 					$system = "{$coding['system']}";
@@ -2002,11 +2017,104 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 
-	private function saveRemoteSource($payload) {
-		$type = $payload['type'];
-		if (!in_array($type, ['bioportal', 'snowstorm'], true)) {
-			throw new Exception('Invalid type');
+	private function saveRemoteSource($payload)
+	{
+		try {
+			// Validate
+			// If context is 'configure', the user must be a superuser or
+			// a project designer and the project must be allowed to use
+			// the configure page
+			if ($payload['context'] === 'configure' && !$this->canConfigure()) {
+				throw new Exception('Not permitted to add sources outside a project context');
+			}
+			// id must be null (new source) or have a valid local source prefix (proj or sys)
+			$id = $payload['id'] ?? null;
+			if (! ($id === null ||
+				strpos($id, 'sys-rs_') === 0 ||
+				strpos($id, 'proj-rs_') === 0
+			)) {
+				throw new Exception('Invalid id');
+			}
+			// New entries must have a valid type
+			if ($id === null) {
+				$type = $payload['type'];
+				if (!in_array($type, ['bioportal', 'snowstorm'], true)) {
+					throw new Exception('Invalid type');
+				}
+				// Generate new ids
+				$ids = $this->generateSourceId();
+				$setting_key = ($payload['context'] === 'configure' ? 'sys-rs_' : 'proj-rs_') . $ids['hex'];
+				$metaId = $ids['id'];
+				$metaUuid = $ids['uuid'];
+				// Create meta
+				$meta = [
+					'v' => 0,
+					'id' => $metaId,
+					'uuid' => $metaUuid,
+					'kind' => $type,
+					'enabled' => true,
+				];
+				if ($type === 'bioportal') {
+					// BioPortal must have an acronym
+					if (trim($payload['bp_ontology'] ?? '') === '') {
+						throw new Exception('Missing BioPortal ontology');
+					}
+					$acronym = trim($payload['bp_ontology']);
+					$meta['title'] = 'BioPortal:' . $acronym;
+					$meta['acronym'] = $acronym;
+					$token = trim($payload['bp_token'] ?? '');
+					$meta['credentials'] = $this->encryptCredentials($token);
+				} else if ($type === 'snowstorm') {
+					// Snowstorm must have a base url
+					if (trim($payload['ss_baseurl'] ?? '') === '') {
+						throw new Exception('Missing Snowstorm base url');
+					}
+					// Snowstorm must have a branch
+					if (trim($payload['ss_branch'] ?? '') === '') {
+						throw new Exception('Missing Snowstorm branch');
+					}
+					// Auth must be one of none, basic or token
+					if (!in_array($payload['ss_auth'] ?? '', ['none', 'basic', 'token'], true)) {
+						throw new Exception('Invalid Snowstorm auth');
+					}
+					$meta['baseurl'] = trim($payload['ss_baseurl']);
+					$meta['branch'] = trim($payload['ss_branch']);
+					$meta['auth'] = $payload['ss_auth'];
+					$creds = '';
+					if ($meta['auth'] === 'basic') {
+						$creds['u'] = trim($payload['ss_username'] ?? '');
+						$creds['p'] = trim($payload['ss_password'] ?? '');
+					} else if ($meta['auth'] === 'token') {
+						$creds['t'] = trim($payload['ss_token'] ?? '');
+					}
+					$meta['credentials'] = $this->encryptCredentials($creds);
+					$meta['title'] = 'Snowstorm:' . $meta['branch'];
+				}
+				// Title and description overrides
+				$title = trim($payload['title'] ?? '');
+				$meta['title_resolved'] = $title === '' ? $meta['title'] : $title;
+				$meta['description'] = '';
+				$meta['description_resolved'] = trim($payload['description'] ?? '');
+				// Store metadata
+				$metaJson = $this->romeJsonEncode($meta);
+				if ($payload['context'] === 'configure') {
+					$this->framework->setSystemSetting($setting_key, $metaJson);
+				} else {
+					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
+				}
+			} else {
+				// Existing entries must have a valid id and type
+
+			}
+		} catch (Throwable $e) {
+			return [
+				'error' => $e->getMessage(),
+			];
 		}
+
+
+
+
 
 
 		return [
@@ -2014,7 +2122,53 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 	}
 
-	function canConfigure() {
+
+	private function testBioPortalApiToken($token)
+	{
+		$token = trim($token['token'] ?? '');
+		if ($token === '') return false;
+
+		$url = 'https://data.bioontology.org/ontologies/LOINC?include=acronym&display_links=false&display_context=false&format=json';
+		$ch = curl_init($url);
+		curl_setopt_array($ch, [
+			CURLOPT_RETURNTRANSFER => true,
+			CURLOPT_HEADER         => true,
+			CURLOPT_HTTPHEADER     => [
+				"Authorization: apikey token=$token",
+				'User-Agent: ' . $this->getUserAgentString(),
+				'Accept: application/json',
+			],
+			CURLOPT_TIMEOUT        => 30,
+		]);
+
+		$body = curl_exec($ch);
+		$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		$err   = curl_error($ch);
+		curl_close($ch);
+		return $code !== 401 && $code !== 403;
+	}
+
+	private function encryptCredentials($payload)
+	{
+		if ($payload === null) return null;
+		if ($payload === '') return '';
+		$valToEncrypt = [
+			'p' => $payload,
+			'r' => base64_encode(random_bytes(8)),
+		];
+		return encrypt($this->romeJsonEncode($valToEncrypt));
+	}
+
+	private function decryptCredentials($payload)
+	{
+		if ($payload === null) return null;
+		if ($payload === '') return '';
+		$decryptedVal = json_decode(decrypt($payload), true);
+		return $decryptedVal['p'] ?? null;
+	}
+
+	function canConfigure()
+	{
 		$user = $this->framework->getUser();
 		if ($user == null) return false;
 		if ($user->isSuperUser()) return true;
@@ -2022,18 +2176,17 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return false;
 	}
 
-	private function toggleSourceEnabled($payload) 
+	private function toggleSourceEnabled($payload)
 	{
 		$key = $payload['key'] ?? null;
-		if (strpos(	$key, 'sys-') === 0) {
+		if (strpos($key, 'sys-') === 0) {
 			if (!$this->canConfigure()) {
 				return [
 					'error' => 'You do not have permission to configure this source.',
 				];
 			}
 			$source = json_decode($this->framework->getSystemSetting($key) ?? '', true);
-		}
-		else {
+		} else {
 			$source = json_decode($this->framework->getProjectSetting($key, $this->project_id) ?? '', true);
 		}
 		if ($key === null || !is_array($source)) {
@@ -2042,12 +2195,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			];
 		}
 		$source['enabled'] = !$source['enabled'];
-		if (strpos(	$key, 'sys-') === 0) {
+		if (strpos($key, 'sys-') === 0) {
 			$this->framework->setSystemSetting($key, $this->romeJsonEncode($source));
-		}
-		else {
+		} else {
 			$this->framework->setProjectSetting($key, $this->project_id, $this->romeJsonEncode($source));
 		}
+		// Augment source
+		$type = strpos($key, '-ls_') !== false ? 'local' : 'remote';
+		$from_system = strpos($key, 'sys-') === 0 && $payload['context'] !== 'configure';
+		$source = $this->prepSourceForClient($source, $key, $type, $from_system);
 		return [
 			'source' => $source,
 		];
@@ -2055,24 +2211,21 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	private function saveLocalSource($payload): array
 	{
-
 		try {
 			// Validate
 			// If context is 'configure', the user must be a superuser or
 			// a project designer and the project must be allowed to use
 			// the configure page
 			if ($payload['context'] === 'configure' && !$this->canConfigure()) {
-				throw new Exception('Not permitted to add local sources outside a project context.');
+				throw new Exception('Not permitted to add sources outside a project context.');
 			}
 
 			// id must be null (new source) or have a valid local source prefix (proj or sys)
 			$id = $payload['id'] ?? null;
-			if (!
-				($id === null || 
-				 strpos($id, 'sys-ls_') === 0 || 
-				 strpos($id, 'proj-ls_') === 0
-				)
-			) {
+			if (! ($id === null ||
+				strpos($id, 'sys-ls_') === 0 ||
+				strpos($id, 'proj-ls_') === 0
+			)) {
 				throw new Exception('Invalid id');
 			}
 			// New entries must have a file
@@ -2106,10 +2259,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$filePath = $this->framework->createTempFile();
 				$compressed = gzencode($payload['fileContent'], 9);
 				file_put_contents($filePath, $compressed);
-				$docId = \REDCap::storeFile($filePath, $this->project_id, $payload['fileName'].'.gz');
+				$docId = \REDCap::storeFile($filePath, $this->project_id, $payload['fileName'] . '.gz');
 				// Generate new ids
 				$ids = $this->generateSourceId();
-				$setting_key =($payload['context'] === 'configure' ? 'sys-ls_' : 'proj-ls_') . $ids['hex'];
+				$setting_key = ($payload['context'] === 'configure' ? 'sys-ls_' : 'proj-ls_') . $ids['hex'];
 				$metaId = $ids['id'];
 				$metaUuid = $ids['uuid'];
 				// Save to cache
@@ -2146,18 +2299,18 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'item_count' => (int)$result->itemCount,
 					'system_counts' => $system_counts,
 					'url' => (string)($result->payload['url'] ?? ''),
-					'built_at' =>  (new \DateTimeImmutable(
-							'now',
-							new \DateTimeZone('UTC'))
-						)->format('Y-m-d\TH:i:s\Z'),
+					'built_at' => (new \DateTimeImmutable(
+						'now',
+						new \DateTimeZone('UTC')
+					)
+					)->format('Y-m-d\TH:i:s\Z'),
 					'enabled' => true,
 				];
 				// Store metadata
 				$metaJson = $this->romeJsonEncode($meta);
 				if ($payload['context'] === 'configure') {
 					$this->framework->setSystemSetting($setting_key, $metaJson);
-				}
-				else {
+				} else {
 					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
 				}
 			}
@@ -2170,17 +2323,18 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'success' => true,
 				'meta' => $meta,
 			];
-		}
-		catch (Throwable $e) {
+		} catch (Throwable $e) {
 			return [
 				'error' => $e->getMessage(),
 			];
 		}
 	}
 
-	function mapLocalResourceKind($kind) {
+	function mapLocalResourceKind($kind)
+	{
 		switch ($kind) {
-			case 'Questionnaire': return 'fhir_questionnaire';
+			case 'Questionnaire':
+				return 'fhir_questionnaire';
 		}
 		return null;
 	}
@@ -2209,7 +2363,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 
-	private function addOrUpdateLocalSource($source) 
+	private function addOrUpdateLocalSource($source)
 	{
 
 		$this->initProject(defined('PROJECT_ID') ? PROJECT_ID : null);
@@ -2324,7 +2478,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'warnings' => $this->romeJsonEncode($warnings),
 			]);
 		}
-
 	}
 
 
@@ -2360,7 +2513,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 
-	function getBioPortalOntologies($payload) {
+	function getBioPortalOntologies($payload)
+	{
 		$token = $payload['token'] ?? null;
 		$bp = $this->getBioPortalApiDetails();
 		$rc_enabled = $bp['enabled'];
@@ -2383,8 +2537,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'rc_enabled' => $rc_enabled,
 				'ontologies' => $this->fetchBioPortalOntologies($token),
 			];
-		}
-		catch (Exception $e) {
+		} catch (Exception $e) {
 			return [
 				'rc_enabled' => $rc_enabled,
 				'ontologies' => [],
@@ -2393,7 +2546,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
-	private function fetchBioPortalOntologies($token) {
+	private function fetchBioPortalOntologies($token)
+	{
 		$url = BioPortal::getApiUrl() . 'ontologies?include=name,acronym&display_links=false&display_context=false&format=json&apikey=' . $token;
 		// Call the URL
 		$jsonString = http_get($url);
@@ -2411,7 +2565,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $list;
 	}
 
-	private function getSnowstormBranches($payload) {
+	private function getSnowstormBranches($payload)
+	{
 		$baseUrl = trim((string)($payload['ss_baseurl'] ?? ''));
 		if ($baseUrl === '') {
 			return [
@@ -2533,7 +2688,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 *
 	 * @param Cache $cache
 	 * @param array{api_url: string, api_token: string, ontology_list: string, enabled: bool} $bp
-	 * @param array<int, string> $acronym_query_response_map Requested ontology acronyms as a map: QUERY ACRONYM => RESPONSE ACRONYM
+	 * @param array<string, string> $acronym_query_response_map Requested ontology acronyms as a map: QUERY ACRONYM => RESPONSE ACRONYM
 	 * @param string $q Query
 	 * @param int $limit_per_acronym Limit per acronym
 	 * @param int $ttlSeconds Cache TTL per acronym (e.g. 1800)

@@ -164,6 +164,7 @@
 		"discover",
 		"configure",
 		"get-bioportal-ontologies",
+		"test-bioportal-token",
 		"get-snowstorm-branches",
 		"save-remote-source",
 		"save-local-source",

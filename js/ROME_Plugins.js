@@ -137,6 +137,7 @@
 
 		const $bioOntEl = $('#rome_bioportal_ontology');
 		const $bioOntTokenEl = $('#rome_bioportal_token');
+		const $bioTestTokenBtn = $('#rome_bioportal_token_test');
 		const $bioRefreshBtn = $('#rome_bioportal_refresh');
 
 		const $snowAuthEl = $('#rome_snowstorm_auth_mode');
@@ -183,6 +184,23 @@
 			$snowBearerWrap.toggleClass('d-none', mode !== 'bearer');
 		}
 
+		async function testBioPortalToken() {
+			const token = $bioOntTokenEl.val();
+			if ($bioOntTokenEl.hasClass('is-valid')) return; // already tested
+			if (!token) return;
+			$bioTestTokenBtn.prop('disabled', true);
+			try {
+				const res = await JSMO.ajax('test-bioportal-token', { token });
+				log('Tested bioportal token', res);
+				$bioOntTokenEl.addClass(res ? 'is-valid' : 'is-invalid');
+			}
+			catch (e) {
+				showError(`BioPortal: failed to perform token test (${e})`);
+			}
+			finally {
+				$bioTestTokenBtn.prop('disabled', false);
+			}
+		}
 
 		async function loadBioportalOntologies({ forceRefresh = false } = {}) {
 			if (ontologiesLoaded && !forceRefresh) return;
@@ -199,9 +217,8 @@
 					: 'Select an ontology ...';
 				$bioOntEl.prop('disabled', res.ontologies.length === 0);
 				const select2Data = res.ontologies.map(o => ({
-					id: o['@id'],          // stable unique value
-					text: o.name,          // fallback
-					acronym: o.acronym,
+					id: o.acronym,
+					text: `${o.acronym} ${o.name}`,
 					name: o.name
 				}));
 				ontologiesLoaded = res.ontologies.length > 0;
@@ -232,7 +249,7 @@
 			const $container = $('<span>');
 
 			$('<b>')
-				.text(data.acronym || '')
+				.text(data.id || '')
 				.appendTo($container);
 
 			$container.prepend('[');
@@ -307,6 +324,14 @@
 			await loadBioportalOntologies({ forceRefresh: true });
 		});
 
+		$bioTestTokenBtn.on('click', async () => {
+			clearError();
+			await testBioPortalToken();
+		});
+		$bioOntTokenEl.on('change', () => {
+			$bioOntTokenEl.removeClass('is-valid is-invalid');
+		});
+
 		$snowAuthEl.on('change', () => {
 			setSnowAuthMode(`${$snowAuthEl.val()}`);
 		});
@@ -324,6 +349,7 @@
 			// Assemble payload
 			const type = `${$typeEl.val()}`;
 			const payload = {
+				context: config.page,
 				title: `${$('#rome_title').val()}`.trim(),
 				description: `${$('#rome_description').val()}`.trim(),
 				type: type
