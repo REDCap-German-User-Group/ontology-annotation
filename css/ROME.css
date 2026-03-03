@@ -173,3 +173,7 @@ h2 {
 .rome-sources-table .rome-source-stats {
 	font-size: 85%;
 }
+.rome-sources-table .dataTables_empty {
+	font-style: italic;
+	color: var(--bs-secondary);
+}

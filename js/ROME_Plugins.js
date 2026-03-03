@@ -659,6 +659,9 @@
 			if (row?.kind === 'fhir_questionnaire') {
 				s += '<i class="fa-solid fa-fire fa-sm ms-1 text-warning"></i>';
 			}
+			if (row?.from_system ?? false) {
+				s += '<i class="fa-solid fa-hard-drive fa-sm ms-1 text-info"></i>';
+			}
 			return s;
 		}
 

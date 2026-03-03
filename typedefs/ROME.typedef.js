@@ -106,6 +106,7 @@
  * @property {Number=} item_count
  * @property {Object<string, Number>=} system_counts
  * @property {boolean} enabled
+ * @property {boolean} from_system
  */
 
 /**

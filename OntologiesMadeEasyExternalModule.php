@@ -378,6 +378,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				// Add key
 				$source['key'] = $key;
 				$source['type'] = strpos($key, 'sys-ls_') === 0 ? 'local' : 'remote';
+				$source['from_system'] = false;
 				$sources[] = $source;
 			}
 		}
