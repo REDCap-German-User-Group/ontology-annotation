@@ -320,6 +320,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return $this->toggleSourceEnabled($payload);
 			case 'delete-source':
 				return $this->deleteSource($payload);
+			case 'get-source-file-info':
+				return $this->getSourceFileInfo($payload);
 		}
 	}
 
@@ -2122,8 +2124,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			return [
 				'source' => $this->prepSourceForClient($meta, $setting_key, $type, $from_system),
 			];
-		} 
-		catch (Throwable $e) {
+		} catch (Throwable $e) {
 			return [
 				'error' => $e->getMessage(),
 			];
@@ -2220,31 +2221,22 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	private function deleteSource($payload): array
 	{
 		$key = trim($payload['key'] ?? '');
-		$source = null;
-		if ($key !== '') {
-			if (strpos($key, 'sys-') === 0) {
-				$source = json_decode($this->framework->getSystemSetting($key) ?? '', true);
-				$project_id = null;
-			}
-			else if (strpos($key, 'proj-') === 0) {
-				$source = json_decode($this->framework->getProjectSetting($key, $this->project_id) ?? '', true);
-				$project_id = $this->project_id;
-			}
-		}
+		$source = $this->getSourceByKey($key);
 		if (!is_array($source)) {
 			return [
 				'error' => 'Missing or invalid key. The source may have been deleted. Please refresh the page.',
 			];
 		}
+
 		// Delete it
+		$project_id = strpos($key, 'sys-') === 0 ? null : $this->project_id;
 		$doc_id = intval($source['doc_id'] ?? 0);
 		if ($doc_id > 0) {
 			$deleted = \Files::deleteFileByDocId($doc_id, $project_id);
 		}
 		if (strpos($key, 'sys-') === 0) {
 			$this->framework->removeSystemSetting($key);
-		}
-		else {
+		} else {
 			$this->framework->removeProjectSetting($key, $project_id);
 		}
 		$logMsg = strip_tags("Delete source $key: {$source['title_resolved']}");
@@ -2254,6 +2246,44 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		return [
 			'deleted' => $key,
+		];
+	}
+
+	private function getSourceByKey($key)
+	{
+		$key = trim("$key");
+		if ($key === '') return null;
+		$source = null;
+		if (strpos($key, 'sys-') === 0) {
+			$source = json_decode($this->framework->getSystemSetting($key) ?? '', true);
+		} else if (strpos($key, 'proj-') === 0) {
+			$source = json_decode($this->framework->getProjectSetting($key, $this->project_id) ?? '', true);
+		}
+		return $source;
+	}
+
+	private function getSourceFileInfo($payload): array
+	{
+		$key = trim($payload['key'] ?? '');
+		$source = $this->getSourceByKey($key);
+		if (!is_array($source)) {
+			return [
+				'error' => 'Missing or invalid key. The source may have been deleted. Please refresh the page.',
+			];
+		}
+		$doc_id = intval($source['doc_id'] ?? 0);
+		$info = \Files::getEdocInfo($doc_id);
+		$name = $info['doc_name'];
+		// Trim .gz from compressed files
+		if (ends_with($name, '.gz')) {
+			$name = substr($name, 0, strlen($name) - 3);
+		}
+		return [
+			'file' => [
+				'name' => $name,
+				'stored' => $info['stored_date'],
+				'deleted' => $info['delete_date'] !== null,
+			],
 		];
 	}
 
@@ -2307,7 +2337,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$filePath = $this->framework->createTempFile();
 				$compressed = gzencode($payload['fileContent'], 9);
 				file_put_contents($filePath, $compressed);
-				$docId = \REDCap::storeFile($filePath, $this->project_id, $payload['fileName'] . '.gz');
+				$storeProjId = $payload['context'] === 'configure' ? null : $this->project_id;
+				$docId = \REDCap::storeFile($filePath, $storeProjId, $payload['fileName'] . '.gz');
+				// Due to a quirk in REDCap, project id will be set to a value other than null when
+				// PROJECT_ID is defined. We compensate for system files by manually removing the project
+				// id from the redcap_edocs_metadata table
+				if ($docId > 0 && $storeProjId === null) {
+					$sql = "UPDATE redcap_edocs_metadata SET project_id = NULL WHERE doc_id = ?";
+					$this->framework->query($sql, $docId);
+				}
 				// Generate new ids
 				$ids = $this->generateSourceId();
 				$setting_key = ($payload['context'] === 'configure' ? 'sys-ls_' : 'proj-ls_') . $ids['hex'];
@@ -2373,8 +2411,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			return [
 				'source' => $this->prepSourceForClient($meta, $setting_key, $type, $from_system),
 			];
-		} 
-		catch (Throwable $e) {
+		} catch (Throwable $e) {
 			return [
 				'error' => $e->getMessage(),
 			];

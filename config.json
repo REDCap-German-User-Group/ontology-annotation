@@ -169,7 +169,8 @@
 		"save-remote-source",
 		"save-local-source",
 		"toggle-source-enabled",
-		"delete-source"
+		"delete-source",
+		"get-source-file-info"
 	],
 	"no-csrf-pages": [
         "ajax/search",

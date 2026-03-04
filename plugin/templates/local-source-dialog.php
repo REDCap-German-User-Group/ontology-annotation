@@ -41,7 +41,7 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 					<div class="col-sm-3 col-form-label">Annotation source file:</div>
 					<div class="col-sm-9">
 						<div class="col-form-label" id="rome-file-info">No file selected. Please upload a file.</div>
-						<div class="form-check">
+						<div class="form-check" id="rome-replace-file-checkbox">
 							<input class="form-check-input" type="checkbox" id="rome_enable_local_file_upload">
 							<label class="form-check-label" for="rome_enable_local_file_upload">Replace existing file</label>
 						</div>

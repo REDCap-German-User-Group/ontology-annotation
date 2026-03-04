@@ -31,6 +31,10 @@
 
 	/** @type {Object} */
 	let dtInstance;
+	/** @type {Function} */
+	let editRemoteSource;
+	/** @type {Function} */
+	let editLocalSource;
 
 	/**
 	 * Implements the public init method.
@@ -302,7 +306,6 @@
 				$titleEl.text('Add a remote source');
 				await loadBioportalOntologies({ forceRefresh: false });
 			}
-
 			bsModal.show();
 		};
 
@@ -420,7 +423,6 @@
 			}
 		});
 
-
 		async function loadSnowStormBranches() {
 
 			$snowBranchesEl.html(`<option value="">Loading…</option>`);
@@ -464,6 +466,10 @@
 			}
 		}
 
+		// Public
+		editRemoteSource = function(source) {
+			openRemoteSourceDialog('edit', source);
+		};
 	}
 
 
@@ -474,6 +480,7 @@
 		const $errEl = $('#romeLocalSourceError');
 		let localSourceFileContent = '';
 		let localSourceFileName = '';
+		let editMode = 'create';
 
 
 		const bsModal = new bootstrap.Modal($modalEl.get(0), { backdrop: 'static' });
@@ -503,16 +510,29 @@
 			localSourceFileContent = '';
 			localSourceFileName = '';
 			$('#rome-file-info').text('No file selected. Please upload a file.');
+			$('#rome_enable_local_file_upload').prop('checked', false);
+			$('#rome-replace-file-checkbox').addClass('d-none');
+			$('#rome-file-drop-area').removeClass('d-none');
 			clearError();
 		}
 
-		async function openLocalSourceDialog(mode, sourceData) {
+		async function openLocalSourceDialog(mode, sourceData, fileData) {
 			resetFormForCreate();
-			if (mode === 'edit' && sourceData) {
+			editMode = mode;
+			if (mode === 'edit') {
 				$titleEl.text('Edit a local source');
-				$('#rome_local_source_id').val(sourceData.id || '');
-				$('#rome_local_title').val(sourceData.title || '');
-				$('#rome_local_description').val(sourceData.description || '');
+				$('#rome_local_source_id').val(sourceData.key || '');
+				$('#rome-title-from-file').text(sourceData.title || '');
+				$('#rome-description-from-file').text(sourceData.description || '');
+				if (sourceData.title !== sourceData.title_resolved) {
+					$('#rome_local_title').val(sourceData.title_resolved || '');
+				}
+				if (sourceData.description !== sourceData.description_resolved) {
+					$('#rome_local_description').val(sourceData.description_resolved || '');
+				}
+				$('#rome-file-info').text(fileData.name || '');
+				$('#rome-replace-file-checkbox').removeClass('d-none');
+				$('#rome-file-drop-area').addClass('d-none');
 			} else {
 				$titleEl.text('Add a local source');
 			}
@@ -522,6 +542,10 @@
 		// Wire events
 		$('#rome-add-local-source').on('click', () => {
 			openLocalSourceDialog('create');
+		});
+
+		$('#rome_enable_local_file_upload').on('change', function () {
+			$('#rome-file-drop-area').toggleClass('d-none', !$(this).is(':checked'));
 		});
 
 		$('#rome-file-input').on('change', async function (ev) {
@@ -597,6 +621,11 @@
 				$('#romeLocalSourceSaveBtn').prop('disabled', false);
 			}
 		});
+
+		// Public
+		editLocalSource = function(source, file) {
+			openLocalSourceDialog('edit', source, file);
+		};
 	}
 
 	function initSourcesTable() {
@@ -757,7 +786,7 @@
 
 			switch (action) {
 				case 'edit':
-					editSource(key);
+					editSource(key, $el);
 					break;
 				case 'delete':
 					deleteSource(key, $el);
@@ -791,12 +820,26 @@
 			}
 		}
 
-		async function editSource(key) {
-			
+		async function editSource(key, $btn) {
+			const source = config.sources.find(s => s.key === key);
+			if (source.type === 'local') {
+				// We need to get file details from the server
+				try {
+					const res = await JSMO.ajax('get-source-file-info', { key });
+					if (res.error) throw res.error;
+					editLocalSource(source, res.file);
+				}
+				catch (err) {
+					showToast('ERROR', err, 'error');
+					return;
+				}
+			}
+			else {
+				editRemoteSource(source);
+			}
 		}
 
 		async function deleteSource(key, $btn) {
-
 			const source = config.sources.find(s => s.key === key);
 			const sourceTitle = source?.title_resolved ?? '(unnamed source)';
 			const confirmed = await confirmModal({
