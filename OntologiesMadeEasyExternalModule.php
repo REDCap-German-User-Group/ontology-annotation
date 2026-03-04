@@ -1481,17 +1481,26 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 *  - id:   "src_<uuidhex>"  (uuid without hyphens)
 	 *  - uuid: canonical UUID v4 with hyphens
 	 *
+	 * @param string|null $hexOrUuid A UUID or 32-character hex string that will be used as the source id when provided
 	 * @return array{id:string, uuid:string}
 	 * @throws Exception
 	 */
-	private function generateSourceId(): array
+	private function generateSourceId($hexOrUuid = null): array
 	{
-		// UUID v4: 16 random bytes with version/variant bits set.
-		$b = random_bytes(16);
-		$b[6] = chr((ord($b[6]) & 0x0f) | 0x40); // version 4
-		$b[8] = chr((ord($b[8]) & 0x3f) | 0x80); // variant RFC 4122
-
-		$hex = bin2hex($b); // 32 hex chars
+		if ($hexOrUuid !== null) {
+			$hex = preg_replace('/[^A-Fa-f0-9]/', '', $hexOrUuid);
+			if (strlen($hex) !== 32) {
+				throw new Exception('Invalid uuid or hex string');
+			}
+		}
+		else {
+			// UUID v4: 16 random bytes with version/variant bits set.
+			$b = random_bytes(16);
+			$b[6] = chr((ord($b[6]) & 0x0f) | 0x40); // version 4
+			$b[8] = chr((ord($b[8]) & 0x3f) | 0x80); // variant RFC 4122
+	
+			$hex = bin2hex($b); // 32 hex chars
+		}
 
 		$uuid = substr($hex, 0, 8) . '-' .
 			substr($hex, 8, 4) . '-' .
@@ -2306,92 +2315,24 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			)) {
 				throw new Exception('Invalid id');
 			}
-			// New entries must have a file
 			if ($id === null) {
+				// New entries must have a file
 				if ($payload['fileName'] === '' || trim($payload['fileContent']) === '') {
 					throw new Exception('Invalid or empty file');
 				}
-				// File content must be valid JSON
-				$json = json_decode(
-					$payload['fileContent'],
-					true,
-					512,
-					JSON_THROW_ON_ERROR
-				);
-				$kind = $this->mapLocalResourceKind($json['resourceType'] ?? null);
-				$builders = $this->getLocalResourceBuilders($kind);
-				if (count($builders) === 0) {
-					throw new Exception('Incompatible file type (no builder found)');
-				}
-				$result = $builders[0]->buildFromJsonString($payload['fileContent'], []);
-				// Do not save files with 0 counts
-				if ($result->itemCount === 0) {
-					throw new Exception('Invalid file (no items)');
-				}
-				// Check cache
-				$cache = $this->getCache();
-				if ($cache === null) {
-					throw new Exception('Failed to access cache.');
-				}
-				// Save file (always compress)
-				$filePath = $this->framework->createTempFile();
-				$compressed = gzencode($payload['fileContent'], 9);
-				file_put_contents($filePath, $compressed);
-				$storeProjId = $payload['context'] === 'configure' ? null : $this->project_id;
-				$docId = \REDCap::storeFile($filePath, $storeProjId, $payload['fileName'] . '.gz');
-				// Due to a quirk in REDCap, project id will be set to a value other than null when
-				// PROJECT_ID is defined. We compensate for system files by manually removing the project
-				// id from the redcap_edocs_metadata table
-				if ($docId > 0 && $storeProjId === null) {
-					$sql = "UPDATE redcap_edocs_metadata SET project_id = NULL WHERE doc_id = ?";
-					$this->framework->query($sql, $docId);
-				}
-				// Generate new ids
-				$ids = $this->generateSourceId();
-				$setting_key = ($payload['context'] === 'configure' ? 'sys-ls_' : 'proj-ls_') . $ids['hex'];
-				$metaId = $ids['id'];
-				$metaUuid = $ids['uuid'];
-				// Save to cache
-				// Cache key: versioned by doc_id.
-				// Format: idx:<src_id>:<doc_id>
-				$cacheKey = "idx:" . $metaId . ":" . $docId;
-				// Store payload. TTL=0 means "never expires" (safe due to doc_id versioning).
-				$ttl = 0;
-				$cache->setPayload($cacheKey, $result->payload, $ttl, [
-					'kind' => $result->kind,
-					'id' => $metaId,
-					'uuid' => $metaUuid,
-					'doc_id' => $docId,
+				list ($setting_key, $meta) = $this->tryStoreNewLocalSource([
+					'fileName' => $payload['fileName'],
+					'fileContent' => $payload['fileContent'],
+					'project_id' => $payload['context'] === 'configure' ? null : $this->project_id,
+					'current_id' => null,
 				]);
-				// Validate code systems in use
-				$system_counts = $result->payload['system_counts'] ?? [];
-				if (!is_array($system_counts)) $system_counts = [];
 				// Resolve title and description
-				$srcTitle = $result->payload['title'] ?? null;
-				$srcDesc = $result->payload['description'] ?? null;
-				$resolvedTitle = strlen(trim($payload['title'])) > 0 ? trim($payload['title']) : $srcTitle;
-				$resolvedDesc = strlen($payload['description']) > 0 ? $payload['description'] : $srcDesc;
-				// Generate metadata
-				$meta = [
-					'v' => 1,
-					'id' => $metaId,
-					'uuid' => $metaUuid,
-					'doc_id' => $docId,
-					'kind' => $result->kind,
-					'title' => $srcTitle,
-					'title_resolved' => $resolvedTitle,
-					'description' => $srcDesc,
-					'description_resolved' => $resolvedDesc,
-					'item_count' => (int)$result->itemCount,
-					'system_counts' => $system_counts,
-					'url' => (string)($result->payload['url'] ?? ''),
-					'built_at' => (new \DateTimeImmutable(
-						'now',
-						new \DateTimeZone('UTC')
-					)
-					)->format('Y-m-d\TH:i:s\Z'),
-					'enabled' => true,
-				];
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
+					? trim($payload['title']) : $meta['title'];
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
+					? trim($payload['description']) : $meta['description'];
+				// Set enabled to true
+				$meta['enabled'] = true;
 				// Store metadata
 				$metaJson = $this->romeJsonEncode($meta);
 				if ($payload['context'] === 'configure') {
@@ -2400,9 +2341,44 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
 				}
 			}
-			// Existing entries must have a an existing docId or a replacement file
 			else {
-				// TODO
+				// Existing entries must have a an existing docId or a replacement file
+				$source = $this->getSourceByKey($id);
+				if (!is_array($source)) {
+					return [
+						'error' => 'Missing or invalid id. The source may have been deleted. Please refresh the page.',
+					];
+				}
+				// Is this a replacement file?
+				$fileName = $payload['fileName'] ?? '';
+				$fileContent = $payload['fileContent'] ?? '';
+				if ($fileContent !== '' && $fileName !== '') {
+					// Replace file
+					list ($_, $meta) = $this->tryStoreNewLocalSource([
+						'fileName' => $payload['fileName'],
+						'fileContent' => $payload['fileContent'],
+						'project_id' => $payload['context'] === 'configure' ? null : $this->project_id,
+						'current_id' => $source['uuid'],
+					]);
+					// Copy updated meta over to source
+					foreach ($meta as $metaKey => $metaValue) {
+						$source[$metaKey] = $metaValue;
+					}
+				}
+				$meta = $source;
+				// Resolve title and description
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
+					? trim($payload['title']) : $meta['title'];
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
+					? trim($payload['description']) : $meta['description'];
+				// Store metadata
+				$metaJson = $this->romeJsonEncode($meta);
+				$setting_key = $id;
+				if ($payload['context'] === 'configure') {
+					$this->framework->setSystemSetting($setting_key, $metaJson);
+				} else {
+					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
+				}
 			}
 
 			$type = 'local';
@@ -2416,6 +2392,99 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'error' => $e->getMessage(),
 			];
 		}
+	}
+
+	/**
+	 * Parses a local resource file and stores the original file and sets the search cache
+	 * @param array $data Array with fileContent, fileName, project_id, current_id (optional)
+	 * @return array{string, array{v: int, id: string, uuid: string, doc_id: int|string, kind: mixed, title: mixed, description: mixed, item_count: int, system_counts: array, url: string, built_at: string}} 
+	 * @throws mixed
+	 */
+	private function tryStoreNewLocalSource($data)
+	{
+		$fileContent = $data['fileContent'] ?? '';
+		$fileName = $data['fileName'] ?? '';
+		$project_id = $data['project_id'] ?? null;
+		$current_id = $data['current_id'] ?? null;
+		// File content must be valid JSON
+		$json = json_decode(
+			$fileContent,
+			true,
+			512,
+			JSON_THROW_ON_ERROR
+		);
+		$kind = $this->mapLocalResourceKind($json['resourceType'] ?? null);
+		$builders = $this->getLocalResourceBuilders($kind);
+		if (count($builders) === 0) {
+			throw new Exception('Incompatible file type (no builder found)');
+		}
+		$result = $builders[0]->buildFromJsonString($fileContent, []);
+		// Do not save files with 0 counts
+		if ($result->itemCount === 0) {
+			throw new Exception('Invalid file (no items)');
+		}
+		// Check cache
+		$cache = $this->getCache();
+		if ($cache === null) {
+			throw new Exception('Failed to access cache.');
+		}
+		// Save file (always compress)
+		$filePath = $this->framework->createTempFile();
+		$compressed = gzencode($fileContent, 9);
+		file_put_contents($filePath, $compressed);
+		$docId = \REDCap::storeFile($filePath, $project_id, $fileName . '.gz');
+		if (!is_numeric($docId) || $docId <= 0) {
+			throw new Exception('Failed to store file.');
+		}
+		// Due to a quirk in REDCap, project id will be set to a value other than null when
+		// PROJECT_ID is defined. We compensate for system files by manually removing the project
+		// id from the redcap_edocs_metadata table
+		if ($docId > 0 && $project_id === null) {
+			$sql = "UPDATE redcap_edocs_metadata SET project_id = NULL WHERE doc_id = ?";
+			$this->framework->query($sql, $docId);
+		}
+		// Generate or recreate ids
+		$ids = $this->generateSourceId($current_id);
+		$setting_key = ($project_id === null ? 'sys-ls_' : 'proj-ls_') . $ids['hex'];
+		$metaId = $ids['id'];
+		$metaUuid = $ids['uuid'];
+		// Save to cache
+		// Cache key: versioned by doc_id.
+		// Format: idx:<src_id>:<doc_id>
+		$cacheKey = "idx:" . $metaId . ":" . $docId;
+		// Store payload. TTL=0 means "never expires" (safe due to doc_id versioning).
+		$ttl = 0;
+		$cache->setPayload($cacheKey, $result->payload, $ttl, [
+			'kind' => $result->kind,
+			'id' => $metaId,
+			'uuid' => $metaUuid,
+			'doc_id' => $docId,
+		]);
+		// Validate code systems in use
+		$system_counts = $result->payload['system_counts'] ?? [];
+		if (!is_array($system_counts)) $system_counts = [];
+		// Get title and description from source file
+		$srcTitle = $result->payload['title'] ?? null;
+		$srcDesc = $result->payload['description'] ?? null;
+		// Generate metadata stub (missing: title_resolved, description_resolved, enabled)
+		$meta_stub = [
+			'v' => 1,
+			'id' => $metaId,
+			'uuid' => $metaUuid,
+			'doc_id' => $docId,
+			'kind' => $result->kind,
+			'title' => $srcTitle,
+			'description' => $srcDesc,
+			'item_count' => (int)$result->itemCount,
+			'system_counts' => $system_counts,
+			'url' => (string)($result->payload['url'] ?? ''),
+			'built_at' => (new \DateTimeImmutable(
+				'now',
+				new \DateTimeZone('UTC')
+			)
+			)->format('Y-m-d\TH:i:s\Z'),
+		];
+		return [ $setting_key, $meta_stub ];
 	}
 
 	function mapLocalResourceKind($kind)
