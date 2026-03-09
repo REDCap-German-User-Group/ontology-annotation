@@ -84,14 +84,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	// Inject system sources into project config
-	public function redcap_module_configuration_settings($project_id, $settings)
+	public function redcap_module_configuration_settings_obsolete($project_id, $settings)
 	{
 		// Only inject per-project system source selectors when viewing a PROJECT config dialog.
 		if ($project_id === null) {
 			return $settings;
 		}
-
-		return $settings; // --- obsolete
 
 		// Read system sources (repeatable system setting).
 		$settingKey = 'sys-fhir-source';
@@ -150,13 +148,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 
-	// After a module config has been saved
-	function redcap_module_save_configuration($project_id)
+	// After a module config has been saved -- obsolete
+	function redcap_module_save_configuration_disabled($project_id)
 	{
-
-		return;
-
-		// -- obsolete ---
 
 
 		if (empty($project_id)) $project_id = null;
