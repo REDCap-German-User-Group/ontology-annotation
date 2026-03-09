@@ -2122,10 +2122,27 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				}
 			} else {
 				// Existing entries must have a valid id and type
-
+				$source = $this->getSourceByKey($id);
+				if (!is_array($source)) {
+					return [
+						'error' => 'Missing or invalid id. The source may have been deleted. Please refresh the page.',
+					];
+				}
+				$meta = $source;
+				// Resolve title and description
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
+					? trim($payload['title']) : $meta['title'];
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
+					? trim($payload['description']) : $meta['description'];
+				// Store metadata
+				$metaJson = $this->romeJsonEncode($meta);
+				$setting_key = $id;
+				if ($payload['context'] === 'configure') {
+					$this->framework->setSystemSetting($setting_key, $metaJson);
+				} else {
+					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
+				}
 			}
-
-
 
 			$type = 'remote';
 			$from_system = false; // TODO

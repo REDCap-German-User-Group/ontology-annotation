@@ -130,6 +130,7 @@
 
 		let ontologiesLoaded = false;
 		let rcBioPortalTokenAvailable = false;
+		let editMode = 'create';
 
 		const $modalEl = $('#romeRemoteSourceModal');
 		const $titleEl = $('#romeRemoteSourceModalTitle');
@@ -283,27 +284,24 @@
 
 		async function openRemoteSourceDialog(mode, sourceData) {
 			resetFormForCreate();
-
+			editMode = mode;
 			if (mode === 'edit' && sourceData) {
 				$titleEl.text('Edit a remote source');
-				$('#rome_source_id').val(sourceData.id || '');
-				$('#rome_remote_type').val(sourceData.remote_type || 'bioportal');
+				$('#rome_source_id').val(sourceData.key || '');
 				$('#rome_title').val(sourceData.title || '');
 				$('#rome_description').val(sourceData.description || '');
-
-				setType(sourceData.remote_type || 'bioportal');
-
-				if (sourceData.remote_type === 'bioportal') {
-					await loadBioportalOntologies({ forceRefresh: false });
-					if (sourceData.bioportal_ontology) $bioOntEl.val(sourceData.bioportal_ontology).trigger('change');
-				} else {
-					$('#rome_snowstorm_base_url').val(sourceData.snowstorm_base_url || '');
-					$('#rome_snowstorm_branch').val(sourceData.snowstorm_branch || '').trigger('change');
-					$snowAuthEl.val(sourceData.snowstorm_auth_mode || 'none');
-					setSnowAuthMode(sourceData);
+				$('#rome_remote_block_edit').removeClass('d-none');
+				$('#rome_remote_block_add').addClass('d-none');
+				if (sourceData.kind === 'bioportal') {
+					$('#rome_remote_type_info').val(`BioPortal: ${sourceData.acronym}`);
+				}
+				else if (sourceData.kind === 'snowstorm') {
+					$('#rome_remote_type_info').val(`Snowstorm: ${sourceData.ss_branch}`);
 				}
 			} else {
 				$titleEl.text('Add a remote source');
+				$('#rome_remote_block_edit').addClass('d-none');
+				$('#rome_remote_block_add').removeClass('d-none');
 				await loadBioportalOntologies({ forceRefresh: false });
 			}
 			bsModal.show();
@@ -348,62 +346,68 @@
 		$('#romeRemoteSourceSaveBtn').on('click', async function (ev) {
 			ev.preventDefault();
 			clearError();
-
-			// Assemble payload
-			const type = `${$typeEl.val()}`;
-			const payload = {
+			
+			let payload = {
 				context: config.page,
 				title: `${$('#rome_title').val()}`.trim(),
 				description: `${$('#rome_description').val()}`.trim(),
-				type: type
 			};
-			if (type === 'snowstorm') {
-				payload.ss_baseurl = `${$('#rome_snowstorm_base_url').val() ?? ''}`.trim();
-				payload.ss_branch = $('#rome_snowstorm_branches').val() ?? '';
-				payload.ss_auth = `${$('#rome_snowstorm_auth_mode').val() ?? ''}`.trim();
-				payload.ss_username = `${$('#rome_snowstorm_basic_user').val() ?? ''}`.trim();
-				payload.ss_password = `${$('#rome_snowstorm_basic_pass').val() ?? ''}`.trim();
-				payload.ss_token = `${$('#rome_snowstorm_bearer').val() ?? ''}`.trim();
-			}
-			else if (type === 'bioportal') {
-				payload.bp_token = `${$('#rome_bioportal_token').val() ?? ''}`.trim();
-				payload.bp_ontology = `${$('#rome_bioportal_ontology').val() ?? ''}`.trim();
-			}
-			if (payload.type === 'bioportal') {
-				if (!payload.bp_ontology) {
-					showError('Ontology is required');
-					return;
-				}
-				if (!rcBioPortalTokenAvailable && !payload.bp_token) {
-					showError('BioPortal token is required');
-					return;
-				}
-			}
-			else if (payload.type === 'snowstorm') {
-				if (!payload.ss_baseurl) {
-					showError('Snowstorm API base URL is required');
-					return;
-				}
-				if (!payload.ss_branch) {
-					showError('Snowstorm branch is required');
-					return;
-				}
-				if (payload.ss_auth === 'basic') {
-					if (!payload.ss_username || !payload.ss_password) {
-						showError('Snowstorm username and password are required for basic auth');
-						return;
-					}
-				}
-				else if (payload.ss_auth === 'bearer') {
-					if (!payload.ss_token) {
-						showError('Snowstorm bearer token is required');
-						return;
-					}
-				}
+
+			if (editMode === 'edit') {
+				payload.id = $('#rome_source_id').val();
 			}
 			else {
-				showError('Invalid source type');
-				return;
+				// Assemble payload
+				const type = `${$typeEl.val()}`;
+				payload.type = type;
+				if (type === 'snowstorm') {
+					payload.ss_baseurl = `${$('#rome_snowstorm_base_url').val() ?? ''}`.trim();
+					payload.ss_branch = $('#rome_snowstorm_branches').val() ?? '';
+					payload.ss_auth = `${$('#rome_snowstorm_auth_mode').val() ?? ''}`.trim();
+					payload.ss_username = `${$('#rome_snowstorm_basic_user').val() ?? ''}`.trim();
+					payload.ss_password = `${$('#rome_snowstorm_basic_pass').val() ?? ''}`.trim();
+					payload.ss_token = `${$('#rome_snowstorm_bearer').val() ?? ''}`.trim();
+				}
+				else if (type === 'bioportal') {
+					payload.bp_token = `${$('#rome_bioportal_token').val() ?? ''}`.trim();
+					payload.bp_ontology = `${$('#rome_bioportal_ontology').val() ?? ''}`.trim();
+				}
+				if (payload.type === 'bioportal') {
+					if (!payload.bp_ontology) {
+						showError('Ontology is required');
+						return;
+					}
+					if (!rcBioPortalTokenAvailable && !payload.bp_token) {
+						showError('BioPortal token is required');
+						return;
+					}
+				}
+				else if (payload.type === 'snowstorm') {
+					if (!payload.ss_baseurl) {
+						showError('Snowstorm API base URL is required');
+						return;
+					}
+					if (!payload.ss_branch) {
+						showError('Snowstorm branch is required');
+						return;
+					}
+					if (payload.ss_auth === 'basic') {
+						if (!payload.ss_username || !payload.ss_password) {
+							showError('Snowstorm username and password are required for basic auth');
+							return;
+						}
+					}
+					else if (payload.ss_auth === 'bearer') {
+						if (!payload.ss_token) {
+							showError('Snowstorm bearer token is required');
+							return;
+						}
+					}
+				}
+				else {
+					showError('Invalid source type');
+					return;
+				}
 			}
 
 			// Save
