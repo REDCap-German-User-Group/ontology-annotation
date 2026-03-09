@@ -2283,7 +2283,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if (strpos($key, 'sys-') === 0) {
 			$this->framework->setSystemSetting($key, $this->romeJsonEncode($source));
 		} else {
-			$this->framework->setProjectSetting($key, $this->project_id, $this->romeJsonEncode($source));
+			$this->framework->setProjectSetting($key, $this->romeJsonEncode($source), $this->project_id);
 		}
 		// Augment source
 		$type = strpos($key, '-ls_') !== false ? 'local' : 'remote';
