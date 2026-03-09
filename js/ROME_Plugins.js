@@ -488,7 +488,6 @@
 		};
 	}
 
-
 	function initLocalSourcesManagement() {
 
 		const $modalEl = $('#romeLocalSourceModal');
@@ -887,7 +886,11 @@
 		//#endregion Events
 	}
 
-
+	function initSystemSourcesManagment() {
+		// TODO: Add system sources managment
+		// Dialog with config.sysSources as a list to pick
+		// Proj source will proxy sys source.
+	}	
 
 	function refreshSourcesTable(source = null) {
 		// Remove existing entry from config.sources (identify by key)

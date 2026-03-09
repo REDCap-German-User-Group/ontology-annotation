@@ -356,6 +356,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$jsConfig['sources'] = $this->getSystemSources();
 		}
 		else if ($page === 'manage') {
+			$jsConfig['sources'] = $this->getProjectSources();
 			$jsConfig['sysSources'] = $this->getSystemSources(true);
 		}
 
@@ -395,6 +396,41 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 		return $sources;
 	}
+
+
+	/**
+	 * Gets all project sources
+	 * 
+	 * @return array 
+	 */
+	function getProjectSources(): array
+	{
+		$settings = $this->framework->getProjectSettings($this->project_id);
+		$sources = [];
+		foreach ($settings as $key => $value) {
+			if (
+				strpos($key, 'proj-ls_') === 0 ||
+				strpos($key, 'proj-rs_') === 0
+			) {
+				$source = json_decode($value, true);
+				if (!is_array($source)) continue;
+
+				// TODO: If this is a sys-source proxy, check if the system source is currently still available (present and enabled)
+
+				$source = $this->prepSourceForClient(
+					$source,
+					$key,
+					strpos($key, 'proj-ls_') === 0 ? 'local' : 'remote',
+					false
+				);
+				$sources[] = $source;
+			}
+		}
+		return $sources;
+	}
+
+
+
 
 	function prepSourceForClient($source, $key, $type, $from_system)
 	{
