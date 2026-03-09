@@ -91,6 +91,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			return $settings;
 		}
 
+		return $settings; // --- obsolete
+
 		// Read system sources (repeatable system setting).
 		$settingKey = 'sys-fhir-source';
 		$sysSources = $this->framework->getSubSettings($settingKey, null);
@@ -151,6 +153,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	// After a module config has been saved
 	function redcap_module_save_configuration($project_id)
 	{
+
+		return;
+
+		// -- obsolete ---
+
+
 		if (empty($project_id)) $project_id = null;
 		$this->initProject($project_id);
 		$this->initConfig();
