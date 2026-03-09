@@ -288,8 +288,16 @@
 			if (mode === 'edit' && sourceData) {
 				$titleEl.text('Edit a remote source');
 				$('#rome_source_id').val(sourceData.key || '');
-				$('#rome_title').val(sourceData.title || '');
-				$('#rome_description').val(sourceData.description || '');
+				const title = (sourceData.title_resolved ?? '').trim();
+				if (title !== (sourceData.title ?? '')) {
+					$('#rome_title').val(title);
+				}
+				$('#rome-title-from-source').text(sourceData.title || '');
+				const description = (sourceData.description_resolved ?? '');
+				if (description !== (sourceData.description ?? '')) {
+					$('#rome_description').val(description);
+				}
+				$('#rome-description-from-source').text(sourceData.description || '');
 				$('#rome_remote_block_edit').removeClass('d-none');
 				$('#rome_remote_block_add').addClass('d-none');
 				if (sourceData.kind === 'bioportal') {
@@ -298,8 +306,12 @@
 				else if (sourceData.kind === 'snowstorm') {
 					$('#rome_remote_type_info').val(`Snowstorm: ${sourceData.ss_branch}`);
 				}
+				$('#rome-remote-with-own-credentials')[(sourceData.usesOwnCredentials ?? false) ? 'removeClass' : 'addClass']('d-none');
 			} else {
 				$titleEl.text('Add a remote source');
+				$('#rome-title-from-source').text('');
+				$('#rome-description-from-source').text('');
+
 				$('#rome_remote_block_edit').addClass('d-none');
 				$('#rome_remote_block_add').removeClass('d-none');
 				await loadBioportalOntologies({ forceRefresh: false });
@@ -377,7 +389,7 @@
 						showError('Ontology is required');
 						return;
 					}
-					if (!rcBioPortalTokenAvailable && !payload.bp_token) {
+					if (config.page !== 'configure' && !rcBioPortalTokenAvailable && !payload.bp_token) {
 						showError('BioPortal token is required');
 						return;
 					}

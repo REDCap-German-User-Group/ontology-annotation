@@ -355,6 +355,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if ($page === 'configure') {
 			$jsConfig['sources'] = $this->getSystemSources();
 		}
+		else if ($page === 'manage') {
+			$jsConfig['sysSources'] = $this->getSystemSources(true);
+		}
 
 		return $jsConfig;
 	}
@@ -365,9 +368,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	/**
 	 * Gets all system sources
+	 * 
+	 * @param boolean $enabledOnly
 	 * @return array 
 	 */
-	function getSystemSources(): array
+	function getSystemSources($enabledOnly = false): array
 	{
 		$settings = $this->framework->getSystemSettings();
 		$sources = [];
@@ -378,6 +383,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			) {
 				$source = json_decode($value['system_value'], true);
 				if (!is_array($source)) continue;
+				if ($enabledOnly && !$source['enabled']) continue;
 				$source = $this->prepSourceForClient(
 					$source,
 					$key,
@@ -397,6 +403,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$source['from_system'] = $from_system;
 		// We don't want to leak the doc_id to the client
 		unset($source['doc_id']);
+		// Same for remote source credentials, but we indicate whether credentials were configured
+		if ($type === 'remote') {
+			$credentials = $source['credentials'] ?? '';
+			$source['usesOwnCredentials'] = $credentials !== '';
+			unset($source['credentials']);
+		}
 		return $source;
 	}
 
@@ -2061,7 +2073,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$metaUuid = $ids['uuid'];
 				// Create meta
 				$meta = [
-					'v' => 0,
+					'v' => 1,
 					'id' => $metaId,
 					'uuid' => $metaUuid,
 					'kind' => $type,
@@ -2073,7 +2085,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 						throw new Exception('Missing BioPortal ontology');
 					}
 					$acronym = trim($payload['bp_ontology']);
-					$meta['title'] = 'BioPortal:' . $acronym;
+					$meta['title'] = 'BioPortal: ' . $acronym;
 					$bp = $this->getBioPortalApiDetails();
 					$bp_ontologies = json_decode($bp['ontology_list'], true);
 					$bp_ontology = array_find($bp_ontologies, function ($o) use ($acronym) {

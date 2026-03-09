@@ -38,6 +38,7 @@ if ($bp['enabled'] && $allowRcBioPortal) {
 					<label class="col-sm-3 col-form-label" for="rome_title">Title <i>(optional)</i>:</label>
 					<div class="col-sm-9">
 						<input class="form-control form-control-sm" data-rome-reset="" type="text" name="title" id="rome_title" maxlength="120">
+						<div class="rome-title-from-source" id="rome-title-from-source"></div>
 					</div>
 				</div>
 
@@ -45,6 +46,7 @@ if ($bp['enabled'] && $allowRcBioPortal) {
 					<label class="col-sm-3 col-form-label" for="rome_description">Description <i>(optional)</i>:</label>
 					<div class="col-sm-9">
 						<textarea class="form-control form-control-sm" data-rome-reset="" name="description" id="rome_description" rows="3" maxlength="1000"></textarea>
+						<div class="rome-description-from-source" id="rome-description-from-source"></div>
 					</div>
 				</div>
 
@@ -55,6 +57,9 @@ if ($bp['enabled'] && $allowRcBioPortal) {
 						<input type="text" class="form-control form-control-sm" disabled readonly id="rome_remote_type_info" value="BioPortal: LOINC">
 						<div class="form-text">
 							Remote type and remote details cannot be changed. Delete this source and add a new one instead.
+						</div>
+						<div class="form-text text-danger" id="rome-remote-with-own-credentials">
+							Note: This remote source uses its own credentials.
 						</div>
 					</div>
 				</div>
