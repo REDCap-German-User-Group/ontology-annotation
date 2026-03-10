@@ -51,7 +51,7 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 								<i class="fa-solid fa-file-arrow-up"></i>
 								<span id="rome-file-drop-message-text">Drag and drop a file here, or <em>click here</em>, to upload</span>
 							</div>
-							<input id="rome-file-input" class="rome-file-drop-file-input" type="file">
+							<input id="rome-file-input" class="rome-file-drop-file-input" type="file" accept="application/json">
 						</div>
 					</div>
 				</div>
