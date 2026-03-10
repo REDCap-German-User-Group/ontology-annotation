@@ -355,8 +355,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if ($page === 'configure') {
 			$jsConfig['sources'] = $this->getSystemSources();
 		}
-		else if ($page === 'manage') {
-			$jsConfig['sources'] = $this->getProjectSources();
+		else if ($page === 'manage' && $pid !== null) {
+			$jsConfig['sources'] = $this->getProjectSources($pid);
 			$jsConfig['sysSources'] = $this->getSystemSources(true);
 		}
 
@@ -401,11 +401,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	/**
 	 * Gets all project sources
 	 * 
+	 * @param int $project_id
+	 * @param boolean $redact When false, the source will not be redacted (i.e., for internal use)
 	 * @return array 
 	 */
-	function getProjectSources(): array
+	function getProjectSources($project_id, $redact = true): array
 	{
-		$settings = $this->framework->getProjectSettings($this->project_id);
+		$settings = $this->framework->getProjectSettings($project_id);
 		$sources = [];
 		foreach ($settings as $key => $value) {
 			if (
@@ -421,7 +423,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					$source,
 					$key,
 					strpos($key, 'proj-ls_') === 0 ? 'local' : 'remote',
-					false
+					false,
+					$redact
 				);
 				$sources[] = $source;
 			}
@@ -432,18 +435,19 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 
 
-	function prepSourceForClient($source, $key, $type, $from_system)
+	function prepSourceForClient($source, $key, $type, $from_system, $redact = true)
 	{
 		$source['key'] = $key;
 		$source['type'] = $type;
 		$source['from_system'] = $from_system;
-		// We don't want to leak the doc_id to the client
-		unset($source['doc_id']);
-		// Same for remote source credentials, but we indicate whether credentials were configured
 		if ($type === 'remote') {
-			$credentials = $source['credentials'] ?? '';
-			$source['usesOwnCredentials'] = $credentials !== '';
+			// Add indicator whether the source uses its own credentials
+			$source['usesOwnCredentials'] = ($source['credentials'] ?? '') !== '';
+		}
+		if ($redact) {
+			// We don't want to leak doc_id and credentials to the client
 			unset($source['credentials']);
+			unset($source['doc_id']);
 		}
 		return $source;
 	}
@@ -1891,37 +1895,22 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	{
 		$effective = [];
 
-		// Project-private sources (active + built)
-		$proj_sources = $this->getBuiltActiveFhirSources($project_id);
-		foreach ($proj_sources as $id => $src) {
-			$effective[$id] = $src;
-		}
-
-		// System sources (opt-in per project)
-		$sys_sources = $this->getBuiltActiveFhirSources(null);
-		foreach ($sys_sources as $id => $src) {
-			if ($this->isSystemSourceSelectedInProject($project_id, $id)) {
-				$effective[$id] = $src;
-			}
-		}
-
-		// Remote sources
-		$ext_sources = $this->getConfiguredActiveRemoteSources($project_id);
-		foreach ($ext_sources as $id => $src) {
-			$effective[$id] = $src;
+		$sources = $this->getProjectSources($project_id, false);
+		foreach ($sources as $src) {
+			if (!($src['enabled'] ?? false)) continue;
+			$effective[$src['id']] = $src;
 		}
 
 		// Build JS list (id + label + optional hint/count)
 		$list = [];
 		foreach ($effective as $id => $src) {
-			$system_counts = ($src['meta'] ?? [])['system_counts'] ?? null;
 			$list[] = [
 				'id' => $src['id'],
-				'label' => $src['label'],
-				'desc' => $src['desc'],
+				'label' => $src['title_resolved'],
+				'desc' => $src['description_resolved'],
 				'count' => $src['item_count'] ?? null,
-				'system_counts' => $system_counts,
-				'hint' => ($src['deferred'] === true) ? 'remote' : 'local',
+				'system_counts' => $src['system_counts'] ?? null,
+				'hint' => $src['type'],
 			];
 		}
 
@@ -1933,23 +1922,24 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Lookup map for server dispatch (by id)
 		$map = [];
 		foreach ($effective as $id => $src) {
-			if ($src['deferred'] === true) {
+			if ($src['type'] === 'remote') {
 				$docId = null;
 				$indexCacheKey = null;
 				$itemCount = -1;
-				$meta = $src['meta'] ?? [];
+				$meta = $src;
 			} else {
 				$docId = (int)$src['doc_id'];
 				$indexCacheKey = 'idx:' . $id . ':' . $docId;
 				$itemCount = (int)($src['item_count'] ?? 0);
-				$meta = null;
+				$meta = $src;
 			}
+			// TODO: Determine scope (project or system)
+			$scope = 'project';
 			$map[$id] = [
 				'id' => $id,
-				'scope' => $src['scope'],
+				'scope' => $scope,
 				'kind' => $src['kind'],
-				'deferred' => $src['deferred'] === true,
-				'doc_id' => $docId,
+				'deferred' => $src['type'] === 'remote',
 				'item_count' => $itemCount,
 				// cache key for local index:
 				'index_cache_key' => $indexCacheKey,

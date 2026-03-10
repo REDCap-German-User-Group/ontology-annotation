@@ -115,17 +115,10 @@ exit;
 function performLocalSearch($q, $src, $cache, $limit, &$results, &$errors, &$stats)
 {
 	$sid = $src['id'];
-	// Local sources require a doc_id to be specified.
-	$docId = (int)($src['doc_id'] ?? 0);
-	if ($docId <= 0) {
-		$errors[$sid] = 'Invalid source version.';
-		return;
-	}
 	// Local sources must have been build (and therefor have a cached payload).
-	$indexKey = 'idx:' . $sid . ':' . $docId;
-	$payload = $cache->getPayload($indexKey);
+	$payload = $cache->getPayload($src['index_cache_key']);
 	if ($payload === null) {
-		$errors[$sid] = 'Index missing (not built yet).';
+		$errors[$sid] = 'Index missing.';
 		return;
 	}
 	try {
