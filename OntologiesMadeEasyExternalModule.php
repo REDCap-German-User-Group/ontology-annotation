@@ -1891,13 +1891,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Sources Registry
 
-	public function buildSourceRegistry(int $project_id): array
+	public function buildSourceRegistry(int $project_id, ?string $type = null): array
 	{
 		$effective = [];
 
 		$sources = $this->getProjectSources($project_id, false);
 		foreach ($sources as $src) {
 			if (!($src['enabled'] ?? false)) continue;
+			if ($type && $type !== $src['type']) continue;
 			$effective[$src['id']] = $src;
 		}
 
@@ -1969,52 +1970,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return is_array($meta) ? $meta : null;
 	}
 
-	/** Minimal label normalization */
-	private function buildLabelFromMeta(array $meta): string
-	{
-		$title = isset($meta['title']) ? trim((string)$meta['title']) : '';
-		if ($title === '') $title = 'Untitled';
-
-		$count = isset($meta['item_count']) ? (int)$meta['item_count'] : 0;
-		$suffix = ($count === 0) ? ' (0 items)' : " ({$count} items)";
-
-		return $title . $suffix;
-	}
-
-	private function getBuiltActiveFhirSources($project_id): array
-	{
-		$settingPrefix = $project_id === null ? 'sys-' : 'proj-';
-		$rows = $this->framework->getSubSettings($settingPrefix . 'fhir-source', $project_id);
-		if (!is_array($rows)) $rows = [];
-
-		$out = [];
-		foreach ($rows as $row) {
-			if (!is_array($row)) continue;
-			// Skip inactive sources
-			if (!$row[$settingPrefix . 'fhir-active']) continue;
-
-			$meta = $this->decodeMetadata($row[$settingPrefix . 'fhir-metadata'] ?? null);
-			if ($meta === null) continue;
-
-			// Require id + doc_id
-			$id = (string)($meta['id'] ?? '');
-			$docId = (int)($meta['doc_id'] ?? 0);
-			if ($id === '' || $docId <= 0) continue;
-
-			$out[$id] = [
-				'id' => $id,
-				'scope' => $project_id === null ? 'system' : 'project',
-				'deferred' => false,
-				'kind' => (string)($meta['kind'] ?? 'fhir_questionnaire'),
-				'doc_id' => $docId,
-				'item_count' => intval($meta['item_count'] ?? 0),
-				'label' => $this->buildLabelFromMeta($meta),
-				'desc' => (string)($meta['description'] ?? ''),
-				'meta' => $meta,
-			];
-		}
-		return $out;
-	}
 
 	function getConfiguredActiveRemoteSources(int $project_id): array
 	{
@@ -2046,13 +2001,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 		return $out;
 	}
-
-	private function isSystemSourceSelectedInProject(int $project_id, string $sourceId): bool
-	{
-		$v = $this->getProjectSetting($sourceId, $project_id);
-		return $v == true;
-	}
-
 
 	#endregion
 
@@ -2711,12 +2659,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 */
 	function getBioPortalApiDetails()
 	{
-		// Ontoloy list:
-		// "name": "VODANAFACILITIESLIST",
-		// "acronym": "VODANAMFLCODE",
-		// "@id": "https://data.bioontology.org/ontologies/VODANAMFLCODE",
-		// "@type": "http://data.bioontology.org/metadata/Ontology"
-
 		$details = [
 			'api_url' => (string)$GLOBALS['bioportal_api_url'] ?? '',
 			'api_token' => (string)$GLOBALS['bioportal_api_token'] ?? '',
@@ -2724,6 +2666,62 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'enabled' => $this->isBioPortalAvailable(),
 		];
 		return $details;
+	}
+
+	function getBioPortalResultIdPrefix($acronym, $token) 
+	{
+		$bp = $this->getBioPortalApiDetails();
+		$base = $bp['api_url'];
+		$token = $token === '' ? $bp['api_token'] : $token;
+		$headers = ['Accept: application/json'];
+		$ua = $this->getUserAgentString();
+
+		$id_prefix = null;
+
+		$qs = str_split('aeioubcd0fghqvz', 1);
+		foreach ($qs as $q) {
+			$params = [
+				'q' => $q,
+				'ontologies' => $acronym,
+				'suggest' => 'true',
+				'include' => 'prefLabel,notation,cui',
+				'display_links' => 'false',
+				'display_context' => 'false',
+				'format' => 'json',
+				'pagesize' => 1,
+				'page' => 1,
+				'apikey' => $token,
+			];
+			$url = $base . 'search?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+	
+	
+			$resp = http_get($url, 5, '', $headers, $ua);
+			try {
+				$json = json_decode($resp, true, 512, JSON_THROW_ON_ERROR);
+				foreach ($json['collection'] ?? [] as $result) {
+					$val = $result['notation'] ?? $result['cui'] ?? null;
+					$id = $result['@id'] ?? null;
+					if ($val === null || $id === null) return null; // We cannot parse this result
+					// Match val to id from their ends and find the part of id from start to where the match fails
+					// e.g., val = "dcterms:AgentClass" and id = "http://purl.org/dc/terms/AgentClass",
+					// then the id prefix would be "http://purl.org/dc/terms/"
+					$id_len = mb_strlen($id);
+					$val_len = mb_strlen($val);
+					$val_pos = mb_strlen($val) - 1;
+					while ($val_pos >= 0) {
+						$c = mb_substr($val, $val_pos, 1);
+						if ($c !== mb_substr($id, $id_len - ($val_len - $val_pos), 1)) break;
+						$val_pos--;
+					}
+					$id_prefix = mb_substr($id, 0, $id_len - ($val_len - $val_pos));
+					break;
+				}
+			}
+			catch (\Throwable $e) {
+				// do nothing
+			}
+		}
+		return $id_prefix;
 	}
 
 

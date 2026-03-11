@@ -31,7 +31,9 @@ if ($cache == null) {
 }
 
 // Get remote sources
-$sources = $module->getConfiguredActiveRemoteSources(PROJECT_ID);
+$source_registry = $module->buildSourceRegistry(PROJECT_ID, 'remote');
+$sources = $source_registry['map'];
+
 
 #endregion
 
@@ -43,10 +45,10 @@ $sources = $module->getConfiguredActiveRemoteSources(PROJECT_ID);
 // Others might dispatch only the first and further defer the rest.
 
 
-$supported_types = [
+$supported_kinds = [
 	'bioportal',
 ];
-$jobs_by_type = [];
+$jobs_by_kind = [];
 $requested_pending_ok = [];
 
 foreach ($requested_pending as $sid => $token) {
@@ -68,13 +70,12 @@ foreach ($requested_pending as $sid => $token) {
 		continue;
 	}
 	$source = $sources[$job['sid']];
-	$meta = $source['meta'] ?? [];
-	$type = $meta['type'] ?? null;
+	$kind = $source['kind'] ?? null;
 	// Check that type is supported
-	if (!in_array($type, $supported_types, true)) {
+	if (!in_array($kind, $supported_kinds, true)) {
 		continue;
 	}
-	$jobs_by_type[$type][] = $job;
+	$jobs_by_kind[$kind][] = $job;
 	$requested_pending_ok[] = $sid;
 }
 
@@ -97,10 +98,15 @@ foreach ($requested_pending as $sid => $_) {
 }
 $limitPerSource = $module->getMaxSearchResultsPerSource();
 
-foreach ($jobs_by_type as $type => $jobs) {
+foreach ($jobs_by_kind as $kind => $jobs) {
 
-	if ($type === 'bioportal') {
+	if ($kind === 'bioportal') {
 		$q = $jobs[0]['q'];
+
+		// Originally, the idea was to combine bioportal requests into a single unified request.
+		// But as it turns out, there is no reliable way to split the response back up.
+		// Thus, we will execute the requests one by one.
+
 		// Aggregate acronyms
 		$acr_q_r_map = [];
 		$acr_src_map = [];
