@@ -2643,7 +2643,105 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 
-	#region BioPortal
+	#region All Remote Source Kinds (from cache)
+
+	/**
+	 * Searches the cache for any previously stored results for the given source/query
+	 * @param Cache $cache 
+	 * @param string $q 
+	 * @param array $source 
+	 * @return null|array 
+	 */
+	function searchCached(Cache $cache, string $q, array $source): ?array
+	{
+		// Construct cache key
+		$cacheKey = null;
+		if ($source['kind'] === 'bioportal') {
+			$acronym = $source['meta']['acronym'] ?? null;
+			if ($acronym === null) throw new Exception('Invalid source - missing acronym');
+			$cacheKey = $this->generateBioPortalSearchCacheKey($acronym, $q);
+		}
+		else if ($source['kind'] === 'snowstorm') {
+			// TODO
+			throw new Exception('Not implemented');
+		}
+		// Success?
+		if ($cacheKey === null) {
+			throw new Exception('Invalid source - unknown kind');
+		}
+		// Get cached (returns null if not cached, thus we can return this directly)
+		$cached = $cache->getPayload($cacheKey);
+		return $cached;
+	}
+
+	/**
+	 * Build a remote cache key stored in redcap_external_modules_log.record (VARCHAR(100)).
+	 *
+	 * Format:
+	 *   r:<remote>:<segments...>[:<preview>][:<hash>]
+	 *
+	 * - All keys start with "r:" so prune can delete "r:%".
+	 * - Segments are ':'-separated.
+	 * - Preview is optional (human readable, truncated to fit).
+	 * - Hash is optional (short sha1 over a canonical string).
+	 */
+	private function remoteCacheKey(
+		string $remote,         // e.g. 'bp', 'ss', 'umls'
+		array $segments = [],   // e.g. ['s', 'SNOMEDCT']
+		string $hashInput = '', // canonical string to hash (already normalized)
+		?string $preview = null // human-readable preview (already normalized), truncated to fit
+	): string {
+		$maxLen = 100;
+
+		$remote = trim($remote);
+		if ($remote === '') {
+			throw new \InvalidArgumentException('remoteCacheKey: remote must be non-empty');
+		}
+
+		// Normalize/escape segments (no ':' to keep keys readable)
+		$cleanSegs = [];
+		foreach ($segments as $seg) {
+			if ($seg === null) continue;
+			$seg = trim((string)$seg);
+			if ($seg === '') continue;
+			$seg = str_replace(':', '∶', $seg);
+			$cleanSegs[] = $seg;
+		}
+
+		$base = 'r:' . str_replace(':', '∶', $remote);
+		if ($cleanSegs) {
+			$base .= ':' . implode(':', $cleanSegs);
+		}
+
+		$hashPart = ':' . substr(sha1($hashInput), 0, 12);
+		$fixed = $base . $hashPart;
+
+		if ($preview === null || $preview === '') {
+			return $fixed; // already short; hash always present
+		}
+
+		$p = str_replace(':', '∶', $preview);
+		$p = preg_replace('/[\x00-\x1F\x7F]+/u', '', $p) ?? $p;
+
+		// Fit ":<preview>" into maxLen, shrinking by characters until byte length fits
+		$key = $fixed . ':' . $p;
+		if (strlen($key) <= $maxLen) {
+			return $key;
+		}
+
+		// Reduce preview safely (character-wise) until the overall key fits in bytes
+		while ($p !== '' && strlen($fixed . ':' . $p) > $maxLen) {
+			$p = mb_substr($p, 0, mb_strlen($p) - 1);
+		}
+
+		return $p === '' ? $fixed : ($fixed . ':' . $p);
+	}
+
+	#endregion All Remote Sources (Cache)
+
+
+
+	#region Remote Source Kind: BioPortal
 
 	function isBioPortalAvailable()
 	{
@@ -2777,7 +2875,148 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $list;
 	}
 
-	private function getSnowstormBranches($payload)
+	/**
+	 * BioPortal search across multiple ontologies (acronyms).
+	 * - validates acronyms against REDCap cached ontology list
+	 * - returns per-acronym hit lists (each capped to $limit)
+	 * - does ONE BioPortal call for all cache misses
+	 *
+	 * @param Cache $cache
+	 * @param string $q
+	 * @param array $source
+	 * @param int $limit Limit per acronym
+	 * @param int $ttlSeconds Cache TTL per acronym (e.g. 1800)
+	 * @return array<string, array<int, array{system:string, code:string, display:string, score:int|float}>> keyed by QUERY ACRONYM
+	 */
+	function searchBioPortal(
+		Cache $cache,
+		string $q,
+		array $source,
+		int $limit,
+		int $ttlSeconds = 1800
+	): array {
+		$out = [];
+		$q = trim($q);
+
+		if ($q === '' || $limit <= 0) return $out;
+		$bp = $this->getBioPortalApiDetails();
+		$base  = rtrim((string)($bp['api_url'] ?? ''), '/') . '/';
+		$token = (string)($bp['api_token'] ?? '');
+		$meta = $source['meta'] ?? [];
+		if ($meta['credentials'] !== '') {
+			$token = $this->decryptCredentials($meta['credentials']);
+		}
+		// Some checks
+		if (empty($token)) throw new Exception('Invalid source metadata - missing BioPortal API token');
+		$acronym = $meta['acronym'] ?? null;
+		if ($acronym === null) throw new Exception('Invalid source metadata - missing BioPortal acronym');
+		if ($limit < 1) throw new Exception('Invalid search request - limit must be at least 1');
+		$limit = max(1, min($this->getMaxSearchResultsPerSource(), $limit));
+		// Build request
+		$params = [
+			'q' => $q,
+			'ontologies' => $acronym,
+			'suggest' => 'true',
+			'include' => 'prefLabel,notation,cui',
+			'display_links' => 'false',
+			'display_context' => 'false',
+			'format' => 'json',
+			'pagesize' => $limit,
+			'page' => 1,
+			'apikey' => $token,
+		];
+		$url = $base . 'search?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+		$headers = ['Accept: application/json'];
+		$ua = $this->getUserAgentString();
+		// Do request
+		$resp = http_get($url, 5, '', $headers, $ua);
+		if ($resp === false || trim($resp) === '') {
+			throw new Exception('BioPortal search failed');
+		}
+		$json = json_decode($resp, true);
+		$collection = is_array($json) ? ($json['collection'] ?? null) : null;
+		if (!is_array($collection)) throw new Exception('BioPortal search failed');
+
+		// Parse results
+		foreach ($collection as $r) {
+			if (!is_array($r)) continue;
+			$id = isset($r['@id']) && is_string($r['@id']) ? $r['@id'] : '';
+			$display = isset($r['prefLabel']) && is_string($r['prefLabel']) ? trim($r['prefLabel']) : '';
+			if ($display === '' && isset($r['label']) && is_string($r['label'])) $display = trim($r['label']);
+			if ($display === '') continue;
+			// Prefer notation when present (canonical codes)
+			$code = isset($r['notation']) && is_string($r['notation']) ? trim($r['notation']) : '';
+			if ($code === '') {
+				// fallback (still stable, but BioPortal-specific)
+				$code = $id !== '' ? trim($id) : '';
+			}
+			if ($code === '') continue;
+
+			$out[] = [
+				'system' => $this->bioPortalSystemUriForAcronym($acronym, $id),
+				'code' => $code,
+				'display' => $display,
+				'score' => 1,
+			];
+		}
+
+		// Store into cache (even if empty, cache empties to avoid hammering)
+		$cacheKey = $this->generateBioPortalSearchCacheKey($acronym, $q);
+		$cache->setPayload($cacheKey, $out, $ttlSeconds, [
+			'kind' => 'bioportal',
+			'acr' => $acronym,
+		]);
+
+		return $out;
+	}
+
+	/**
+	 * 
+	 * @param string $acr 
+	 * @param string $q 
+	 * @return string 
+	 */
+	private function generateBioPortalSearchCacheKey(string $acr, string $q): string
+	{
+		$acr = strtoupper(trim($acr));
+
+		$qNorm = mb_strtolower(trim($q));
+		$qNorm = preg_replace('/\s+/u', ' ', $qNorm) ?? $qNorm;
+
+		$preview = mb_substr($qNorm, 0, 40); // you can keep 40 as a goal; builder will truncate if needed
+
+		$cacheKey = $this->remoteCacheKey(
+			'bp',
+			['s', $acr],
+			$qNorm,      // hashInput (canonical)
+			$preview,      // preview
+			100,
+			12
+		);
+		return $cacheKey;
+	}
+
+	/**
+	 * System URI mapping (to be expanded).
+	 * @param string $acr 
+	 * @param string $id 
+	 * @return string 
+	 */
+	private function bioPortalSystemUriForAcronym(string $acr, string $id): string
+	{
+		$acr = strtoupper(trim($acr));
+		if ($acr === 'SNOMEDCT') return 'http://snomed.info/sct';
+		if ($acr === 'LOINC') return 'http://loinc.org';
+		return 'bioportal:' . $acr;
+	}
+
+	#endregion BioPortal
+
+
+
+	#region Remote Source Kind: Snwowstorm
+
+		private function getSnowstormBranches($payload)
 	{
 		$baseUrl = trim((string)($payload['ss_baseurl'] ?? ''));
 		if ($baseUrl === '') {
@@ -2892,294 +3131,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 	}
 
-	/**
-	 * BioPortal search across multiple ontologies (acronyms).
-	 * - validates acronyms against REDCap cached ontology list
-	 * - returns per-acronym hit lists (each capped to $limit)
-	 * - does ONE BioPortal call for all cache misses
-	 *
-	 * @param Cache $cache
-	 * @param array{api_url: string, api_token: string, ontology_list: string, enabled: bool} $bp
-	 * @param array<string, string> $acronym_query_response_map Requested ontology acronyms as a map: QUERY ACRONYM => RESPONSE ACRONYM
-	 * @param string $q Query
-	 * @param int $limit_per_acronym Limit per acronym
-	 * @param int $ttlSeconds Cache TTL per acronym (e.g. 1800)
-	 * @return array<string, array<int, array{system:string, code:string, display:string, score:int|float}>> keyed by QUERY ACRONYM
-	 */
-	function searchBioPortal(
-		Cache $cache,
-		array $bp,
-		array $acronym_query_response_map,
-		string $q,
-		int $limit_per_acronym,
-		int $ttlSeconds = 1800
-	): array {
-		$out = [];
-		$q = trim($q);
+	#endregion Snowstorm
 
-		if (empty($bp['enabled']) || $q === '' || $limit_per_acronym <= 0) return $out;
-
-		$base  = rtrim((string)($bp['api_url'] ?? ''), '/') . '/';
-		$token = (string)($bp['api_token'] ?? '');
-		if ($base === '/' || $token === '') return $out;
-
-		// Allowed acronyms (REDCap cached list)
-		$allowed = $this->getBioPortalAllowedAcronyms($bp);
-
-		// Normalize + validate requested acronyms
-		$req = [];
-		foreach ($acronym_query_response_map as $q_acr => $r_acr) {
-			if (!in_array($q_acr, $allowed, true)) continue; // only allow known ontologies
-			$req[$q_acr] = true;
-		}
-		$reqAcronyms = array_keys($req);
-		if (!$reqAcronyms) return $out;
-
-		// Cache check per acronym
-		$misses = [];
-		foreach ($reqAcronyms as $q_acr) {
-			$cacheKey = $this->generateBioPortalSearchCacheKey($q_acr, $q);
-			$cached = $cache->getPayload($cacheKey);
-			if (is_array($cached)) {
-				$out[$q_acr] = $cached;
-			} else {
-				$misses[] = $q_acr;
-			}
-		}
-
-		// If all hit cache, done
-		if (!$misses) return $out;
-
-		// One unified BioPortal call for misses
-		$pagesize = $limit_per_acronym * count($misses);
-
-		$params = [
-			'q' => $q,
-			'ontologies' => implode(',', $misses),
-			'suggest' => 'true',
-			'include' => 'prefLabel,notation,cui',
-			'display_links' => 'false',
-			'display_context' => 'false',
-			'format' => 'json',
-			'pagesize' => (int)$pagesize,
-			'page' => 1,
-			'apikey' => $token,
-		];
-		$url = $base . 'search?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
-
-		$headers = ['Accept: application/json'];
-		$ua = $this->getUserAgentString();
-
-		$resp = http_get($url, 5, '', $headers, $ua);
-		if ($resp === false || trim($resp) === '') {
-			// If BioPortal fails, return whatever cache hits we had (misses remain absent)
-			return $out;
-		}
-
-		$json = json_decode($resp, true);
-		$collection = is_array($json) ? ($json['collection'] ?? null) : null;
-		if (!is_array($collection)) return $out;
-
-		// Prepare buckets for misses
-		$fetched = [];
-		foreach ($misses as $acr) $fetched[$acr] = [];
-		// Prepare reverse lookup (last one wins if case of collision)
-		$r_q_map = [];
-		foreach ($acronym_query_response_map as $q_acr => $r_acr) $r_q_map[$r_acr] = $q_acr;
-
-		// Split + map, enforcing per-acronym limit
-		foreach ($collection as $r) {
-			if (!is_array($r)) continue;
-
-			$id = isset($r['@id']) && is_string($r['@id']) ? $r['@id'] : '';
-			$r_acr = $this->getBioPortalAcronymFromId($id);
-			if ($r_acr === '' || !isset($r_q_map[$r_acr])) continue;
-			$acr = $r_q_map[$r_acr];
-
-			if (count($fetched[$acr]) >= $limit_per_acronym) continue;
-
-			$display = isset($r['prefLabel']) && is_string($r['prefLabel']) ? trim($r['prefLabel']) : '';
-			if ($display === '' && isset($r['label']) && is_string($r['label'])) $display = trim($r['label']);
-			if ($display === '') continue;
-
-			// Prefer notation when present (canonical codes)
-			$code = isset($r['notation']) && is_string($r['notation']) ? trim($r['notation']) : '';
-			if ($code === '') {
-				// fallback (still stable, but BioPortal-specific)
-				$code = $id !== '' ? trim($id) : '';
-			}
-			if ($code === '') continue;
-
-			$fetched[$acr][] = [
-				'system' => $this->bioPortalSystemUriForAcronym($acr),
-				'code' => $code,
-				'display' => $display,
-				'score' => 1,
-			];
-		}
-
-		// Store misses into cache + merge into output (even if empty, cache empties to avoid hammering)
-		foreach ($misses as $acr) {
-			$hits = $fetched[$acr] ?? [];
-			$cacheKey = $this->generateBioPortalSearchCacheKey($acr, $q);
-			$cache->setPayload($cacheKey, $hits, $ttlSeconds, [
-				'kind' => 'bioportal',
-				'acr' => $acr,
-			]);
-			$out[$acr] = $hits;
-		}
-
-		return $out;
-	}
-
-	/**
-	 * Build a remote cache key stored in redcap_external_modules_log.record (VARCHAR(100)).
-	 *
-	 * Format:
-	 *   r:<remote>:<segments...>[:<preview>][:<hash>]
-	 *
-	 * - All keys start with "r:" so prune can delete "r:%".
-	 * - Segments are ':'-separated.
-	 * - Preview is optional (human readable, truncated to fit).
-	 * - Hash is optional (short sha1 over a canonical string).
-	 */
-	private function remoteCacheKey(
-		string $remote,         // e.g. 'bp', 'ss', 'umls'
-		array $segments = [],   // e.g. ['s', 'SNOMEDCT']
-		string $hashInput = '', // canonical string to hash (already normalized)
-		?string $preview = null // human-readable preview (already normalized), truncated to fit
-	): string {
-		$maxLen = 100;
-
-		$remote = trim($remote);
-		if ($remote === '') {
-			throw new \InvalidArgumentException('remoteCacheKey: remote must be non-empty');
-		}
-
-		// Normalize/escape segments (no ':' to keep keys readable)
-		$cleanSegs = [];
-		foreach ($segments as $seg) {
-			if ($seg === null) continue;
-			$seg = trim((string)$seg);
-			if ($seg === '') continue;
-			$seg = str_replace(':', '∶', $seg);
-			$cleanSegs[] = $seg;
-		}
-
-		$base = 'r:' . str_replace(':', '∶', $remote);
-		if ($cleanSegs) {
-			$base .= ':' . implode(':', $cleanSegs);
-		}
-
-		$hashPart = ':' . substr(sha1($hashInput), 0, 12);
-		$fixed = $base . $hashPart;
-
-		if ($preview === null || $preview === '') {
-			return $fixed; // already short; hash always present
-		}
-
-		$p = str_replace(':', '∶', $preview);
-		$p = preg_replace('/[\x00-\x1F\x7F]+/u', '', $p) ?? $p;
-
-		// Fit ":<preview>" into maxLen, shrinking by characters until byte length fits
-		$key = $fixed . ':' . $p;
-		if (strlen($key) <= $maxLen) {
-			return $key;
-		}
-
-		// Reduce preview safely (character-wise) until the overall key fits in bytes
-		while ($p !== '' && strlen($fixed . ':' . $p) > $maxLen) {
-			$p = mb_substr($p, 0, mb_strlen($p) - 1);
-		}
-
-		return $p === '' ? $fixed : ($fixed . ':' . $p);
-	}
-
-
-
-	private function generateBioPortalSearchCacheKey(string $acr, string $q): string
-	{
-		$acr = strtoupper(trim($acr));
-
-		$qNorm = mb_strtolower(trim($q));
-		$qNorm = preg_replace('/\s+/u', ' ', $qNorm) ?? $qNorm;
-
-		$preview = mb_substr($qNorm, 0, 40); // you can keep 40 as a goal; builder will truncate if needed
-
-		$cacheKey = $this->remoteCacheKey(
-			'bp',
-			['s', $acr],
-			$qNorm,      // hashInput (canonical)
-			$preview,      // preview
-			100,
-			12
-		);
-		return $cacheKey;
-	}
-
-	/**
-	 * Extract acronym from BioPortal @id like:
-	 * http://purl.bioontology.org/ontology/SNOMEDCT/111552007
-	 */
-	private function getBioPortalAcronymFromId(string $id): string
-	{
-		if ($id === '') return '';
-		// Fast parse without regex
-		$needle = '/ontology/';
-		$pos = strpos($id, $needle);
-		if ($pos === false) return '';
-		$rest = substr($id, $pos + strlen($needle));
-		$slash = strpos($rest, '/');
-		if ($slash === false) return '';
-		$acr = substr($rest, 0, $slash);
-		$acr = strtoupper(trim($acr));
-		return $acr;
-	}
-
-	/**
-	 * System URI mapping (expand later).
-	 */
-	private function bioPortalSystemUriForAcronym(string $acr): string
-	{
-		$acr = strtoupper(trim($acr));
-		if ($acr === 'SNOMEDCT') return 'http://snomed.info/sct';
-		if ($acr === 'LOINC') return 'http://loinc.org';
-		return 'bioportal:' . $acr;
-	}
-
-
-
-	/**
-	 * @param array{ontology_list: string} $bp
-	 * @return array<string> List of allowed acronyms (uppercase)
-	 */
-	private function getBioPortalAllowedAcronyms(array $bp): array
-	{
-		$set = [];
-
-		// TODO: The list is capped by what is configured to be searchable in the project
-
-
-		$raw = (string)($bp['ontology_list'] ?? '');
-		if ($raw === '') return $set;
-
-		$list = json_decode($raw, true);
-		if (!is_array($list)) return $set;
-
-		foreach ($list as $o) {
-			if (!is_array($o)) continue;
-			$acr = $o['acronym'] ?? '';
-			if (!is_string($acr)) continue;
-			$acr = trim($acr);
-			if ($acr === '') continue;
-			$set[strtoupper($acr)] = true;
-		}
-
-		return array_keys($set);
-	}
-
-
-	#endregion
 
 	function getUserAgentString()
 	{

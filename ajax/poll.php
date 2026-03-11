@@ -41,7 +41,7 @@ $sources = $source_registry['map'];
 
 // Note: We batch jobs by type to let the type's implementation to decide how to 
 // handle multiple pending jobs of the same type.
-// They might, as in case of BioPortal, send a unified request and split the response back up.
+// They might prefer to send a unified request and then split the response back up.
 // Others might dispatch only the first and further defer the rest.
 
 
@@ -76,7 +76,7 @@ foreach ($requested_pending as $sid => $token) {
 		continue;
 	}
 	$jobs_by_kind[$kind][] = $job;
-	$requested_pending_ok[] = $sid;
+	$requested_pending_ok[$sid] = $token;
 }
 
 
@@ -89,7 +89,7 @@ $pending = [];
 $errors = [];
 // Add an error for any pending request that could not be assigned
 foreach ($requested_pending as $sid => $_) {
-	if (!in_array($sid, $requested_pending_ok, true)) {
+	if (!array_key_exists($sid, $requested_pending_ok)) {
 		$errors[$sid] = [
 			'rid' => $rid,
 			'error' => 'job_not_found',
@@ -98,55 +98,86 @@ foreach ($requested_pending as $sid => $_) {
 }
 $limitPerSource = $module->getMaxSearchResultsPerSource();
 
+// Process of jobs is done in two steps: 
+// 1. We check the cache and serve cached results for pending jobs
+// 2. We process jobs that are not yet cached, bug only one. The rest will remain pending
+
+// Search cached results, and add non-cached jobs to pending_by_kind
+$pending_by_kind = [];
 foreach ($jobs_by_kind as $kind => $jobs) {
-
-	if ($kind === 'bioportal') {
-		$q = $jobs[0]['q'];
-
-		// Originally, the idea was to combine bioportal requests into a single unified request.
-		// But as it turns out, there is no reliable way to split the response back up.
-		// Thus, we will execute the requests one by one.
-
-		// Aggregate acronyms
-		$acr_q_r_map = [];
-		$acr_src_map = [];
-		foreach ($jobs as $job) {
-			$sid = $job['sid'];
-			$source = $sources[$sid];
-			$acr_q_r_map[$source['meta']['q_acronym']] = $source['meta']['r_acronym'];
-			$acr_src_map[$source['meta']['q_acronym']] = $sid;
-		}
+	foreach ($jobs as $job) {
+		$sid = $job['sid'];
+		$source = $sources[$sid];
 		try {
-			$bp = $module->getBioPortalApiDetails();
-			$byAcr = $module->searchBioPortal(
-				$cache,
-				$bp,
-				$acr_q_r_map,
-				$q,
-				$limitPerSource
-			);
-			// Untangle and assign to sources
-			foreach ($acr_src_map as $acr => $sid) {
-				$results[$sid] = $byAcr[$acr] ?? [];
+			$result = $module->searchCached($cache, $job['q'], $source);
+			if ($result === null) {
+				// Job is not cached, add to pending
+				$pending_by_kind[$kind][] = $job;
 			}
-			// Mark jobs as done
-			foreach ($jobs as $job) {
+			else {
+				// Add result
+				$results[$sid] = $result;
+				// Mark jobs as done
 				$cache->setPayload($job['cache_key'], ['done' => true], 5, []);
 			}
-		} catch (Throwable $e) {
-			foreach ($jobs as $job) {
-				$sid = $job['sid'];
-				$token = $job['token'];
-				$errors[$sid] = $e->getMessage();
-				$pending[$sid] = [
-					'token' => $requested_pending[$sid],
-					'after_ms' => 500,
-				];
-			}
+		}
+		catch (Throwable $e) {
+			$errors[$sid] = $e->getMessage();
+			// We do not care about the job if it failed beyond reporting the error
 		}
 	}
 }
 
+// Process pending jobs that will require an actual search
+// We do this based on assumption that some kinds are faster than others
+// and thus we process Snowstorm before BioPortal.
+// Later, we may parallelize this or let the client decide on priority.
+do {
+	// Snowstorm
+	if (isset($pending_by_kind['snowstorm'])) {
+		$job = $pending_by_kind['snowstorm'][0];
+		unset($pending_by_kind['snowstorm'][0]);
+
+		$sid = $job['sid'];
+		$source = $sources[$sid];
+
+		// TODO - Implement Snowstorm search
+
+		break; // out of do-while
+	}
+	// BioPortal
+	if (isset($pending_by_kind['bioportal'])) {
+		// Get first job
+		$job = $pending_by_kind['bioportal'][0];
+		unset($pending_by_kind['bioportal'][0]);
+		// Process
+		$sid = $job['sid'];
+		$source = $sources[$sid];
+		try {
+			$results[$sid] = $module->searchBioPortal($cache, $job['q'], $source, $limitPerSource);
+			// Mark jobs as done
+			$cache->setPayload($job['cache_key'], ['done' => true], 5, []);
+		}
+		catch (Throwable $e) {
+			$errors[$sid] = $e->getMessage();
+			// We do not care about the job if it failed beyond reporting the error
+		}
+		break; // out of do-while
+	}
+}
+while (false);
+
+// Add all remaining as pending
+foreach ($pending_by_kind as $kind => $jobs) {
+	foreach ($jobs as $job) {
+		$pending[$job['sid']] = [
+			'token' => $token,
+			'after_ms' => 20, // can be more or less immediate
+		];
+	}
+}
+
+// Send response
 header('Content-Type: application/json; charset=utf-8');
 echo json_encode([
 	'rid' => $rid,
