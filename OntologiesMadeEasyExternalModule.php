@@ -73,207 +73,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
-	// Config defaults
-	function redcap_module_project_enable($version, $project_id)
-	{
-		// Ensure that some project settings have default values
-		$current = $this->getProjectSettings();
-		if (!array_key_exists('code-theme', $current)) {
-			$this->setProjectSetting('code-theme', 'dark');
-		}
-	}
-
-	// Inject system sources into project config
-	public function redcap_module_configuration_settings_obsolete($project_id, $settings)
-	{
-		// Only inject per-project system source selectors when viewing a PROJECT config dialog.
-		if ($project_id === null) {
-			return $settings;
-		}
-
-		// Read system sources (repeatable system setting).
-		$settingKey = 'sys-fhir-source';
-		$sysSources = $this->framework->getSubSettings($settingKey, null);
-		if (!is_array($sysSources)) $sysSources = [];
-
-		// Build a list of eligible system sources: active + metadata present
-		$injected = [];
-
-		foreach ($sysSources as $row) {
-			if (!is_array($row)) continue;
-
-			// Checkbox "active" can come in as string/array/bool depending on framework/version/UI.
-			$isActive = $row['sys-fhir-active'] == true;
-			if (!$isActive) continue;
-
-			$meta = $this->decodeMetadata($row['sys-fhir-metadata'] ?? null);
-			if ($meta === null) continue;
-
-			$id = isset($meta['id']) ? (string)$meta['id'] : '';
-			if ($id === '') continue;
-
-			$title = isset($meta['title']) ? trim((string)$meta['title']) : '';
-			if ($title === '') $title = 'Untitled';
-
-			$count = (int)$meta['item_count'];
-			$badge_class = ($count === 0) ? 'badge-danger' : 'badge-info fw-normal';
-			$suffix = '<span style="vertical-align:top;margin-top: 2px;" class="me-1 badge badge-pill ' . $badge_class . '">&nbsp;' . $count . '&nbsp;</span>' . $this->framework->tt("conf_proj_fhir_active");
-			$desc = trim((string) $meta['description'] ?? '');
-			if ($desc !== '') $desc = '<br><i class="text-muted">' . $desc . '</i>';
-
-			$injected[] = [
-				'key' => $id, // e.g. src_<uuidhex>
-				'name' =>  '<div><b>' . $title . '</b>' . $desc . '</div>' . $suffix,
-				'type' => 'checkbox',
-			];
-		}
-
-
-		$bioportal_enabled = $this->isBioPortalAvailable();
-		// TODO - Add a BioPortal source config interface
-
-		// Inject into settings
-		if (!empty($injected)) {
-			$settings[] = [
-				'key' => 'sys-source-select-note',
-				'name' => $this->framework->tt('conf_sys_source_select_note'),
-				'type' => 'descriptive',
-			];
-			foreach ($injected as $s) {
-				$settings[] = $s;
-			}
-		}
-
-		return $settings;
-	}
-
-
-	// After a module config has been saved -- obsolete
-	function redcap_module_save_configuration_disabled($project_id)
-	{
-
-
-		if (empty($project_id)) $project_id = null;
-		$this->initProject($project_id);
-		$this->initConfig();
-
-		$cache = $this->getCache();
-
-		if ($cache === null) {
-			// We cannot continue without a valid cache backend configuration
-			// TODO: Alert the admin about this
-			return;
-		}
-
-		require_once __DIR__ . '/classes/FhirQuestionnaireIndexBuilder.php';
-
-		// Builders (dummy for now).
-		$builders = [
-			new FhirQuestionnaireIndexBuilder(),
-		];
-
-		// Load repeatable sources.
-		$settingKeyPrefix = $project_id === null ? 'sys-' : 'proj-';
-		$settingKey = $settingKeyPrefix . 'fhir-source';
-		$entries = $this->framework->getSubSettings($settingKey, $project_id);
-		if (!is_array($entries)) $entries = [];
-
-		$changed_entries = [];
-		$warnings = [];
-		$errors = [];
-
-		foreach ($entries as $repeatIdx => $entry) {
-			if (!is_array($entry)) continue;
-			// Skip first entry if it's empty.
-			if (
-				$repeatIdx == 0 && empty($entry[$settingKeyPrefix . 'fhir-file']) &&
-				empty($entry[$settingKeyPrefix . 'fhir-metadata'])
-			) continue;
-
-			$titleOverride = $entry[$settingKeyPrefix . 'fhir-title'] ?? '';
-			$descOverride = $entry[$settingKeyPrefix . 'fhir-desc'] ?? '';
-			$titleOverride = is_string($titleOverride) ? trim($titleOverride) : '';
-			$descOverride  = is_string($descOverride) ? trim($descOverride) : '';
-
-			// Ensure build + metadata sync.
-			$opts = [
-				'kind' => 'fhir_questionnaire', // May need to add autodetection (Questionnaire and ROME-specific "ROME_Annotation")
-				'doc_id_key' => $settingKeyPrefix . 'fhir-file',
-				'meta_key' => $settingKeyPrefix . 'fhir-metadata',
-				'title_key' => $settingKeyPrefix . 'fhir-title',
-				'desc_key' => $settingKeyPrefix . 'fhir-desc',
-				'active_key' => $settingKeyPrefix . 'fhir-active',
-				'resolved_title' => $titleOverride,
-				'resolved_desc' => $descOverride,
-				'fallback_title' => 'Untitled',
-				'fallback_desc' => '',
-				'cache_ttl' => 0, // safe due to doc_id versioning
-				'is_system' => $project_id === null,
-				'repeat_idx' => $repeatIdx,
-			];
-			$res = $this->ensureBuiltAndMetadata(
-				$cache,
-				$builders,
-				$entry,
-				$opts
-			);
-
-			foreach ($res['warnings'] as $w) $warnings[] = $w;
-			foreach ($res['errors'] as $e) $errors[] = $e;
-
-			$newEntry = $res['updated_entry'];
-
-			// Persist only if metadata changed (we only mutate fhir-metadata).
-			$metadataKey = $settingKeyPrefix . 'fhir-metadata';
-			if (($newEntry[$metadataKey] ?? null) !== ($entry[$metadataKey] ?? null)) {
-				$changed_entries[$repeatIdx] = $newEntry;
-			} else {
-				// If source is to be deactivated, only update active status.
-				if ($newEntry[$settingKeyPrefix . 'active'] !== $entry[$settingKeyPrefix . 'active']) {
-					$changed_entries[$repeatIdx] = [
-						$settingKeyPrefix . 'active' => $newEntry[$settingKeyPrefix . 'active']
-					];
-				}
-			}
-		}
-
-		// Write back updated repeatable setting if needed.
-		if (count($changed_entries)) {
-			// Full per key arrays must be written. Therefore, we need to transform them first
-			$firstChangedEntry = $changed_entries[array_key_first($changed_entries)] ?? [];
-			$valuesByKey = [];
-			foreach ($entries as $idx => $entry) {
-				foreach ($firstChangedEntry as $key => $value) {
-					if (array_key_exists($idx, $changed_entries)) {
-						// Use changed value
-						$value = $changed_entries[$idx][$key];
-					}
-					$valuesByKey[$key][$idx] = $value;
-				}
-			}
-			// Now write back the changed entries
-			foreach ($valuesByKey as $key => $values) {
-				if ($project_id === null) {
-					$this->framework->setSystemSetting($key, $values);
-				} else {
-					$this->framework->setProjectSetting($key, $values, $project_id);
-				}
-			}
-			// Set log message
-			$log_msg = 'FHIR source build complete';
-		}
-
-		// Log warnings / errors
-		if (!empty($errors) || !empty($warnings)) {
-			$log_msg = 'FHIR source build issues:' . count($errors) . ' errors, ' . count($warnings) . ' warnings';
-
-			$this->log($log_msg, [
-				'errors' => $this->romeJsonEncode($errors),
-				'warnings' => $this->romeJsonEncode($warnings),
-			]);
-		}
-	}
-
 	// AJAX handler
 	function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance, $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id)
 	{
@@ -327,7 +126,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
-	#endregion
+	#endregion Hooks
 
 
 	#region Plugin Page Configuration
@@ -365,6 +164,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#endregion
 
+
 	#region Prepare Sources for Client Use
 
 	/**
@@ -396,7 +196,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 		return $sources;
 	}
-
 
 	/**
 	 * Gets all project sources
@@ -432,10 +231,16 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $sources;
 	}
 
-
-
-
-	function prepSourceForClient($source, $key, $type, $from_system, $redact = true)
+	/**
+	 * Prepares a source for client use (redacting sensitive stuff, etc.)
+	 * @param array $source 
+	 * @param string $key 
+	 * @param string $type 
+	 * @param bool $from_system 
+	 * @param bool $redact 
+	 * @return array 
+	 */
+	function prepSourceForClient($source, $key, $type, $from_system, $redact = true): array
 	{
 		$source['key'] = $key;
 		$source['type'] = $type;
@@ -453,6 +258,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	#endregion
+
 
 	#region Set Configuration from plugin pages
 
@@ -1971,36 +1777,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 
-	function getConfiguredActiveRemoteSources(int $project_id): array
-	{
-		$out = [];
-		// TODO: get configured sources from project settings
-
-		// return $out;
-
-		// TODO - fix query/result acronym mismatch
-		// Idea to get ACRONYM - DIFFERENT ACRONYM mapping is to do a simple request to search for a 
-		// single ontology and extract the id. 
-		// This is a bit of a hack, but it's the only way to get the ACRONYM - DIFFERENT ACRONYM mapping
-
-
-		// For now, return hardcoded BioPortal SNOMEDCT
-		$out['src_bioportal_snomedct'] = [
-			'id' => 'src_bioportal_snomedct',
-			'kind' => 'bioportal',
-			'scope' => 'project',
-			'label' => 'BioPortal: SNOMEDCT',
-			'desc' => 'Search SNOMED CT via BioPortal',
-			'deferred' => true,
-			'meta' => [
-				'type' => 'bioportal',
-				'q_acronym' => 'SNOMEDCT',
-				'r_acronym' => 'SNOMEDCT', // CAVE: Need to get creatively, see LOINC<>LNC
-				'sys_uri' => 'http://snomed.info/sct',
-			],
-		];
-		return $out;
-	}
 
 	#endregion
 
@@ -2524,123 +2300,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $valid_builders;
 	}
 
-
-	private function addOrUpdateLocalSource($source)
-	{
-
-		$this->initProject(defined('PROJECT_ID') ? PROJECT_ID : null);
-		$this->initConfig();
-		$cache = $this->getCache();
-		if ($cache === null) {
-			throw new Exception("Cache is not configured.");
-		}
-
-		$builders = $this->getLocalResourceBuilders();
-
-		throw new Exception("Not implemented");
-
-
-		// Load repeatable sources.
-		$settingKeyPrefix = $project_id === null ? 'sys-' : 'proj-';
-		$settingKey = $settingKeyPrefix . 'fhir-source';
-		$entries = $this->framework->getSubSettings($settingKey, $project_id);
-		if (!is_array($entries)) $entries = [];
-
-		$changed_entries = [];
-		$warnings = [];
-		$errors = [];
-
-		foreach ($entries as $repeatIdx => $entry) {
-			if (!is_array($entry)) continue;
-			// Skip first entry if it's empty.
-			if (
-				$repeatIdx == 0 && empty($entry[$settingKeyPrefix . 'fhir-file']) &&
-				empty($entry[$settingKeyPrefix . 'fhir-metadata'])
-			) continue;
-
-			$titleOverride = $entry[$settingKeyPrefix . 'fhir-title'] ?? '';
-			$descOverride = $entry[$settingKeyPrefix . 'fhir-desc'] ?? '';
-			$titleOverride = is_string($titleOverride) ? trim($titleOverride) : '';
-			$descOverride  = is_string($descOverride) ? trim($descOverride) : '';
-
-			// Ensure build + metadata sync.
-			$opts = [
-				'kind' => 'fhir_questionnaire', // May need to add autodetection (Questionnaire and ROME-specific "ROME_Annotation")
-				'doc_id_key' => $settingKeyPrefix . 'fhir-file',
-				'meta_key' => $settingKeyPrefix . 'fhir-metadata',
-				'title_key' => $settingKeyPrefix . 'fhir-title',
-				'desc_key' => $settingKeyPrefix . 'fhir-desc',
-				'active_key' => $settingKeyPrefix . 'fhir-active',
-				'resolved_title' => $titleOverride,
-				'resolved_desc' => $descOverride,
-				'fallback_title' => 'Untitled',
-				'fallback_desc' => '',
-				'cache_ttl' => 0, // safe due to doc_id versioning
-				'is_system' => $project_id === null,
-				'repeat_idx' => $repeatIdx,
-			];
-			$res = $this->ensureBuiltAndMetadata(
-				$cache,
-				$builders,
-				$entry,
-				$opts
-			);
-
-			foreach ($res['warnings'] as $w) $warnings[] = $w;
-			foreach ($res['errors'] as $e) $errors[] = $e;
-
-			$newEntry = $res['updated_entry'];
-
-			// Persist only if metadata changed (we only mutate fhir-metadata).
-			$metadataKey = $settingKeyPrefix . 'fhir-metadata';
-			if (($newEntry[$metadataKey] ?? null) !== ($entry[$metadataKey] ?? null)) {
-				$changed_entries[$repeatIdx] = $newEntry;
-			} else {
-				// If source is to be deactivated, only update active status.
-				if ($newEntry[$settingKeyPrefix . 'active'] !== $entry[$settingKeyPrefix . 'active']) {
-					$changed_entries[$repeatIdx] = [
-						$settingKeyPrefix . 'active' => $newEntry[$settingKeyPrefix . 'active']
-					];
-				}
-			}
-		}
-
-		// Write back updated repeatable setting if needed.
-		if (count($changed_entries)) {
-			// Full per key arrays must be written. Therefore, we need to transform them first
-			$firstChangedEntry = $changed_entries[array_key_first($changed_entries)] ?? [];
-			$valuesByKey = [];
-			foreach ($entries as $idx => $entry) {
-				foreach ($firstChangedEntry as $key => $value) {
-					if (array_key_exists($idx, $changed_entries)) {
-						// Use changed value
-						$value = $changed_entries[$idx][$key];
-					}
-					$valuesByKey[$key][$idx] = $value;
-				}
-			}
-			// Now write back the changed entries
-			foreach ($valuesByKey as $key => $values) {
-				if ($project_id === null) {
-					$this->framework->setSystemSetting($key, $values);
-				} else {
-					$this->framework->setProjectSetting($key, $values, $project_id);
-				}
-			}
-			// Set log message
-			$log_msg = 'FHIR source build complete';
-		}
-
-		// Log warnings / errors
-		if (!empty($errors) || !empty($warnings)) {
-			$log_msg = 'FHIR source build issues:' . count($errors) . ' errors, ' . count($warnings) . ' warnings';
-
-			$this->log($log_msg, [
-				'errors' => $this->romeJsonEncode($errors),
-				'warnings' => $this->romeJsonEncode($warnings),
-			]);
-		}
-	}
 
 
 	#region All Remote Source Kinds (from cache)
