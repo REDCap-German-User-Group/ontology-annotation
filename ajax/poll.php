@@ -47,6 +47,7 @@ $sources = $source_registry['map'];
 
 $supported_kinds = [
 	'bioportal',
+	'snowstorm',
 ];
 $jobs_by_kind = [];
 $requested_pending_ok = [];
@@ -135,14 +136,21 @@ foreach ($jobs_by_kind as $kind => $jobs) {
 do {
 	// Snowstorm
 	if (isset($pending_by_kind['snowstorm'])) {
+		// Get first job
 		$job = $pending_by_kind['snowstorm'][0];
 		unset($pending_by_kind['snowstorm'][0]);
-
+		// Process
 		$sid = $job['sid'];
 		$source = $sources[$sid];
-
-		// TODO - Implement Snowstorm search
-
+		try {
+			$results[$sid] = $module->searchSnowstorm($cache, $job['q'], $source, $limitPerSource);
+			// Mark jobs as done
+			$cache->setPayload($job['cache_key'], ['done' => true],  5, []);
+		}
+		catch (Throwable $e) {
+			$errors[$sid] = $e->getMessage();
+			// We do not care about the job if it failed beyond reporting the error
+		}
 		break; // out of do-while
 	}
 	// BioPortal

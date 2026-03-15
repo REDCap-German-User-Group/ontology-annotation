@@ -1861,7 +1861,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					$meta['baseurl'] = trim($payload['ss_baseurl']);
 					$meta['branch'] = trim($payload['ss_branch']);
 					$meta['auth'] = $payload['ss_auth'];
-					$creds = '';
+					$creds = [];
 					if ($meta['auth'] === 'basic') {
 						$creds['u'] = trim($payload['ss_username'] ?? '');
 						$creds['p'] = trim($payload['ss_password'] ?? '');
@@ -1947,23 +1947,32 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $code !== 401 && $code !== 403;
 	}
 
+	/**
+	 * Encrypts an array
+	 * @param array $payload 
+	 * @return null|string|false 
+	 */
 	private function encryptCredentials($payload)
 	{
 		if ($payload === null) return null;
-		if ($payload === '') return '';
-		$valToEncrypt = [
-			'p' => $payload,
-			'r' => base64_encode(random_bytes(8)),
-		];
-		return encrypt($this->romeJsonEncode($valToEncrypt));
+		if ($payload === []) return '';
+		if (!is_array($payload)) throw new \Exception('Invalid payload - must be null, empty string, or an array');
+		$payload['__r'] = base64_encode(random_bytes(8));
+		return encrypt($this->romeJsonEncode($payload));
 	}
 
+	/**
+	 * Decrypts an encrypted array
+	 * @param null|string $payload 
+	 * @return null|array
+	 */
 	private function decryptCredentials($payload)
 	{
 		if ($payload === null) return null;
-		if ($payload === '') return '';
-		$decryptedVal = json_decode(decrypt($payload), true);
-		return $decryptedVal['p'] ?? null;
+		if ($payload === '') return [];
+		$decryptedVal = json_decode(decrypt($payload), true, 512, JSON_THROW_ON_ERROR);
+		unset($decryptedVal['__r']);
+		return $decryptedVal;
 	}
 
 	function canConfigure()
@@ -2321,8 +2330,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$cacheKey = $this->generateBioPortalSearchCacheKey($acronym, $q);
 		}
 		else if ($source['kind'] === 'snowstorm') {
-			// TODO
-			throw new Exception('Not implemented');
+			$cacheKey = $this->generateSnowstormSearchCacheKey($source['meta'], $q);
 		}
 		// Success?
 		if ($cacheKey === null) {
@@ -2642,7 +2650,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$qNorm = mb_strtolower(trim($q));
 		$qNorm = preg_replace('/\s+/u', ' ', $qNorm) ?? $qNorm;
 
-		$preview = mb_substr($qNorm, 0, 40); // you can keep 40 as a goal; builder will truncate if needed
+		$preview = mb_substr($qNorm, 0, 40); // goal; will be truncated if needed
 
 		$cacheKey = $this->remoteCacheKey(
 			'bp',
@@ -2675,7 +2683,138 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Remote Source Kind: Snwowstorm
 
-		private function getSnowstormBranches($payload)
+	/**
+	 * Snowstorm search 
+	 *
+	 * @param Cache $cache
+	 * @param string $q
+	 * @param array $source
+	 * @param int $limit Limit per acronym
+	 * @param int $ttlSeconds Cache TTL per acronym (e.g. 1800)
+	 * @return array
+	 */
+	function searchSnowstorm(
+		Cache $cache,
+		string $q,
+		array $source,
+		int $limit,
+		int $ttlSeconds = 1800
+	): array {
+		$out = [];
+		$q = trim($q);
+
+		if ($q === '' || $limit <= 0) return $out;
+
+		$meta = $source['meta'];
+		
+		$baseUrl = trim((string)($meta['baseurl'] ?? ''));
+		if ($baseUrl === '') throw new Exception('Snowstorm base URL not set.');
+		$auth = strtolower(trim((string)($meta['auth'] ?? 'none')));
+		if (!in_array($auth, ['none', 'basic', 'token'], true)) throw new Exception('Invalid auth type: ' . $auth);
+
+		$headers = [
+			'Content-Type: application/json',
+			'Accept: application/json',
+			'User-Agent: ' . $this->getUserAgentString(),
+		];
+		$cred_decoded = $this->decryptCredentials($meta['credentials'] ?? '');
+
+		$curlUserPwd = null;
+		if ($auth === 'basic') {
+			$username = $cred_decoded['u'] ?? '';
+			$password = $cred_decodedd['p'] ?? '';
+			$curlUserPwd = $username . ':' . $password;
+		} elseif ($auth === 'token') {
+			$token = $cred_decodedd['t'] ?? '';
+			if (stripos($token, 'Bearer ') !== 0) $token = 'Bearer ' . $token;
+			$headers[] = 'Authorization: ' . $token;
+		}
+
+		$url = rtrim($baseUrl, '/') . '/' . $meta['branch'] . '/concepts/search';
+		$post_data = json_encode([
+			'termFilter' => $q,
+			'limit' => $limit,
+			'activeFilter' => true,
+		]);
+
+		$ch = curl_init($url);
+		if ($ch === false) throw new Exception('Failed to initialize Snowstorm request.');
+
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_POST, true);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+		if ($curlUserPwd !== null) curl_setopt($ch, CURLOPT_USERPWD, $curlUserPwd);
+
+		$body = curl_exec($ch);
+		$httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		$curlErr = curl_error($ch);
+		if (!empty($curlErr)) throw new Exception('Failed to execute Snowstorm request: ' . $curlErr);
+		
+		$json = json_decode($body, true, flags: JSON_THROW_ON_ERROR);
+
+		if (is_array($json['items'] ?? null)) {
+
+			// We filter by active concepts and ignore any extensions
+			// (extension concept IDs start with 999 or 1xxxxxx)
+			foreach ($json['items'] as $concept) {
+				if (($concept['active'] ?? false) === false) continue;
+				$concept_id = $concept['conceptId'] ?? null;
+				if ($concept_id === null || preg_match('/^(999|1[0-9]{9,})/', $concept_id)) continue;
+
+				$display = $concept['pt']['term'] ?? $concept['fsn']['term'] ?? 'Unknown';
+
+				$out[] = [
+					'system' => 'http://snomed.info/sct',
+					'code' => $concept_id,
+					'display' => $display,
+					'score' => 1,
+				];
+			}
+		} 
+
+		// Store into cache (even if empty, cache empties to avoid hammering)
+		$cacheKey = $this->generateSnowstormSearchCacheKey($meta, $q);
+		$cache->setPayload($cacheKey, $out, $ttlSeconds, [
+			'kind' => 'snowstorm',
+			'branch' => $meta['branch'],
+		]);
+
+		return $out;
+	}
+
+	/**
+	 * 
+	 * @param array $meta 
+	 * @param string $q 
+	 * @return string 
+	 */
+	private function generateSnowstormSearchCacheKey(array $meta, string $q): string
+	{
+		// We cache snowstorm results by snowstorm server/branch
+		// For this, we generate a hash of baseurl + branch and use the first 10 chars of it
+		$server = $meta['baseurl'].','.$meta['branch'];
+		$hash_fragment = strtoupper(left(hash('sha256', $server), 10));
+
+		$qNorm = mb_strtolower(trim($q));
+		$qNorm = preg_replace('/\s+/u', ' ', $qNorm) ?? $qNorm;
+
+		$preview = mb_substr($qNorm, 0, 40); // goal; will be truncated if needed
+
+		$cacheKey = $this->remoteCacheKey(
+			'ss',
+			['s', $hash_fragment],
+			$qNorm,      // hashInput (canonical)
+			$preview,      // preview
+			100,
+			12
+		);
+		return $cacheKey;
+	}
+
+	private function getSnowstormBranches($payload)
 	{
 		$baseUrl = trim((string)($payload['ss_baseurl'] ?? ''));
 		if ($baseUrl === '') {
@@ -2733,7 +2872,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_HTTPGET, true);
 		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-		curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 20);
 		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 		if ($curlUserPwd !== null) curl_setopt($ch, CURLOPT_USERPWD, $curlUserPwd);
 
