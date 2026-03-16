@@ -77,6 +77,7 @@
 		"get-snowstorm-branches",
 		"save-remote-source",
 		"save-local-source",
+		"save-system-source",
 		"toggle-source-enabled",
 		"delete-source",
 		"get-source-file-info"

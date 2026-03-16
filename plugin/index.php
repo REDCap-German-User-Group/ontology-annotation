@@ -129,4 +129,7 @@ if (!$module->checkCacheConfigured()) {
 if ($active_tab === 'manage' || $active_tab === 'configure') {
 	include __DIR__ . "/templates/remote-source-dialog.php";
 	include __DIR__ . "/templates/local-source-dialog.php";
+	if ($active_tab === 'manage') {
+		include __DIR__ . "/templates/system-source-dialog.php";
+	}
 }

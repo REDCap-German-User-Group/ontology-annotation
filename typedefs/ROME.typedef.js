@@ -19,6 +19,7 @@
  * @property {string=} page
  * @property {string=} version
  * @property {SourceInfo[]=} sources
+ * @property {SourceInfo[]=} sysSources
  */
 
 /**

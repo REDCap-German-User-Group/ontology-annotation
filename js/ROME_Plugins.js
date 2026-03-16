@@ -35,6 +35,8 @@
 	let editRemoteSource;
 	/** @type {Function} */
 	let editLocalSource;
+	/** @type {Function} */
+	let editSystemSource;
 
 	/**
 	 * Implements the public init method.
@@ -68,6 +70,7 @@
 				case 'manage':
 					initRemoteSourcesManagement();
 					initLocalSourcesManagement();
+					initSystemSourcesManagement();
 					initSourcesTable();
 					break;
 				case 'configure':
@@ -358,7 +361,7 @@
 		$('#romeRemoteSourceSaveBtn').on('click', async function (ev) {
 			ev.preventDefault();
 			clearError();
-			
+
 			let payload = {
 				context: config.page,
 				title: `${$('#rome_title').val()}`.trim(),
@@ -483,7 +486,7 @@
 		}
 
 		// Public
-		editRemoteSource = function(source) {
+		editRemoteSource = function (source) {
 			openRemoteSourceDialog('edit', source);
 		};
 	}
@@ -589,7 +592,7 @@
 		});
 
 		// Public
-		editLocalSource = function(source, file) {
+		editLocalSource = function (source, file) {
 			openLocalSourceDialog('edit', source, file);
 		};
 
@@ -644,6 +647,288 @@
 		};
 	}
 
+	function initSystemSourcesManagement() {
+
+		const $modalEl = $('#romeSystemSourceModal');
+		const $titleEl = $('#romeSystemSourceModalTitle');
+		const $errEl = $('#romeSystemSourceError');
+		const bsModal = new bootstrap.Modal($modalEl.get(0), { backdrop: 'static' });
+		let editMode = 'create';
+		let selectedSystemSourceId = null;
+		let ssDtInstance = null;
+
+		// Wire events
+		$modalEl.on('hide.bs.modal', function () {
+			$(document.activeElement).trigger('blur');
+		});
+
+		$('#rome-add-system-source').on('click', () => {
+			openSystemSourceDialog('create');
+		});
+
+		// Save
+		$('#romeSystemSourceSaveBtn').on('click', async function (ev) {
+			ev.preventDefault();
+			clearError();
+
+			// Assemble payload
+			const payload = {
+				context: config.page,
+				id: editMode === 'edit' ? `${$('#rome_system_source_id').val()}`.trim() : null,
+				title: `${$('#rome_system_title').val()}`.trim(),
+				description: `${$('#rome_system_description').val()}`.trim(),
+				sytemSoureId: selectedSystemSourceId
+			};
+			// Validation
+			if (editMode === 'create' && payload.selectedSystemSourceId === null) {
+				showError('A system source must be selected');
+				return;
+			}
+
+			// Save
+			try {
+				// Disable form elements
+				$modalEl.find('input, textarea').prop('disabled', true);
+				$('#romeSystemSourceSaveBtn').prop('disabled', true);
+				const res = await JSMO.ajax('save-system-source', payload);
+				if (res.error) throw `Failed to save system source: ${res.error}`;
+				bsModal.hide();
+				refreshSourcesTable(res.source);
+			}
+			catch (e) {
+				showError(`${e}`);
+			}
+			finally {
+				// Enable form elements
+				$modalEl.find('input, textarea').prop('disabled', false);
+				$('#romeSystemSourceSaveBtn').prop('disabled', false);
+			}
+		});
+
+		// Public
+		editSystemSource = function (source, file) {
+			openSystemSourceDialog('edit', source);
+		};
+
+		// Setup table
+		initSystemSourcesTable();
+
+		function showError(msg) {
+			$errEl.text(msg);
+			$errEl.removeClass('d-none');
+		}
+
+		function clearError() {
+			$errEl.text('');
+			$errEl.addClass('d-none');
+		}
+
+		function resetFormForCreate() {
+			$modalEl.find('[data-rome-reset]').each(function () {
+				const $this = $(this);
+				$this.val($this.attr('data-rome-reset')).trigger('change');
+			});
+
+			$('#rome_system_source_id').val('');
+			selectedSystemSourceId = null;
+			$('#rome-system-source-info').text('No system source selected. Please select one from the list.');
+			$('#rome-system-sources-table-wrapper').removeClass('d-none');
+			$('#rome-title-from-system').text('');
+			$('#rome-description-from-system').text('');
+			clearError();
+			refreshSystemSourcesTable();
+		}
+
+		async function openSystemSourceDialog(mode, sourceData) {
+			resetFormForCreate();
+			editMode = mode;
+			if (mode === 'edit') {
+				$titleEl.text('Edit a system source');
+				$('#rome_system_source_id').val(sourceData.key || '');
+				$('#rome-title-from-source').text(sourceData.title || '');
+				$('#rome-description-from-source').text(sourceData.description || '');
+				if (sourceData.title !== sourceData.title_resolved) {
+					$('#rome_system_title').val(sourceData.title_resolved || '');
+				}
+				if (sourceData.description !== sourceData.description_resolved) {
+					$('#rome_system_description').val(sourceData.description_resolved || '');
+				}
+				$('#rome-system-source-info').text(sourceData.info || '');
+			} else {
+				$titleEl.text('Add a system source');
+			}
+			bsModal.show();
+		};
+
+		function initSystemSourcesTable() {
+
+			const $table = $('#rome-system-sources-table');
+
+			//#region Datatable
+			ssDtInstance = $table.DataTable({
+				autoWidth: true,
+				data: config.sysSources ?? [],
+				columns: [
+					{
+						data: null,
+						render: (_data, type, row) => {
+							if (type === 'sort' || type === 'type') {
+								return row.checked ? 'checked' : 'unchecked';
+							}
+							return renderCheckedColumn(row);
+						}
+					},
+					{
+						data: null,
+						render: (_data, type, row) => {
+							if (type === 'sort' || type === 'type') {
+								return row.type;
+							}
+							return renderTypeColumn(row);
+						}
+					},
+					{
+						data: null,
+						render: (_data, type, row) => {
+							if (type === 'sort' || type === 'type') {
+								return `${row.title_resolved} ${row.description_resolved}`;
+							}
+							return renderTitleColumn(row);
+						}
+					},
+					{
+						data: null,
+						searchable: false,
+						render: (_data, type, row) => {
+							if (type === 'sort' || type === 'type') {
+								return row?.item_count ?? 0;
+							}
+							return renderStatsColumn(row);
+						}
+					}
+				],
+				language: {
+					emptyTable: 'No system sources found.'
+				},
+				paging: true,
+				searching: true,
+				info: true,
+				lengthChange: false,
+				pageLength: 5,
+				order: [[2, 'asc']],
+				createdRow: (rowEl, rowData) => {
+					$(rowEl).data('source-key', rowData['key'] ?? '');
+				}
+			});
+
+
+			/**
+			 * Renders "Type" column cell content.
+			 * @param {Object} row
+			 * @returns {string}
+			 */
+			function renderTypeColumn(row) {
+				return getSourceTypeIcon(row);
+			}
+
+			/**
+			 * Renders "Checked" column cell content.
+			 * @param {Object} row
+			 * @returns {string}
+			 */
+			function renderCheckedColumn(row) {
+				const checked = (row?.checked ?? false) === true;
+				return `
+					<div class="form-radio">
+						<input class="form-radio-input" type="radio" name="system-source-selected" data-source="${row.key}" data-action="select-source" ${checked ? 'checked' : ''} aria-label="Select row ${escapeHTML(row.title_resolved)}">
+					</div>
+				`;
+			}
+
+			/**
+			 * Renders "Title/Description" column cell content.
+			 * @param {Object} row
+			 * @returns {string}
+			 */
+			function renderTitleColumn(row) {
+				return `
+					<div class="rome-system-source-select" data-action="select-source" data-source="${row.key}">
+						<div class="rome-source-title">${escapeHTML(row.title_resolved)}</div>
+						<div class="rome-source-description">${escapeHTML(row.description_resolved)}</div>
+					</div>
+				`;
+			}
+
+			/**
+			 * Renders "Stats" column cell content.
+			 * @param {Object} row
+			 * @returns {string}
+			 */
+			function renderStatsColumn(row) {
+				let s = '';
+				if (row.item_count) {
+					s += `Items: ${row.item_count}`
+				}
+				if (typeof row.system_counts === 'object') {
+					s += `<br/>Systems: ${Object.keys(row.system_counts).length}`;
+				}
+				return `<div class="rome-source-stats">${s ? s : '&mdash;'}</div>`;
+			}
+			//#endregion DataTable
+
+			//#region Events
+			$table.off('click change').on('click change', '[data-action]', function (e) {
+				const $el = $(this);
+				const action = $el.attr('data-action');
+				if (action === 'select-source') {
+					const key = $el.attr('data-source');
+					log('System source action', { action, key });
+					selectedSystemSourceId = key;
+					const source = config.sysSources.find(s => s.key === key);
+					setSystemSourceInfo(source);
+					refreshSystemSourcesTable();
+				}
+			});
+			//#endregion
+
+		}
+
+		function setSystemSourceInfo(source) {
+			$('#rome-system-source-info').html(getSourceTypeIcon(source)).append(
+				`<span class="ms-1">${source.type === 'remote' ? 'Remote' : 'Local'}</span>`
+			);
+			$('#rome-title-from-system').text(source.title || '');
+			$('#rome-description-from-system').text(source.description_resolved || '');
+
+		}
+
+		function refreshSystemSourcesTable() {
+			const data = config.sysSources ?? [];
+			for (const source of data) {
+				source['checked'] = source.key === selectedSystemSourceId;
+			}
+			ssDtInstance.clear().rows.add(data).draw();
+		}
+
+	}
+
+	function getSourceTypeIcon(source) {
+		let s = '';
+		if (source.type === 'local') {
+			s = '<i class="fa-solid fa-database text-muted"></i>';
+		}
+		else {
+			s = '<i class="fa-solid fa-cloud text-muted"></i>';
+		}
+		if (source?.kind === 'fhir_questionnaire') {
+			s += '<i class="fa-solid fa-fire fa-sm ms-1 text-warning"></i>';
+		}
+		if (source?.from_system ?? false) {
+			s += '<i class="fa-solid fa-hard-drive fa-sm ms-1 text-info"></i>';
+		}
+		return s;
+	}
+
 	function initSourcesTable() {
 
 		const data = config.sources ?? [];
@@ -690,7 +975,7 @@
 							return row?.item_count ?? 0;
 						}
 						return renderStatsColumn(row);
-					} 
+					}
 				},
 				{
 					data: null,
@@ -720,20 +1005,7 @@
 		 * @returns {string}
 		 */
 		function renderTypeColumn(row) {
-			let s = '';
-			if (row.type === 'local') {
-				s = '<i class="fa-solid fa-database text-muted"></i>';
-			}
-			else {
-				s = '<i class="fa-solid fa-cloud text-muted"></i>';
-			}
-			if (row?.kind === 'fhir_questionnaire') {
-				s += '<i class="fa-solid fa-fire fa-sm ms-1 text-warning"></i>';
-			}
-			if (row?.from_system ?? false) {
-				s += '<i class="fa-solid fa-hard-drive fa-sm ms-1 text-info"></i>';
-			}
-			return s;
+			return getSourceTypeIcon(row);
 		}
 
 		/**
@@ -787,11 +1059,11 @@
 				<button type="button" class="btn btn-sm btn-link text-danger p-0" title="Delete this source" data-source="${row.key}" data-action="delete"><i class="fa fa-trash-alt"></i></button>`;
 			const editBtn = `
 				<button type="button" class="btn btn-sm btn-link text-secondary p-0 me-2" title="Edit this source" data-source="${row.key}" data-action="edit"><i class="fa fa-pencil"></i></button>`;
-			
+
 			return editBtn + delBtn;
 		}
 		//#endregion DataTable
-	
+
 		//#region Events
 		$table.off('click change').on('click change', '[data-action]', function (e) {
 			const $el = $(this);
@@ -819,8 +1091,8 @@
 		async function toggleSourceEnabled(key, $btn) {
 			const toState = $btn.prop('disabled', true).is(':checked');
 			try {
-				const res = await JSMO.ajax('toggle-source-enabled', { 
-					key: key, 
+				const res = await JSMO.ajax('toggle-source-enabled', {
+					key: key,
 					enabled: toState,
 					context: config.page
 				});
@@ -885,12 +1157,6 @@
 		}
 		//#endregion Events
 	}
-
-	function initSystemSourcesManagment() {
-		// TODO: Add system sources managment
-		// Dialog with config.sysSources as a list to pick
-		// Proj source will proxy sys source.
-	}	
 
 	function refreshSourcesTable(source = null) {
 		// Remove existing entry from config.sources (identify by key)

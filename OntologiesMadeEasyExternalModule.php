@@ -117,6 +117,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					];
 				}
 				break;
+			case 'save-system-source':
+				try {
+					return $this->saveSystemSource($payload);
+				} catch (Throwable $e) {
+					return [
+						'error' => $e->getMessage()
+					];
+				}
+				break;
 			case 'toggle-source-enabled':
 				return $this->toggleSourceEnabled($payload);
 			case 'delete-source':
@@ -2084,6 +2093,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'deleted' => $info['delete_date'] !== null,
 			],
 		];
+	}
+
+
+	private function saveSystemSource($payload): array
+	{
+		// TODO: Implement
+		throw new Exception('Not implemented');
 	}
 
 	private function saveLocalSource($payload): array

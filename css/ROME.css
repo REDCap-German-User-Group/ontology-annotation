@@ -86,10 +86,17 @@ h2 {
 	width: auto;
 }
 
+.rome-system-sources-table {
+	width: 100% !important;
+}
+
 
 .rome-sources-col-title {
 	width: 350px;
 	max-width: 350px;
+}
+.rome-system-sources-table td:nth-child(3) {
+	cursor: pointer;
 }
 .rome-sources-col-type {
 	width: 50px;
@@ -99,9 +106,13 @@ h2 {
 	width: 70px;
 	max-width: 70px;
 }
+.rome-sources-col-checked {
+	width: 40px;
+	max-width: 40px;
+}
 .rome-sources-col-stats {
-	width: 80px;
-	max-width: 80px;
+	width: 100px;
+	max-width: 100px;
 }
 .rome-sources-col-actions {
 	width: 100px;
