@@ -197,8 +197,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$source = $this->prepSourceForClient(
 					$source,
 					$key,
-					strpos($key, 'sys-ls_') === 0 ? 'local' : 'remote',
-					false
+					strpos($key, 'sys-ls_') === 0 ? 'local' : 'remote'
 				);
 				$sources[] = $source;
 			}
@@ -219,19 +218,37 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$sources = [];
 		foreach ($settings as $key => $value) {
 			if (
-				strpos($key, 'proj-ls_') === 0 ||
-				strpos($key, 'proj-rs_') === 0
+				strpos($key, 'proj-ls_') === 0 || // Local
+				strpos($key, 'proj-rs_') === 0 || // Remote
+				strpos($key, 'proj-ss_') === 0    // System
 			) {
 				$source = json_decode($value, true);
 				if (!is_array($source)) continue;
+				$type = strpos($key, 'proj-ls_') === 0 ? 'local' : 'remote';
 
-				// TODO: If this is a sys-source proxy, check if the system source is currently still available (present and enabled)
+				// If this is a system source proxy, then check if the system source is 
+				// currently still available (present and enabled)
+				if ($source['system_source_id'] !== null) {
+					$systemSource = $this->getSourceByKey($source['system_source_id']);
+					// Add warnings
+					if ($systemSource === null) {
+						$source['message'] = "The system source for this source is no longer available. This source should be deleted.";
+						$source['system_state'] = 'deleted';
+						$source['enabled'] = false;
+					}
+					if (!$systemSource['enabled']) {
+						$source['message'] = "This system source for this source is currently disabled.";
+						$source['system_state'] = 'disabled';
+						$source['enabled'] = false;
+					}
+					$source['system_state'] = 'enabled';
+					$type = strpos($source['system_source_id'], 'sys-ls_') === 0 ? 'local' : 'remote';
+				}
 
 				$source = $this->prepSourceForClient(
 					$source,
 					$key,
-					strpos($key, 'proj-ls_') === 0 ? 'local' : 'remote',
-					false,
+					$type,
 					$redact
 				);
 				$sources[] = $source;
@@ -245,15 +262,14 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	 * @param array $source 
 	 * @param string $key 
 	 * @param string $type 
-	 * @param bool $from_system 
 	 * @param bool $redact 
 	 * @return array 
 	 */
-	function prepSourceForClient($source, $key, $type, $from_system, $redact = true): array
+	function prepSourceForClient($source, $key, $type, $redact = true): array
 	{
 		$source['key'] = $key;
 		$source['type'] = $type;
-		$source['from_system'] = $from_system;
+		$source['from_system'] = strpos($source['system_source_id'] ?? '', 'sys-') === 0;
 		if ($type === 'remote') {
 			// Add indicator whether the source uses its own credentials
 			$source['usesOwnCredentials'] = ($source['credentials'] ?? '') !== '';
@@ -1918,10 +1934,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			}
 
 			$type = 'remote';
-			$from_system = false; // TODO
 
 			return [
-				'source' => $this->prepSourceForClient($meta, $setting_key, $type, $from_system),
+				'source' => $this->prepSourceForClient($meta, $setting_key, $type),
 			];
 		} catch (Throwable $e) {
 			return [
@@ -1986,11 +2001,21 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	function canConfigure()
 	{
+		$is_project = $this->project_id !== null;
 		$user = $this->framework->getUser();
 		if ($user == null) return false;
-		if ($user->isSuperUser()) return true;
-		if ($this->project_id != null && $user->hasDesignRights($this->project_id)) return true;
-		return false;
+		$hasDesignRights = $is_project && $user->hasDesignRights($this->project_id);
+		$isSuperuser = $user->isSuperUser();
+		$normalUserCanConfigure = $is_project && $this->framework->getProjectSetting("proj-can-configure", $this->project_id) === true;
+		return $isSuperuser || ($hasDesignRights && $normalUserCanConfigure);
+	}
+
+	function canManage()
+	{
+		$is_project = $this->project_id !== null;
+		$user = $this->framework->getUser();
+		if ($user == null) return false;
+		return $is_project && ($user->hasDesignRights() || $user->isSuperUser());
 	}
 
 	private function toggleSourceEnabled($payload)
@@ -2019,8 +2044,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 		// Augment source
 		$type = strpos($key, '-ls_') !== false ? 'local' : 'remote';
-		$from_system = strpos($key, 'sys-') === 0 && $payload['context'] !== 'configure';
-		$source = $this->prepSourceForClient($source, $key, $type, $from_system);
+		$source = $this->prepSourceForClient($source, $key, $type);
 		return [
 			'source' => $source,
 		];
@@ -2098,56 +2122,51 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	private function saveSystemSource($payload): array
 	{
-		// TODO: Implement
-		throw new Exception('Not implemented');
-	}
-
-	private function saveLocalSource($payload): array
-	{
 		try {
 			// Validate
-			// If context is 'configure', the user must be a superuser or
-			// a project designer and the project must be allowed to use
-			// the configure page
-			if ($payload['context'] === 'configure' && !$this->canConfigure()) {
-				throw new Exception('Not permitted to add sources outside a project context.');
+			// Context must be 'manage', the user must be a project designer 
+			if ($payload['context'] !== 'manage' || !$this->canManage()) {
+				throw new Exception('Not permitted to add sources.');
 			}
-
-			// id must be null (new source) or have a valid local source prefix (proj or sys)
+			// id must be null (new source) or have a valid system source prefix (proj)
 			$id = $payload['id'] ?? null;
-			if (! ($id === null ||
-				strpos($id, 'sys-ls_') === 0 ||
-				strpos($id, 'proj-ls_') === 0
-			)) {
+			if (! ($id === null || strpos($id, 'proj-ss_') === 0)) {
 				throw new Exception('Invalid id');
 			}
+
 			if ($id === null) {
-				// New entries must have a file
-				if ($payload['fileName'] === '' || trim($payload['fileContent']) === '') {
-					throw new Exception('Invalid or empty file');
+				// New entries must have a systemSourceId
+				$systemSourceId = trim($payload['systemSourceId'] ?? '');
+				$systemSource = $this->getSourceByKey($systemSourceId);
+				if ($systemSource === null || !($systemSource['enabled'] ?? false)) {
+					throw new Exception('Invalid system source id or system source has been disabled or deleted. Please refresh the page.');
 				}
-				list ($setting_key, $meta) = $this->tryStoreNewLocalSource([
-					'fileName' => $payload['fileName'],
-					'fileContent' => $payload['fileContent'],
-					'project_id' => $payload['context'] === 'configure' ? null : $this->project_id,
-					'current_id' => null,
-				]);
+
+				$ids = $this->generateSourceId();
+				$meta = [
+					'v' => 1,
+					'id' => $ids['id'],
+					'uuid' => $ids['uuid'],
+					'kind' => $systemSource['kind'],
+					'title' => $systemSource['title'],
+					'description' => $systemSource['description'],
+				];
 				// Resolve title and description
 				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
-					? trim($payload['title']) : $meta['title'];
+				? trim($payload['title']) : $meta['title'];
 				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
-					? trim($payload['description']) : $meta['description'];
+				? trim($payload['description']) : $meta['description'];
 				// Set enabled to true
 				$meta['enabled'] = true;
+				// Finally, store the systemSourceId
+				$meta['system_source_id'] = $systemSourceId;
 				// Store metadata
 				$metaJson = $this->romeJsonEncode($meta);
-				if ($payload['context'] === 'configure') {
-					$this->framework->setSystemSetting($setting_key, $metaJson);
-				} else {
-					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
-				}
+				$setting_key = 'proj-ss_' . $ids['hex'];
+				$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
 			}
 			else {
+				throw new Exception('Not implemented');
 				// Existing entries must have a an existing docId or a replacement file
 				$source = $this->getSourceByKey($id);
 				if (!is_array($source)) {
@@ -2187,11 +2206,110 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				}
 			}
 
-			$type = 'local';
-			$from_system = false; // TODO
+			$type = $meta['type'];
+			$from_system = true;
 
 			return [
 				'source' => $this->prepSourceForClient($meta, $setting_key, $type, $from_system),
+			];
+		} catch (Throwable $e) {
+			return [
+				'error' => $e->getMessage(),
+			];
+		}
+	}
+
+	private function saveLocalSource($payload): array
+	{
+		try {
+			// Validate
+			// If context is 'configure', the user must be a superuser or
+			// a project designer and the project must be allowed to use
+			// the configure page
+			if ($payload['context'] === 'configure' && !$this->canConfigure()) {
+				throw new Exception('Not permitted to add sources outside a project context.');
+			}
+
+			// id must be null (new source) or have a valid local source prefix (proj or sys)
+			$id = $payload['id'] ?? null;
+			if (! ($id === null ||
+				strpos($id, 'sys-ls_') === 0 ||
+				strpos($id, 'proj-ls_') === 0
+			)) {
+				throw new Exception('Invalid id');
+			}
+			if ($id === null) {
+				// New entries must have a file
+				$fileName = trim($payload['fileName'] ?? '');
+				$fileContent = trim($payload['fileContent'] ?? '');
+				if ($fileName === '' || $fileContent === '') {
+					throw new Exception('Invalid or empty file');
+				}
+				list ($setting_key, $meta) = $this->tryStoreNewLocalSource([
+					'fileName' => $fileName,
+					'fileContent' => $fileContent,
+					'project_id' => $payload['context'] === 'configure' ? null : $this->project_id,
+					'current_id' => null,
+				]);
+				// Resolve title and description
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
+					? trim($payload['title']) : $meta['title'];
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
+					? trim($payload['description']) : $meta['description'];
+				// Set enabled to true
+				$meta['enabled'] = true;
+				// Store metadata
+				$metaJson = $this->romeJsonEncode($meta);
+				if ($payload['context'] === 'configure') {
+					$this->framework->setSystemSetting($setting_key, $metaJson);
+				} else {
+					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
+				}
+			}
+			else {
+				// Existing entries must have a an existing docId or a replacement file
+				$source = $this->getSourceByKey($id);
+				if (!is_array($source)) {
+					return [
+						'error' => 'Missing or invalid id. The source may have been deleted. Please refresh the page.',
+					];
+				}
+				// Is this a replacement file?
+				$fileName = trim($payload['fileName'] ?? '');
+				$fileContent = trim($payload['fileContent'] ?? '');
+				if ($fileContent !== '' && $fileName !== '') {
+					// Replace file
+					list ($_, $meta) = $this->tryStoreNewLocalSource([
+						'fileName' => $fileName,
+						'fileContent' => $fileContent,
+						'project_id' => $payload['context'] === 'configure' ? null : $this->project_id,
+						'current_id' => $source['uuid'],
+					]);
+					// Copy updated meta over to source
+					foreach ($meta as $metaKey => $metaValue) {
+						$source[$metaKey] = $metaValue;
+					}
+				}
+				$meta = $source;
+				// Resolve title and description
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
+					? trim($payload['title']) : $meta['title'];
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
+					? trim($payload['description']) : $meta['description'];
+				// Store metadata
+				$metaJson = $this->romeJsonEncode($meta);
+				$setting_key = $id;
+				if ($payload['context'] === 'configure') {
+					$this->framework->setSystemSetting($setting_key, $metaJson);
+				} else {
+					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
+				}
+			}
+
+			$type = 'local';
+
+			return [
+				'source' => $this->prepSourceForClient($meta, $setting_key, $type),
 			];
 		} catch (Throwable $e) {
 			return [

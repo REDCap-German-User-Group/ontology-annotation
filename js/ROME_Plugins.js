@@ -677,7 +677,7 @@
 				id: editMode === 'edit' ? `${$('#rome_system_source_id').val()}`.trim() : null,
 				title: `${$('#rome_system_title').val()}`.trim(),
 				description: `${$('#rome_system_description').val()}`.trim(),
-				sytemSoureId: selectedSystemSourceId
+				systemSourceId: selectedSystemSourceId
 			};
 			// Validation
 			if (editMode === 'create' && payload.selectedSystemSourceId === null) {
@@ -909,7 +909,6 @@
 			}
 			ssDtInstance.clear().rows.add(data).draw();
 		}
-
 	}
 
 	function getSourceTypeIcon(source) {

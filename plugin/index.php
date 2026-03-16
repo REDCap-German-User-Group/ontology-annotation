@@ -20,13 +20,8 @@ $is_project = $module->initProject(defined('PROJECT_ID') ? PROJECT_ID : null);
 $module->initConfig();
 
 $annotate_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
-$manage_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
-$configure_enabled = $user->isSuperUser() || 
-	(
-		$is_project && 
-		$user->hasDesignRights() && 
-		$module->framework->getProjectSetting("can-configure") === true
-	);
+$manage_enabled = $module->canManage();
+$configure_enabled = $module->canConfigure();
 
 $nav_tabs = [
 	"about" => [
