@@ -370,15 +370,23 @@
 				.forEach(r => {
 					stub.dataElement.coding.push(r.annotation);
 				});
-			const jsonString = `${config.atName}=${JSON.stringify(stub, null, 2)}`;
+			const isEmpty = (stub.dataElement.coding.length === 0 && Object.keys(stub.dataElement.valueCodingMap).length === 0);
+			const jsonString = isEmpty ? '' : `${config.atName}=${JSON.stringify(stub, null, 2)}`;
 			const prevParsed = odState.parseResults[rowId] ?? null;
-			if (prevParsed === null) {
-				$annotation.val(jsonString);
+			if (prevParsed.start === -1) {
+				// Append to end - but we need to determine if we should add newlines (max 2, considering any already present)
+				let delim = '';
+				if (prevParsed.originalText !== '') {
+					if (prevParsed.originalText.endsWith('\n\n')) delim = '';
+					else if (prevParsed.originalText.endsWith('\n')) delim = '\n';
+					else delim = '\n\n';
+				}
+				$annotation.val(prevParsed.originalText + delim + jsonString);
 			}
 			else {
 				// Replace part from start to end with new string, preserving any text before or after
 				const newVal = prevParsed.originalText.substring(0, prevParsed.start) + jsonString + prevParsed.originalText.substring(prevParsed.end);
-				$annotation.val(newVal);
+				$annotation.val(newVal.trimEnd());
 			}
 			// Clear codings for next iteration
 			stub.dataElement.coding = [];
