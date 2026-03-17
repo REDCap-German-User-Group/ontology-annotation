@@ -13,7 +13,7 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 
 
 ?>
-<div class="rome-plugin-page">
+<div class="rome-plugin-page rome-about">
 
 	<?php if ($rome_cache_status !== 'ok'): ?>
 	<p class="red">
