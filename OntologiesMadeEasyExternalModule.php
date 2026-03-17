@@ -162,8 +162,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		if ($page === 'configure') {
 			$jsConfig['sources'] = $this->getSystemSources();
-		}
-		else if ($page === 'manage' && $pid !== null) {
+		} else if ($page === 'manage' && $pid !== null) {
 			$jsConfig['sources'] = $this->getProjectSources($pid);
 			$jsConfig['sysSources'] = $this->getSystemSources(true);
 		}
@@ -226,25 +225,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				if (!is_array($source)) continue;
 				$type = strpos($key, 'proj-ls_') === 0 ? 'local' : 'remote';
 
-				// If this is a system source proxy, then check if the system source is 
-				// currently still available (present and enabled)
-				if ($source['system_source_id'] !== null) {
-					$systemSource = $this->getSourceByKey($source['system_source_id']);
-					// Add warnings
-					if ($systemSource === null) {
-						$source['message'] = "The system source for this source is no longer available. This source should be deleted.";
-						$source['system_state'] = 'deleted';
-						$source['enabled'] = false;
-					}
-					if (!$systemSource['enabled']) {
-						$source['message'] = "This system source for this source is currently disabled.";
-						$source['system_state'] = 'disabled';
-						$source['enabled'] = false;
-					}
-					$source['system_state'] = 'enabled';
-					$type = strpos($source['system_source_id'], 'sys-ls_') === 0 ? 'local' : 'remote';
-				}
-
 				$source = $this->prepSourceForClient(
 					$source,
 					$key,
@@ -268,12 +248,41 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	function prepSourceForClient($source, $key, $type, $redact = true): array
 	{
 		$source['key'] = $key;
-		$source['type'] = $type;
-		$source['from_system'] = strpos($source['system_source_id'] ?? '', 'sys-') === 0;
-		if ($type === 'remote') {
-			// Add indicator whether the source uses its own credentials
-			$source['usesOwnCredentials'] = ($source['credentials'] ?? '') !== '';
+
+		// If this is a system source proxy, then check if the system source is 
+		// currently still available (present and enabled)
+		if (($source['system_source_id'] ?? null) !== null) {
+			$systemSource = $this->getSourceByKey($source['system_source_id']);
+			// Add warnings
+			if ($systemSource === null) {
+				$source['message'] = "The system source for this source is no longer available. This source should be deleted.";
+				$source['system_state'] = 'deleted';
+				$source['enabled'] = false;
+			}
+			else if (!$systemSource['enabled']) {
+				$source['message'] = "This system source for this source is currently disabled.";
+				$source['system_state'] = 'disabled';
+				$source['enabled'] = false;
+			}
+			else {
+				$source['system_state'] = 'enabled';
+			}
+			$type = strpos($source['system_source_id'], 'sys-ls_') === 0 ? 'local' : 'remote';
+			// If this is a local source, copy over stats
+			if ($type === 'local') {
+				$source['item_count'] = $systemSource['item_count'];
+				$source['system_counts'] = $systemSource['system_counts'];
+			}
+			$source['from_system'] = true;
 		}
+		else {
+			$source['from_system'] = false;
+			if ($type === 'remote') {
+				// Add indicator whether the source uses its own credentials (proj-defined sources only)
+				$source['usesOwnCredentials'] = ($source['credentials'] ?? '') !== '';
+			}
+		}
+		$source['type'] = $type;
 		if ($redact) {
 			// We don't want to leak doc_id and credentials to the client
 			unset($source['credentials']);
@@ -1377,13 +1386,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			if (strlen($hex) !== 32) {
 				throw new Exception('Invalid uuid or hex string');
 			}
-		}
-		else {
+		} else {
 			// UUID v4: 16 random bytes with version/variant bits set.
 			$b = random_bytes(16);
 			$b[6] = chr((ord($b[6]) & 0x0f) | 0x40); // version 4
 			$b[8] = chr((ord($b[8]) & 0x3f) | 0x80); // variant RFC 4122
-	
+
 			$hex = bin2hex($b); // 32 hex chars
 		}
 
@@ -1869,7 +1877,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					$meta['description'] = 'Search via BioPortal: ' . $bp_ontology['name'];
 					$meta['acronym'] = $acronym;
 					$token = trim($payload['bp_token'] ?? '');
-					$meta['credentials'] = $this->encryptCredentials($token);
+					$creds = [];
+					if ($token !== '') $creds['t'] = $token;
+					$meta['credentials'] = $this->encryptCredentials($creds);
 				} else if ($type === 'snowstorm') {
 					// Snowstorm must have a base url
 					if (trim($payload['ss_baseurl'] ?? '') === '') {
@@ -1919,9 +1929,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				}
 				$meta = $source;
 				// Resolve title and description
-				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0
 					? trim($payload['title']) : $meta['title'];
-				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0
 					? trim($payload['description']) : $meta['description'];
 				// Store metadata
 				$metaJson = $this->romeJsonEncode($meta);
@@ -2062,6 +2072,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		// Delete it
 		$project_id = strpos($key, 'sys-') === 0 ? null : $this->project_id;
+		if ($project_id === null && !$this->canConfigure()) {
+			return [
+				'error' => 'You do not have permission to configure this source.',
+			];
+		} else if ($project_id !== null && !$this->canManage()) {
+			return [
+				'error' => 'You do not have permission to manage this source.',
+			];
+		}
 		$doc_id = intval($source['doc_id'] ?? 0);
 		if ($doc_id > 0) {
 			$deleted = \Files::deleteFileByDocId($doc_id, $project_id);
@@ -2133,7 +2152,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			if (! ($id === null || strpos($id, 'proj-ss_') === 0)) {
 				throw new Exception('Invalid id');
 			}
-
 			if ($id === null) {
 				// New entries must have a systemSourceId
 				$systemSourceId = trim($payload['systemSourceId'] ?? '');
@@ -2141,7 +2159,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				if ($systemSource === null || !($systemSource['enabled'] ?? false)) {
 					throw new Exception('Invalid system source id or system source has been disabled or deleted. Please refresh the page.');
 				}
-
 				$ids = $this->generateSourceId();
 				$meta = [
 					'v' => 1,
@@ -2152,10 +2169,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'description' => $systemSource['description'],
 				];
 				// Resolve title and description
-				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
-				? trim($payload['title']) : $meta['title'];
-				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
-				? trim($payload['description']) : $meta['description'];
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0
+					? trim($payload['title']) : $meta['title'];
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0
+					? trim($payload['description']) : $meta['description'];
 				// Set enabled to true
 				$meta['enabled'] = true;
 				// Finally, store the systemSourceId
@@ -2164,9 +2181,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$metaJson = $this->romeJsonEncode($meta);
 				$setting_key = 'proj-ss_' . $ids['hex'];
 				$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
-			}
-			else {
-				throw new Exception('Not implemented');
+			} else {
 				// Existing entries must have a an existing docId or a replacement file
 				$source = $this->getSourceByKey($id);
 				if (!is_array($source)) {
@@ -2174,27 +2189,19 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 						'error' => 'Missing or invalid id. The source may have been deleted. Please refresh the page.',
 					];
 				}
-				// Is this a replacement file?
-				$fileName = $payload['fileName'] ?? '';
-				$fileContent = $payload['fileContent'] ?? '';
-				if ($fileContent !== '' && $fileName !== '') {
-					// Replace file
-					list ($_, $meta) = $this->tryStoreNewLocalSource([
-						'fileName' => $payload['fileName'],
-						'fileContent' => $payload['fileContent'],
-						'project_id' => $payload['context'] === 'configure' ? null : $this->project_id,
-						'current_id' => $source['uuid'],
-					]);
-					// Copy updated meta over to source
-					foreach ($meta as $metaKey => $metaValue) {
-						$source[$metaKey] = $metaValue;
-					}
-				}
+				// Get the system source
+				$systemSourceId = $source['system_source_id'] ?? '';
+				$systemSource = $this->getSourceByKey($systemSourceId);
+				if ($systemSource === null) {
+					return [
+						'error' => 'Missing or invalid system source id. The system source may have been deleted. Please refresh the page.',
+					];
+				} 
 				$meta = $source;
 				// Resolve title and description
-				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0
 					? trim($payload['title']) : $meta['title'];
-				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0
 					? trim($payload['description']) : $meta['description'];
 				// Store metadata
 				$metaJson = $this->romeJsonEncode($meta);
@@ -2205,12 +2212,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
 				}
 			}
-
 			$type = $meta['type'];
-			$from_system = true;
-
 			return [
-				'source' => $this->prepSourceForClient($meta, $setting_key, $type, $from_system),
+				'source' => $this->prepSourceForClient($meta, $setting_key, $type),
 			];
 		} catch (Throwable $e) {
 			return [
@@ -2245,16 +2249,16 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				if ($fileName === '' || $fileContent === '') {
 					throw new Exception('Invalid or empty file');
 				}
-				list ($setting_key, $meta) = $this->tryStoreNewLocalSource([
+				list($setting_key, $meta) = $this->tryStoreNewLocalSource([
 					'fileName' => $fileName,
 					'fileContent' => $fileContent,
 					'project_id' => $payload['context'] === 'configure' ? null : $this->project_id,
 					'current_id' => null,
 				]);
 				// Resolve title and description
-				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0
 					? trim($payload['title']) : $meta['title'];
-				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0
 					? trim($payload['description']) : $meta['description'];
 				// Set enabled to true
 				$meta['enabled'] = true;
@@ -2265,8 +2269,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				} else {
 					$this->framework->setProjectSetting($setting_key, $metaJson, $this->project_id);
 				}
-			}
-			else {
+			} else {
 				// Existing entries must have a an existing docId or a replacement file
 				$source = $this->getSourceByKey($id);
 				if (!is_array($source)) {
@@ -2279,7 +2282,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$fileContent = trim($payload['fileContent'] ?? '');
 				if ($fileContent !== '' && $fileName !== '') {
 					// Replace file
-					list ($_, $meta) = $this->tryStoreNewLocalSource([
+					list($_, $meta) = $this->tryStoreNewLocalSource([
 						'fileName' => $fileName,
 						'fileContent' => $fileContent,
 						'project_id' => $payload['context'] === 'configure' ? null : $this->project_id,
@@ -2292,9 +2295,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				}
 				$meta = $source;
 				// Resolve title and description
-				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0 
+				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0
 					? trim($payload['title']) : $meta['title'];
-				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0 
+				$meta['description_resolved'] = strlen(trim($payload['description'])) > 0
 					? trim($payload['description']) : $meta['description'];
 				// Store metadata
 				$metaJson = $this->romeJsonEncode($meta);
@@ -2408,7 +2411,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			)
 			)->format('Y-m-d\TH:i:s\Z'),
 		];
-		return [ $setting_key, $meta_stub ];
+		return [$setting_key, $meta_stub];
 	}
 
 	function mapLocalResourceKind($kind)
@@ -2462,8 +2465,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$acronym = $source['meta']['acronym'] ?? null;
 			if ($acronym === null) throw new Exception('Invalid source - missing acronym');
 			$cacheKey = $this->generateBioPortalSearchCacheKey($acronym, $q);
-		}
-		else if ($source['kind'] === 'snowstorm') {
+		} else if ($source['kind'] === 'snowstorm') {
 			$cacheKey = $this->generateSnowstormSearchCacheKey($source['meta'], $q);
 		}
 		// Success?
@@ -2567,7 +2569,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $details;
 	}
 
-	function getBioPortalResultIdPrefix($acronym, $token) 
+	function getBioPortalResultIdPrefix($acronym, $token)
 	{
 		$bp = $this->getBioPortalApiDetails();
 		$base = $bp['api_url'];
@@ -2592,8 +2594,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'apikey' => $token,
 			];
 			$url = $base . 'search?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
-	
-	
+
+
 			$resp = http_get($url, 5, '', $headers, $ua);
 			try {
 				$json = json_decode($resp, true, 512, JSON_THROW_ON_ERROR);
@@ -2615,8 +2617,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					$id_prefix = mb_substr($id, 0, $id_len - ($val_len - $val_pos));
 					break;
 				}
-			}
-			catch (\Throwable $e) {
+			} catch (\Throwable $e) {
 				// do nothing
 			}
 		}
@@ -2705,7 +2706,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$token = (string)($bp['api_token'] ?? '');
 		$meta = $source['meta'] ?? [];
 		if ($meta['credentials'] !== '') {
-			$token = $this->decryptCredentials($meta['credentials']);
+			$token = $this->decryptCredentials($meta['credentials'])['t'];
 		}
 		// Some checks
 		if (empty($token)) throw new Exception('Invalid source metadata - missing BioPortal API token');
@@ -2840,7 +2841,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if ($q === '' || $limit <= 0) return $out;
 
 		$meta = $source['meta'];
-		
+
 		$baseUrl = trim((string)($meta['baseurl'] ?? ''));
 		if ($baseUrl === '') throw new Exception('Snowstorm base URL not set.');
 		$auth = strtolower(trim((string)($meta['auth'] ?? 'none')));
@@ -2886,7 +2887,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
 		$curlErr = curl_error($ch);
 		if (!empty($curlErr)) throw new Exception('Failed to execute Snowstorm request: ' . $curlErr);
-		
+
 		$json = json_decode($body, true, flags: JSON_THROW_ON_ERROR);
 
 		if (is_array($json['items'] ?? null)) {
@@ -2907,7 +2908,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'score' => 1,
 				];
 			}
-		} 
+		}
 
 		// Store into cache (even if empty, cache empties to avoid hammering)
 		$cacheKey = $this->generateSnowstormSearchCacheKey($meta, $q);
@@ -2929,7 +2930,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	{
 		// We cache snowstorm results by snowstorm server/branch
 		// For this, we generate a hash of baseurl + branch and use the first 10 chars of it
-		$server = $meta['baseurl'].','.$meta['branch'];
+		$server = $meta['baseurl'] . ',' . $meta['branch'];
 		$hash_fragment = strtoupper(left(hash('sha256', $server), 10));
 
 		$qNorm = mb_strtolower(trim($q));

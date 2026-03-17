@@ -706,7 +706,7 @@
 		});
 
 		// Public
-		editSystemSource = function (source, file) {
+		editSystemSource = function (source) {
 			openSystemSourceDialog('edit', source);
 		};
 
@@ -754,8 +754,11 @@
 					$('#rome_system_description').val(sourceData.description_resolved || '');
 				}
 				$('#rome-system-source-info').text(sourceData.info || '');
+				$('#rome-system-sources-table-wrapper').addClass('d-none');
+				setSystemSourceInfo(sourceData);
 			} else {
 				$titleEl.text('Add a system source');
+				$('#rome-system-sources-table-wrapper').removeClass('d-none');
 			}
 			bsModal.show();
 		};
@@ -1014,9 +1017,12 @@
 		 */
 		function renderEnabledColumn(row) {
 			const enabled = (row?.enabled ?? false) === true;
+			const disabled = (typeof row.system_state === 'string' && row.system_state !== 'enabled') ? 'disabled' : '';
+			const disabledIcon = disabled !== '' ? `<i class="fa-solid fa-lock fa-sm text-${row.system_state === 'deleted' ? 'danger' : 'warning'} ms-1"></i>` : '';
 			return `
 				<div class="form-check form-switch text-success">
-					<input class="form-check-input" type="checkbox" role="switch" data-source="${row.key}" data-action="toggle-enabled" ${enabled ? 'checked' : ''}></input>
+					<input class="form-check-input" type="checkbox" role="switch" data-source="${row.key}" data-action="toggle-enabled" ${enabled ? 'checked' : ''} ${disabled}>
+					${disabledIcon}
 				</div>`;
 		}
 
@@ -1029,6 +1035,7 @@
 			return `
 				<div class="rome-source-title">${escapeHTML(row.title_resolved)}</div>
 				<div class="rome-source-description">${escapeHTML(row.description_resolved)}</div>
+				${(typeof row.system_state === 'string' && row.system_state !== 'enabled') ? `<div class="rome-source-state">${escapeHTML(row.message)}</div>` : ''}
 			`;
 		}
 
@@ -1057,7 +1064,7 @@
 			const delBtn = `
 				<button type="button" class="btn btn-sm btn-link text-danger p-0" title="Delete this source" data-source="${row.key}" data-action="delete"><i class="fa fa-trash-alt"></i></button>`;
 			const editBtn = `
-				<button type="button" class="btn btn-sm btn-link text-secondary p-0 me-2" title="Edit this source" data-source="${row.key}" data-action="edit"><i class="fa fa-pencil"></i></button>`;
+				<button type="button" class="btn btn-sm btn-link text-secondary p-0 me-2" title="Edit this source" data-source="${row.key}" ${row.system_state === 'deleted' ? 'disabled' : ''} data-action="edit"><i class="fa fa-pencil"></i></button>`;
 
 			return editBtn + delBtn;
 		}
@@ -1109,7 +1116,10 @@
 
 		async function editSource(key, $btn) {
 			const source = config.sources.find(s => s.key === key);
-			if (source.type === 'local') {
+			if (source.from_system) {
+				editSystemSource(source);
+			}
+			else if (source.type === 'local') {
 				// We need to get file details from the server
 				try {
 					const res = await JSMO.ajax('get-source-file-info', { key });

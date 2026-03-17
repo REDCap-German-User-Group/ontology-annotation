@@ -182,6 +182,14 @@ h2 {
 	white-space: pre;
 	margin-left: .2em;
 }
+.rome-sources-table .rome-source-state {
+	font-size: 85%;
+	font-weight: 400;
+	margin-left: .2em;
+	color: var(--bs-danger);
+}
+
+
 .rome-sources-table .rome-source-stats {
 	font-size: 85%;
 }
