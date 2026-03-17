@@ -2100,7 +2100,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 	}
 
-	private function getSourceByKey($key)
+	public function getSourceByKey($key)
 	{
 		$key = trim("$key");
 		if ($key === '') return null;

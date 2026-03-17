@@ -109,6 +109,9 @@ foreach ($jobs_by_kind as $kind => $jobs) {
 	foreach ($jobs as $job) {
 		$sid = $job['sid'];
 		$source = $sources[$sid];
+		if ($source['meta']['from_system']) {
+			$source['meta'] = $module->getSourceByKey($source['meta']['system_source_id']);
+		}
 		try {
 			$result = $module->searchCached($cache, $job['q'], $source);
 			if ($result === null) {
@@ -161,6 +164,9 @@ do {
 		// Process
 		$sid = $job['sid'];
 		$source = $sources[$sid];
+		if ($source['meta']['from_system']) {
+			$source['meta'] = $module->getSourceByKey($source['meta']['system_source_id']);
+		}
 		try {
 			$results[$sid] = $module->searchBioPortal($cache, $job['q'], $source, $limitPerSource);
 			// Mark jobs as done
