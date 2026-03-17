@@ -1,0 +1,190 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://github.com/REDCap-German-User-Group/ontology-annotation/schemas/rome-annotation.schema.json",
+	"title": "ROME Ontology Export Schema",
+	"type": "object",
+	"required": [
+		"resourceType",
+		"meta",
+		"dataElements"
+	],
+	"properties": {
+		"resourceType": {
+			"const": "ROME_Ontology_Annotations"
+		},
+		"meta": {
+			"type": "object",
+			"required": [
+				"version",
+				"created",
+				"creator"
+			],
+			"properties": {
+				"version": {
+					"type": "string"
+				},
+				"created": {
+					"type": "string",
+					"format": "date-time"
+				},
+				"updated": {
+					"type": "string",
+					"format": "date-time"
+				},
+				"creator": {
+					"type": "string"
+				},
+				"language": {
+					"type": "string"
+				},
+				"profile": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"format": "uri"
+					}
+				}
+			},
+			"additionalProperties": true
+		},
+		"dataElements": {
+			"type": "array",
+			"items": {
+				"$ref": "#/$defs/DataElement"
+			}
+		}
+	},
+	"additionalProperties": true,
+	"$defs": {
+		"Coding": {
+			"type": "object",
+			"required": [
+				"system",
+				"code"
+			],
+			"properties": {
+				"system": {
+					"type": "string",
+					"format": "uri"
+				},
+				"code": {
+					"type": "string"
+				},
+				"display": {
+					"type": "string"
+				}
+			},
+			"additionalProperties": true
+		},
+		"CodeableConcept": {
+			"type": "object",
+			"required": [
+				"coding",
+				"text"
+			],
+			"properties": {
+				"coding": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/Coding"
+					},
+					"minItems": 1
+				},
+				"text": {
+					"type": "string"
+				}
+			},
+			"additionalProperties": true
+		},
+		"ValueCodingMapEntry": {
+			"type": "object",
+			"required": [
+				"text",
+				"coding"
+			],
+			"properties": {
+				"text": {
+					"type": "string"
+				},
+				"coding": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/Coding"
+					},
+					"minItems": 1
+				}
+			},
+			"additionalProperties": true
+		},
+		"DataElement": {
+			"type": "object",
+			"required": [
+				"name",
+				"text",
+				"type",
+				"coding"
+			],
+			"properties": {
+				"name": {
+					"type": "string"
+				},
+				"text": {
+					"type": "string"
+				},
+				"type": {
+					"type": "string",
+					"enum": [
+						"radio",
+						"checkbox",
+						"dropdown",
+						"number",
+						"text",
+						"date",
+						"datetime",
+						"yesno",
+						"truefalse"
+					]
+				},
+				"coding": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/Coding"
+					},
+					"minItems": 1
+				},
+				"format": {
+					"type": "string",
+					"enum": [
+						"email",
+						"url",
+						"phone"
+					]
+				},
+				"numericType": {
+					"type": "string",
+					"enum": [
+						"integer",
+						"decimal"
+					]
+				},
+				"precision": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"unit": {
+					"$ref": "#/$defs/CodeableConcept"
+				},
+				"valueCodingMap": {
+					"type": "object",
+					"patternProperties": {
+						"^[^\\s]+$": {
+							"$ref": "#/$defs/ValueCodingMapEntry"
+						}
+					},
+					"additionalProperties": true
+				}
+			},
+			"additionalProperties": true
+		}
+	}
+}

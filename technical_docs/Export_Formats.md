@@ -6,7 +6,7 @@ Example: A radio field, _Education Level_, with three options.
 
 ```jsonc
 {
-    "resourceType": "ROME_Ontology_Annotation",
+    "resourceType": "ROME_Ontology_Annotations",
     // For exports, the value for url will be set to the base url of the
     // originating REDCap instance + project id [ + form name/report id]
     // depending on the export scope.
