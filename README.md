@@ -43,7 +43,7 @@ This module provides a user interface (accessible at various places) that facili
 
 The full annotation is captures as a JSON structure in the `@ONTOLOGY` action tag inside the _Field Annotation_ of a field. 
 
-Thus, annotations are integral parts of fields and consequently part of the data dictionary. The annotation format is described in detail [here](docs/Annotation_Format.md).
+Thus, annotations are integral parts of fields and consequently part of the data dictionary. The annotation format is described in detail [here](technical_docs/Annotation_Format.md).
 
 ## Installation
 

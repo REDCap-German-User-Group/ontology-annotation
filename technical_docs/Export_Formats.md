@@ -1,19 +1,16 @@
-# Annotation Format
+# Export Formats
 
-This document describes the format of the `@ONTOLOGY` action tag parameter (a JSON string).
+This document describes the formats ROME annotations can be exported.
 
 Example: A radio field, _Education Level_, with three options.
 
-`@ONTOLOGY=`
 ```jsonc
 {
-    // Note: `resourceType` is not present in the action tag.
     "resourceType": "ROME_Ontology_Annotation",
-    // Note: `url` is not present in the action tag. For exports, the value will be set to
-    // the base url of the originating REDCap instance + project id [ + form name/report id]
+    // For exports, the value for url will be set to the base url of the
+    // originating REDCap instance + project id [ + form name/report id]
     // depending on the export scope.
     "url": "https://...",
-    // Note: `meta` is not present in export files and added for exports only
     "meta": {
         "version": "1.0.0",
         "created": "2025-07-25T12:45:00+02:00",
@@ -24,71 +21,67 @@ Example: A radio field, _Education Level_, with three options.
             "https://..."
         ]
     },
-    "dataElement": {
-        // Note: `name` and `label` are not present in the action tag - they are 
-        // generated (from the REDCap field) when the ontology annotations are exported
-        "name": "education_level",
-        "label": "Höchster Bildungsabschluss",
-        // Note: `type` is not present in the action tag - it is generated (from the REDCap field) when the ontology annotations are exported. This is true for all type-related fields.
-        "type": "radio",
-        "coding": [
-            {
-                "system": "http://loinc.org",
-                "code": "82589-3",
-                "display": "Highest level of education",
-                "version": "Version of the Ontology" // Optional/when available
-            },
-            {
-                "system": "https://snomed.info/sct",
-                "code": "276031006",
-                "display": "Details of education (observable entity)"
-            }
-        ],
-        "text": "Höchster erreichter Bildungsabschluss",
-        "valueCodingMap": {
-            "1": {
-                // `label` is the REDCap label - only added for multi-field export (derived from REDCap metadata)
-                "label": "Kein Abschluss", 
-                "coding": [
+    "dataElements": [
+        {
+            // Note: `name` and `text` correspond to the REDCap field name and label
+            "name": "education_level",
+            "text": "Höchster erreichter Bildungsabschluss",
+            // Note: `type` is generated from the REDCap field type
+            "type": "radio",
+            "coding": [
                 {
-                    "system": "http://snomed.info/sct",
-                    "code": "410594000",
-                    "display": "No formal education"
-                }
-                ],
-                "text": "Kein formaler Abschluss"
-
-            },
-            "2": {
-                "label": "Schulabschluss",
-                "coding": [
+                    "system": "http://loinc.org",
+                    "code": "82589-3",
+                    "display": "Highest level of education",
+                    "version": "Version of the Ontology" // Optional/when available
+                },
                 {
-                    "system": "http://snomed.info/sct",
-                    "code": "289131004",
-                    "display": "Completed secondary education"
+                    "system": "https://snomed.info/sct",
+                    "code": "276031006",
+                    "display": "Details of education (observable entity)"
                 }
-                ],
-                "text": "Abschluss einer weiterführenden Schule"
-            },
-            "3": {
-                "label": "Hochschulabschluss",
-                "coding": [
-                {
-                    "system": "http://snomed.info/sct",
-                    "code": "229710002",
-                    "display": "Completed higher education"
+            ],
+            "valueCodingMap": {
+                "1": {
+                    // `text` is the REDCap choice label
+                    "text": "Kein formaler Abschluss",
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "410594000",
+                            "display": "No formal education"
+                        }
+                    ]
+                },
+                "2": {
+                    "text": "Abschluss einer weiterführenden Schule",
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "289131004",
+                            "display": "Completed secondary education"
+                        }
+                    ]
+                },
+                "3": {
+                    "text": "Abschluss einer Hochschule oder Universität",
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "229710002",
+                            "display": "Completed higher education"
+                        }
+                    ]
                 }
-                ],
-                "text": "Abschluss einer Hochschule oder Universität"
             }
         }
-    }
+    ]
 }
 ```
 
 Notes:
 - `name` is the REDCap field name. It is not present in the field's ontology annotation, but must be added for multi-field ontology exports
-- `label` is the REDCap field/choice label. It is not present in the field's ontology annotation, but must be added for multi-field ontology exports.
+- `text` is the REDCap field/choice label. It is not present in the field's ontology annotation, but must be added for multi-field ontology exports.
 
 ## Metadata (`meta`)
 
@@ -98,7 +91,7 @@ Notes:
     "created": "2025-07-25T12:25:00+02:00",   // Initial annotation
     "updated": "2025-07-25T14:00:00+02:00",   // When this field's annotation was last changed
     "creator": "ROME v1.0.0",                 // Tool used to create the annotation
-    "language": "de",                         // The language of REDCap field-derived labels
+    "language": "de",                         // The language of REDCap field-derived labels (only available when MLM is configured)
     "profile": [
         "https://..."
     ]
@@ -122,6 +115,7 @@ a) Export JSON
     },
     "dataElement": {
         "name": "email",
+        "text": "E-Mail-Adresse des Patienten",
         "type": "text",
         "format": "email",
         "coding": [
@@ -130,29 +124,10 @@ a) Export JSON
                 "code": "424966008",
                 "display": "Patient email address"
             }
-        ],
-        "text": "E-Mail-Adresse des Patienten"
+        ]
     }
 }
 ```
-
-b) Inline @ONTOLOGY annotation
-
-```json
-{
-    "dataElement": {
-        "coding": [
-            {
-                "system": "http://snomed.info/sct",
-                "code": "424966008",
-                "display": "Patient email address"
-            }
-        ],
-    }
-}
-```
-
-
 
 Example of a numerical data type (height) with a unit
 
@@ -168,20 +143,18 @@ Example of a numerical data type (height) with a unit
     },
     "dataElement": {
         "name": "body_height",
-        "label": "Körpergröße",
+        "text": "Körpergröße in cm (auf mm genau)",
         "type": "number",
         "numericType": "decimal",
         "precision": 1,
         "unit": {
-            // Optional, this could also reference another field if the unit is flexible - TODO: Which keyword? Maybe: "ref": "fieldname"
             "coding": [
                 {
                 "system": "http://unitsofmeasure.org",
                 "code": "cm",
                 "display": "Zentimeter"
                 }
-            ],
-            "text": "cm"
+            ]
         },
         "coding": [
             {
@@ -189,8 +162,7 @@ Example of a numerical data type (height) with a unit
                 "code": "8302-2",
                 "display": "Body height"
             }
-        ],
-        "text": "Körpergröße in cm (auf mm genau)"
+        ]
     }
 }
 ```
