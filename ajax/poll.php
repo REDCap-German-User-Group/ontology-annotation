@@ -145,6 +145,9 @@ do {
 		// Process
 		$sid = $job['sid'];
 		$source = $sources[$sid];
+		if ($source['meta']['from_system']) {
+			$source['meta'] = $module->getSourceByKey($source['meta']['system_source_id']);
+		}
 		try {
 			$results[$sid] = $module->searchSnowstorm($cache, $job['q'], $source, $limitPerSource);
 			// Mark jobs as done
@@ -185,7 +188,7 @@ while (false);
 foreach ($pending_by_kind as $kind => $jobs) {
 	foreach ($jobs as $job) {
 		$pending[$job['sid']] = [
-			'token' => $token,
+			'token' => $job['token'],
 			'after_ms' => 20, // can be more or less immediate
 		];
 	}

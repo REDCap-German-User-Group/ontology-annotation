@@ -1830,7 +1830,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	function getMaxSearchResultsPerSource(): int
 	{
 		// TODO: Make this configurable
-		return 20;
+		return 25;
 	}
 
 
@@ -2907,7 +2907,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			foreach ($json['items'] as $concept) {
 				if (($concept['active'] ?? false) === false) continue;
 				$concept_id = $concept['conceptId'] ?? null;
-				if ($concept_id === null || preg_match('/^(999|1[0-9]{9,})/', $concept_id)) continue;
+				// if ($concept_id === null || preg_match('/^(999|1[0-9]{9,})/', $concept_id)) continue;
 
 				$display = $concept['pt']['term'] ?? $concept['fsn']['term'] ?? 'Unknown';
 
@@ -2915,7 +2915,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					'system' => 'http://snomed.info/sct',
 					'code' => $concept_id,
 					'display' => $display,
-					'score' => 1,
+					'score' => 1, // TODO: Add some sensible weighting, e.g., is the search term present in full?
 				];
 			}
 		}

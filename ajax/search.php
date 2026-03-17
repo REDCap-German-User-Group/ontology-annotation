@@ -193,7 +193,7 @@ function deferSearch($q, $rid, $sid, $cache, &$pending) {
 			'sid' => $sid,
 			'created_at' => time(),
 		],
-		300, // 5 min TTL
+		600, // 10 min TTL
 		[]
 	);
 
