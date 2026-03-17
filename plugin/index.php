@@ -83,7 +83,7 @@ if (!$module->checkCacheConfigured()) {
 ?>
 
 <h1 class="projhdr">
-	<i class="fa-solid fa-tags"></i> ROME: REDCap Ontology Annotations Made Easy
+	<i class="fa-solid fa-tags"></i> ROME: REDCap Ontologies Made Easy
 </h1>
 
 <p>

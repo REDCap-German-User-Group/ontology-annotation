@@ -18,7 +18,7 @@ if (!defined('ROME_PLUGIN_PAGE')) exit;
 
 ?>
 <div class="rome-plugin-page">
-	<h2>Exporting Ontology Annotations Made Easy</h2>
+	<h2>Exporting from ROME: REDCap Ontologies Made Easy</h2>
 	<p class="text-muted">
 		Export options will appear here soon &hellip;
 	</p>
