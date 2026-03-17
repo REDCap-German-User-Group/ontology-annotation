@@ -202,3 +202,12 @@ h2 {
 	display: flex;
 	white-space: nowrap;
 }
+
+
+.rome-plugin-page p,
+.rome-plugin-page ul {
+	margin: 3px 0 0 0;
+}
+.rome-plugin-page h3 {
+	margin: 15px 0 5px 0;
+}
