@@ -1,0 +1,213 @@
+#sub-nav {
+	margin-bottom: 1em;
+	display: flex;
+}
+
+#sub-nav a[data-nav-link] {
+	color: #666;
+	font-size: 13px;
+	padding: 7px 9px;
+}
+#sub-nav .active a[data-nav-link] {
+	color: black;
+}
+
+#rome-tab {
+	clear: both;
+}
+
+.rome-title-from-file, 
+.rome-description-from-file,
+.rome-title-from-source, 
+.rome-description-from-source {
+	font-size: 11px;
+	line-height: 14px;
+	color: #999;
+	font-style: italic;
+	margin: .3em;
+	max-height: 42px;
+	overflow-y: auto;
+	white-space: pre;
+}
+
+
+.rome-plugin-page {
+	max-width: 900px;
+}
+
+.rome-code {
+	padding: 5px;
+	border: 1px solid #e5e5e5;
+	border-radius: 8px;
+}
+.rome-code pre {
+	padding: 0;
+	margin: 0;
+	border: none;
+	background-color: transparent;
+	line-height: unset;
+}
+
+h2 {
+	font-size: 15px;
+	font-weight: 700;
+}
+
+
+.rome-discover-select-container {
+	display: flex;
+	align-items: center;
+	justify-content: stretch;
+}
+.rome-discover-select-waiter {
+	display: flex;
+	align-items: center;
+}
+.rome-discover-select-container:has(.ts-wrapper) .rome-discover-select-waiter {
+	display: none;
+}
+.rome-discover-select-container .ts-wrapper {
+	width: 100%;
+}
+
+.rome-no-annotations {
+	font-weight: bold;
+}
+
+
+.rome-plugin-page h3 {
+    font-size: 13px;
+    font-weight: bold;
+	margin: 2em 0 0 0;
+}
+
+
+.rome-sources-table {
+	width: auto;
+}
+
+.rome-system-sources-table {
+	width: 100% !important;
+}
+
+
+.rome-sources-col-title {
+	width: 350px;
+	max-width: 350px;
+}
+.rome-system-sources-table td:nth-child(3) {
+	cursor: pointer;
+}
+.rome-sources-col-type {
+	width: 50px;
+	max-width: 50px;
+}
+.rome-sources-col-enabled {
+	width: 70px;
+	max-width: 70px;
+}
+.rome-sources-col-checked {
+	width: 40px;
+	max-width: 40px;
+}
+.rome-sources-col-stats {
+	width: 100px;
+	max-width: 100px;
+}
+.rome-sources-col-actions {
+	width: 100px;
+	max-width: 100px;
+}
+.rome-config-block {
+	margin-left: .5em;
+}
+
+
+#rome-file-drop-area {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 35px;
+    margin: 0;
+    border: 1px dashed #ccc;
+    border-radius: 3px;
+    transition: 0.2s;
+    cursor: pointer;
+    font-size: 15px;
+    color: #888;
+    background-color: #fff;
+}
+#rome-file-drop-area em {
+	color: var(--bs-primary);
+	font-style: normal;
+
+}
+#rome-file-drop-message {
+    text-align: center;
+    width: 100%;
+}
+.rome-file-drop-file-input {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 100%;
+    cursor: pointer;
+    opacity: 0;
+}
+
+
+.rome-plugin-page .form-switch {
+	min-height: 0;
+	margin-bottom: 0;
+}
+
+#rome-sources .form-check-input:checked {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+#rome-sources td {
+	padding: 4px 10px;
+}
+
+.rome-sources-table .rome-source-title {
+	font-weight: 400;
+}
+.rome-sources-table .rome-source-description {
+	font-size: 85%;
+	font-weight: 400;
+	font-style: italic;
+	white-space: pre;
+	margin-left: .2em;
+}
+.rome-sources-table .rome-source-state {
+	font-size: 85%;
+	font-weight: 400;
+	margin-left: .2em;
+	color: var(--bs-danger);
+}
+
+
+.rome-sources-table .rome-source-stats {
+	font-size: 85%;
+}
+.rome-sources-table .dataTables_empty {
+	font-style: italic;
+	color: var(--bs-secondary);
+}
+
+.rome-bioportal-token-group {
+	display: flex;
+	white-space: nowrap;
+}
+
+
+.rome-plugin-page p,
+.rome-plugin-page ul {
+	margin: 3px 0 0 0;
+}
+.rome-plugin-page h3 {
+	margin: 15px 0 5px 0;
+}

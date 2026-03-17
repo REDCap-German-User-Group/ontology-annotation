@@ -1,7 +1,130 @@
 <?php
 
+namespace DE\RUB\OntologiesMadeEasyExternalModule;
+
+/** @var OntologiesMadeEasyExternalModule $module */
+
+if (!defined('ROME_PLUGIN_PAGE')) define('ROME_PLUGIN_PAGE', true);
+
+$ih = $module->getInjectionHelper();
+$ih->js("js/ConsoleDebugLogger.js");
+$ih->js("js/ROME_Plugins.js");
+$ih->css("css/ROME.css");
+$module->framework->initializeJavascriptModuleObject();
+$jsmo_name = $module->framework->getJavascriptModuleObjectName();
+
+$user = $module->framework->getUser();
+if ($user == null) exit;
+
+$is_project = $module->initProject(defined('PROJECT_ID') ? PROJECT_ID : null);
+$module->initConfig();
+
+$annotate_enabled = $is_project && ($user->hasDesignRights() || $user->isSuperUser());
+$manage_enabled = $module->canManage();
+$configure_enabled = $module->canConfigure();
+
+$nav_tabs = [
+	"about" => [
+		"label" => "About",
+		"icon" => "fa-solid fa-info",
+		"enabled" => true,
+	],
+	"annotate" => [
+		"label" => "Annotate",
+		"icon" => "fa-solid fa-diagram-project",
+		"enabled" => $annotate_enabled,
+	],
+	"discover" => [
+		"label" => "Discover",
+		"icon" => "fa-solid fa-search",
+		"enabled" => true,
+	],
+	"utilities" => [
+		"label" => "Utilities",
+		"icon" => "fa-solid fa-wrench",
+		"enabled" => true,
+	],
+	"export" => [
+		"label" => "Export",
+		"icon" => "fa-solid fa-arrow-up-right-from-square",
+		"enabled" => $is_project,
+	],
+	"manage" => [
+		"label" => "Manage",
+		"icon" => "fa-solid fa-list-check",
+		"enabled" => $manage_enabled,
+	],
+	"configure" => [
+		"label" => "Global Configuration",
+		"icon" => "fa-solid fa-gear",
+		"enabled" => $configure_enabled,
+	]
+];
+$default_tab = "about";
+if ($is_project && $annotate_enabled) { $default_tab = "annotate"; }
+if (!$is_project) { $default_tab = "configure"; }
+// Filter out disabled tabs
+$enabled_nav_tabs = array_filter($nav_tabs, function ($tab) {
+	return $tab['enabled']; 
+});
+// Set active tab
+$active_tab = array_key_exists($_GET['tab'], $enabled_nav_tabs) ? $_GET['tab'] : $default_tab;
+// Get JavaScriptconfiguration for the tab
+$config = $module->getPluginConfig($active_tab);
+
+// Check if cache config is configured
+$rome_cache_status = 'ok';
+if (!$module->checkCacheConfigured()) {
+	$active_tab = 'about';
+	$rome_cache_status = 'not-configured';
+}
+
+// Render page
 ?>
+
 <h1 class="projhdr">
-	<i class="fa-solid fa-tree"></i> ROME: REDCap Ontologies Made Easy
+	<i class="fa-solid fa-tags"></i> ROME: REDCap Ontologies Made Easy
 </h1>
-<p>Ontologies Made Easy is a REDCap external module that facilitates adding and editing ontology annotations.</p>
+
+<p>
+	ROME is a REDCap external module that facilitates adding and editing ontology
+	annotations to data elements in a project and searching for annotations accross multiple
+	projects on a REDCap instance.
+</p>
+
+<div id="sub-nav" class="d-sm-block mb-3">
+	<ul>
+		<?php foreach ($enabled_nav_tabs as $tab => $tab_info): ?>
+			<li class="<?= $active_tab == $tab ? 'active' : '' ?>">
+				<a href="<?= $module->getUrl("plugin/index.php?tab={$tab}") ?>" data-nav-link="<?= $tab ?>">
+					<i class="<?= $tab_info['icon'] ?>"></i> <?= $tab_info['label'] ?>
+				</a>
+			</li>
+		<?php endforeach; ?>
+	</ul>
+</div>
+
+<div id="rome-tab">
+	<?php include __DIR__ . "/tabs/{$active_tab}.php"; ?>
+</div>
+
+<?php if ($active_tab !== 'about'): ?>
+<script>
+	$(function() {
+		if (window.DE_RUB_ROME && window.DE_RUB_ROME.init) {
+			window.DE_RUB_ROME.init(<?= $module->romeJsonEncode($config); ?>, <?= $jsmo_name ?>);
+		}
+	});
+</script>
+<?php endif; ?>
+
+<?php
+
+// More page-specific includes
+if ($active_tab === 'manage' || $active_tab === 'configure') {
+	include __DIR__ . "/templates/remote-source-dialog.php";
+	include __DIR__ . "/templates/local-source-dialog.php";
+	if ($active_tab === 'manage') {
+		include __DIR__ . "/templates/system-source-dialog.php";
+	}
+}
