@@ -2755,6 +2755,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$display = isset($r['prefLabel']) && is_string($r['prefLabel']) ? trim($r['prefLabel']) : '';
 			if ($display === '' && isset($r['label']) && is_string($r['label'])) $display = trim($r['label']);
 			if ($display === '') continue;
+			$display = html_entity_decode($display, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 			// Prefer notation when present (canonical codes)
 			$code = isset($r['notation']) && is_string($r['notation']) ? trim($r['notation']) : '';
 			if ($code === '') {
