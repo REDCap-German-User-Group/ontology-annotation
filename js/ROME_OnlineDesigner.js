@@ -371,6 +371,12 @@
 					stub.dataElement.coding.push(r.annotation);
 				});
 			const isEmpty = (stub.dataElement.coding.length === 0 && Object.keys(stub.dataElement.valueCodingMap).length === 0);
+			if (stub.dataElement.coding.length === 0) {
+				delete stub.dataElement.coding;
+			}
+			if (Object.keys(stub.dataElement.valueCodingMap).length === 0) {
+				delete stub.dataElement.valueCodingMap;
+			}
 			const jsonString = isEmpty ? '' : `${config.atName}=${JSON.stringify(stub, null, 2)}`;
 			const prevParsed = odState.parseResults[rowId] ?? null;
 			if (prevParsed.start === -1) {
@@ -913,6 +919,9 @@
 	 * @returns {boolean}
 	 */
 	function validateBeforeSave(onProceedAfterMissingChoiceWarning = null, skipMissingChoicePrompt = false) {
+
+		// TODO: Reimplement warning for missing choice targets and other issues
+		setAnnotations();
 
 		return true;
 
