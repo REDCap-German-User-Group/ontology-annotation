@@ -1,18 +1,10 @@
-// Ontology Made Easy EM - Online Designer Integration
+// ROME: REDCap Ontologies Made Easy EM - Online Designer Integration
 
 // TODOs
 // - [ ] Add a config option/filter to limit searching to selected ontologies (from those configured in
 //       the module settings).
 // - [ ] Add a schema validator (such as https://github.com/ajv-validator/ajv) to the module
 // - [ ] Allow the client to restrict search results to certain code systems (relevant for FhirQuestionnaire stuff). A list is already available.
-// - [ ] Cleanup of module logs and unused src_ settings
-
-
-
-// * Backend structure:
-//   Array, each row represents one annotation. Store coordinates (i.e., field, choice, unit).
-//   This will allow for easy manipulation; JSON can be generated from the array easily for both,
-//   regular fields and matrix fields.
 
 /// <reference types="jquery" />
 /// <reference types="jqueryui" />
@@ -71,7 +63,7 @@
 		JSMO = jsmo;
 
 		// Configure the logger
-		LOGGER.configure({ active: config.debug, name: 'ROME Online Designer', version: config.version });
+		LOGGER.configure({ active: config.debug, name: 'ROME', version: config.version });
 
 		// Configure the ontology parser
 		ontologyParser = createOntologyAnnotationParser({
@@ -1738,13 +1730,15 @@
 			odState.$error
 			.css('display', 'block')
 			.attr('data-bs-tooltip', 'hover')
-			.attr('title', errorMessage)
-			.tooltip('enable');
+			.attr('title', errorMessage);
+			const tt = new bootstrap.Tooltip(odState.$error.get(0));
+			tt.enable();
 		}
 		else {
 			odState.$error
-			.css('display', 'none')
-			.tooltip('disable');
+			.css('display', 'none');
+			const tt = new bootstrap.Tooltip(odState.$error.get(0));
+			tt.dispose();
 		}
 	}
 

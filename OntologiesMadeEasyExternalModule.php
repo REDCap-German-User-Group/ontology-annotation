@@ -32,6 +32,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	const AT_ONTOLOGY = '@ONTOLOGY';
 
+
+
 	#region Hooks
 
 	function redcap_module_link_check_display($project_id, $link)
@@ -138,6 +140,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	#endregion Hooks
 
 
+
 	#region Plugin Page Configuration
 
 	/**
@@ -171,6 +174,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	}
 
 	#endregion
+
 
 
 	#region Prepare Sources for Client Use
@@ -294,6 +298,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	#endregion
 
 
+
 	#region Set Configuration from plugin pages
 
 	private function requireProjectContext()
@@ -366,6 +371,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	#endregion
 
 
+
 	#region Online Designer
 
 	/**
@@ -387,6 +393,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			$errors[] = $this->tt('error_cache_not_configured');
 		} else {
 			$sources_list = $this->buildSourceRegistry($this->project_id)['list'];
+		}
+		if (count($sources_list) == 0) {
+			$errors[] = $this->tt('error_no_sources_configured');
 		}
 		$warnings = [];
 
