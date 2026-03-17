@@ -1,5 +1,5 @@
 {
-	"name": "ROME: REDCap Ontologies Made Easy",
+	"name": "ROME: REDCap Ontology Annotation Made Easy",
 	"tt_name": "module_name",
 	"namespace": "DE\\RUB\\OntologiesMadeEasyExternalModule",
 	"description": "A REDCap external module that facilitates adding and editing ontology annotations.",
