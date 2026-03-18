@@ -2909,7 +2909,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$concept_id = $concept['conceptId'] ?? null;
 				// if ($concept_id === null || preg_match('/^(999|1[0-9]{9,})/', $concept_id)) continue;
 
-				$display = $concept['pt']['term'] ?? $concept['fsn']['term'] ?? 'Unknown';
+				$display = $concept['fsn']['term'] ?? $concept['pt']['term'] ?? 'Unknown';
 
 				$out[] = [
 					'system' => 'http://snomed.info/sct',
