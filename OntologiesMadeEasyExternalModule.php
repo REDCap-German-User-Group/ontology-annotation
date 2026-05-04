@@ -36,13 +36,23 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#region Hooks
 
+	/**
+	 * Link check
+	 * @param int|string|null $project_id 
+	 * @param array $link 
+	 * @return array 
+	 */
 	function redcap_module_link_check_display($project_id, $link)
 	{
 		// Allow for all users in all contexts
 		return $link;
 	}
 
-	// Injection
+	/**
+	 * Injection
+	 * @param int|string|null $project_id 
+	 * @return void 
+	 */
 	function redcap_every_page_top($project_id)
 	{
 		// Only run in project context and on specific pages
@@ -59,7 +69,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
-	// Injection
+	/**
+	 * Injection
+	 * @param int|string|null $project_id 
+	 * @return void 
+	 */
 	function redcap_every_page_before_render($project_id)
 	{
 		// Only run in project context and on specific pages
@@ -75,7 +89,24 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 	}
 
-	// AJAX handler
+	/**
+	 * AJAX handler
+	 * @param string $action 
+	 * @param mixed $payload 
+	 * @param int|string $project_id 
+	 * @param string $record 
+	 * @param string $instrument 
+	 * @param string|int $event_id 
+	 * @param string|int $repeat_instance 
+	 * @param string $survey_hash 
+	 * @param string|int $response_id 
+	 * @param string $survey_queue_hash 
+	 * @param string $page 
+	 * @param string $page_full 
+	 * @param string $user_id 
+	 * @param string|int $group_id 
+	 * @return mixed
+	 */
 	function redcap_module_ajax($action, $payload, $project_id, $record, $instrument, $event_id, $repeat_instance, $survey_hash, $response_id, $survey_queue_hash, $page, $page_full, $user_id, $group_id)
 	{
 		$this->initProject($project_id);
