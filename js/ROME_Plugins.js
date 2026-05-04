@@ -850,6 +850,8 @@
 			});
 
 			$('#rome_local_source_id').val('');
+			$('#rome-title-from-file').text('');
+			$('#rome-description-from-file').text('');
 			$('#rome-file-input').val('');
 			localSourceFileContent = '';
 			localSourceFileName = '';
