@@ -128,7 +128,7 @@
 	}
 
 	function getSelectedExportFormat() {
-		return `${$('input[name="rome-export-format"]:checked').val() || 'native'}`;
+		return `${$('input[name="rome-export-format"]:checked').val() || 'native_rome'}`;
 	}
 
 	function getExportFormsForState(state) {

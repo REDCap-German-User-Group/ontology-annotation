@@ -16,7 +16,7 @@ $project = new \Project($module->getProjectId());
 $hasDraft = $project->isDraftMode();
 $defaultMetadataState = $hasDraft ? 'draft' : 'production';
 $formats = [
-	'native' => 'Native ROME JSON',
+	'native_rome' => 'Native ROME JSON',
 	'fhir_questionnaire' => 'FHIR Questionnaire',
 ];
 
@@ -58,7 +58,7 @@ $formats = [
 					<div class="d-flex align-items-center gap-3">
 						<?php foreach ($formats as $formatValue => $formatLabel): ?>
 							<label class="form-check-label">
-								<input type="radio" class="form-check-input" name="rome-export-format" value="<?= htmlspecialchars($formatValue, ENT_QUOTES) ?>" <?= $formatValue === 'native' ? 'checked' : '' ?>>
+								<input type="radio" class="form-check-input" name="rome-export-format" value="<?= htmlspecialchars($formatValue, ENT_QUOTES) ?>" <?= $formatValue === 'native_rome' ? 'checked' : '' ?>>
 								<?= htmlspecialchars($formatLabel) ?>
 							</label>
 						<?php endforeach; ?>

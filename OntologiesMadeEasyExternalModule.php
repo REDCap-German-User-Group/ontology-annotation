@@ -261,7 +261,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'states' => $stateConfigs,
 			'forms' => $stateConfigs[$defaultMetadataState]['forms'] ?? [],
 			'formats' => [
-				['value' => 'native', 'label' => 'Native ROME JSON'],
+				['value' => 'native_rome', 'label' => 'Native ROME JSON'],
 				['value' => 'fhir_questionnaire', 'label' => 'FHIR Questionnaire'],
 			],
 			'hasDraft' => $hasDraft,
@@ -275,8 +275,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if (!is_array($forms)) $forms = [];
 		$forms = array_values(array_filter(array_map('strval', $forms)));
 
-		$format = (string)($payload['format'] ?? 'native');
-		if (!in_array($format, ['native', 'fhir_questionnaire'], true)) {
+		$format = (string)($payload['format'] ?? 'native_rome');
+		if (!in_array($format, ['native_rome', 'fhir_questionnaire'], true)) {
 			throw new Exception('Unsupported export format.');
 		}
 
@@ -521,6 +521,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'creator' => 'ROME ' . $this->VERSION,
 				'metadataState' => $metadataState,
 			],
+			'title' => $this->buildExportTitle(),
+			'description' => $this->buildExportDescription(),
 			'dataElements' => $out,
 		];
 	}
@@ -615,7 +617,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'resourceType' => 'Questionnaire',
 			'url' => $this->getExportSourceUrl(),
 			'status' => 'active',
-			'title' => 'ROME ontology annotations',
+			'title' => $this->buildExportTitle(),
+			'description' => $this->buildExportDescription(),
 			'date' => date('c'),
 			'publisher' => 'ROME ' . $this->VERSION,
 			'extension' => [[
@@ -751,6 +754,17 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	private function buildExportFilename(string $prefix, string $extension): string
 	{
 		return $prefix . '-' . date('Ymd-His') . '.' . $extension;
+	}
+
+	private function buildExportTitle(): string
+	{
+		return 'ROME Ontology Annotations'; // TODO: Make this configurable
+	}
+
+	private function buildExportDescription(): string
+	{
+		$projTitle = $this->proj->project['app_title'];
+		return "Export of ontology annotations for project:\n$projTitle";
 	}
 
 	#endregion
@@ -3010,6 +3024,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		switch ($kind) {
 			case 'Questionnaire':
 				return 'fhir_questionnaire';
+			case 'ROME_Ontology_Annotations':
+				return 'native_rome';
 		}
 		return null;
 	}
