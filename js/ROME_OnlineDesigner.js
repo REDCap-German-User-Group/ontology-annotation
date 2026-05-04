@@ -9,7 +9,8 @@
 /// <reference types="jquery" />
 /// <reference types="jqueryui" />
 /// <reference path="../../../codebase/Resources/js/base.js" />
-/// <reference path="../typedefs/ROME.typedef.js" />
+/// <reference path="../typedefs/ROME_OnlineDesigner.typedef.js" />
+/// <reference path="../typedefs/JSMO.typedef.js" />
 /// <reference path="./ConsoleDebugLogger.js" />
 /// <reference path="./WatchTargets.js" />
 
