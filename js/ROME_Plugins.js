@@ -3,12 +3,12 @@
 /// <reference types="jquery" />
 /// <reference path="../typedefs/ROME_Plugins.typedef.js" />
 /// <reference path="../typedefs/JSMO.typedef.js" />
-/// <reference path="./ConsoleDebugLogger.js" />
 
 // @ts-check
 ; (function () {
 	const EM_NAME = 'ROME';
 	const NS_PREFIX = 'DE_RUB_';
+	const romeWindow = /** @type {ROMEWindow} */ (window);
 	const LOGGER = ConsoleDebugLogger.create().configure({
 		name: 'ROME Plugin',
 		active: true,
@@ -30,15 +30,15 @@
 	/** @type {JavascriptModuleObject|null} */
 	let JSMO = null;
 
-	/** @type {Object} */
-	let dtInstance;
-	/** @type {Function} */
-	let editRemoteSource;
-	/** @type {Function} */
-	let editLocalSource;
-	/** @type {Function} */
-	let editSystemSource;
-	/** @type {Object|null} */
+	/** @type {MinimalDataTableApi|null} */
+	let dtInstance = null;
+	/** @type {(source: PluginSourceInfo) => void} */
+	let editRemoteSource = () => {};
+	/** @type {(source: PluginSourceInfo, file: SourceFileInfo) => void} */
+	let editLocalSource = () => {};
+	/** @type {(source: PluginSourceInfo) => void} */
+	let editSystemSource = () => {};
+	/** @type {ExportResult|null} */
 	let lastExport = null;
 	let exportPending = false;
 
@@ -90,6 +90,29 @@
 		});
 	}
 
+	/**
+	 * @returns {JavascriptModuleObject}
+	 */
+	function getJSMO() {
+		if (!JSMO) throw new Error('JSMO is not available for this ROME plugin page.');
+		return JSMO;
+	}
+
+	/**
+	 * @param {JQuery<HTMLElement>} $el
+	 * @returns {HTMLElement}
+	 */
+	function requireElement($el) {
+		const el = $el.get(0);
+		if (!el) throw new Error('Required ROME plugin element is missing.');
+		return el;
+	}
+
+	function blurActiveElement() {
+		const active = document.activeElement;
+		if (active instanceof HTMLElement) active.blur();
+	}
+
 
 
 	//#region Export
@@ -101,9 +124,8 @@
 		const $forms = $('#rome-export-forms');
 		const $download = $('#rome-export-download');
 
-		if (window.TomSelect && $forms.length) {
-			// @ts-ignore
-			new window.TomSelect('#rome-export-forms', {
+		if (romeWindow.TomSelect && $forms.length) {
+			new romeWindow.TomSelect('#rome-export-forms', {
 				plugins: ['remove_button'],
 				valueField: 'value',
 				labelField: 'text',
@@ -124,14 +146,24 @@
 		populateExportFormsForState(getSelectedExportMetadataState() || metadataState);
 	}
 
+	/**
+	 * @returns {string}
+	 */
 	function getSelectedExportMetadataState() {
 		return `${$('input[name="rome-export-metadata-state"]:checked').val() || $('input[name="rome-export-metadata-state"]').val() || config.export?.defaultMetadataState || 'production'}`;
 	}
 
+	/**
+	 * @returns {string}
+	 */
 	function getSelectedExportFormat() {
 		return `${$('input[name="rome-export-format"]:checked').val() || 'native_rome'}`;
 	}
 
+	/**
+	 * @param {string} state
+	 * @returns {ExportFormInfo[]}
+	 */
 	function getExportFormsForState(state) {
 		const exportConfig = config.export || {};
 		const stateConfig = exportConfig.states?.[state] || {};
@@ -142,9 +174,13 @@
 		return [];
 	}
 
+	/**
+	 * @param {string} state
+	 * @returns {void}
+	 */
 	function populateExportFormsForState(state) {
 		const forms = getExportFormsForState(state);
-		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		const select = /** @type {TomSelectElement|null} */ ($('#rome-export-forms').get(0));
 		if (select?.tomselect) {
 			select.tomselect.clear(true);
 			select.tomselect.clearOptions();
@@ -170,23 +206,39 @@
 		refreshExportStatus();
 	}
 
+	/**
+	 * @param {ExportFormInfo} form
+	 * @returns {string}
+	 */
 	function formatExportFormOptionLabel(form) {
 		const valid = getExportFormValidCount(form);
 		const invalid = getExportFormInvalidCount(form);
 		return `${form.label} (${valid} annotated${invalid ? `, ${invalid} invalid` : ''})`;
 	}
 
+	/**
+	 * @param {ExportFormInfo} form
+	 * @returns {number}
+	 */
 	function getExportFormValidCount(form) {
 		return Number(form.validAnnotationCount || 0);
 	}
 
+	/**
+	 * @param {ExportFormInfo} form
+	 * @returns {number}
+	 */
 	function getExportFormInvalidCount(form) {
 		return Number(form.invalidAnnotationCount || 0);
 	}
 
+	/**
+	 * @param {boolean} enabled
+	 * @returns {void}
+	 */
 	function setExportOptionsEnabled(enabled) {
 		$('input[name="rome-export-format"], #rome-export-add-all, #rome-export-clear-all').prop('disabled', !enabled);
-		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		const select = /** @type {TomSelectElement|null} */ ($('#rome-export-forms').get(0));
 		if (select?.tomselect) {
 			if (enabled) select.tomselect.enable();
 			else select.tomselect.disable();
@@ -198,7 +250,7 @@
 	function selectAllExportForms() {
 		const forms = getExportFormsForState(getSelectedExportMetadataState());
 		const values = forms.filter(form => getExportFormValidCount(form) > 0).map(form => form.name);
-		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		const select = /** @type {TomSelectElement|null} */ ($('#rome-export-forms').get(0));
 		if (select?.tomselect) {
 			select.tomselect.clear(true);
 			for (const value of values) select.tomselect.addItem(value, true);
@@ -210,7 +262,7 @@
 	}
 
 	function clearExportForms() {
-		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		const select = /** @type {TomSelectElement|null} */ ($('#rome-export-forms').get(0));
 		if (select?.tomselect) {
 			select.tomselect.clear(true);
 		} else {
@@ -219,6 +271,10 @@
 		refreshExportStatus();
 	}
 
+	/**
+	 * @param {string} [message]
+	 * @returns {void}
+	 */
 	function refreshExportStatus(message = '') {
 		const forms = getSelectedExportForms();
 		const stateForms = getExportFormsForState(getSelectedExportMetadataState());
@@ -231,8 +287,11 @@
 		$('#rome-export-download').prop('disabled', exportPending || forms.length === 0);
 	}
 
+	/**
+	 * @returns {string[]}
+	 */
 	function getSelectedExportForms() {
-		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		const select = /** @type {TomSelectElement|null} */ ($('#rome-export-forms').get(0));
 		if (select?.tomselect) {
 			const value = select.tomselect.getValue();
 			const values = Array.isArray(value) ? value : String(value || '').split(',').filter(Boolean);
@@ -263,7 +322,7 @@
 		let finalStatus = '';
 
 		try {
-			const res = await JSMO.ajax('export-annotations', payload);
+			const res = /** @type {ExportResult} */ (await getJSMO().ajax('export-annotations', payload));
 			lastExport = res || null;
 			renderExportMessages(res || {});
 			if (res?.success && res.content && res.filename) {
@@ -282,6 +341,10 @@
 		}
 	}
 
+	/**
+	 * @param {Partial<ExportResult>} result
+	 * @returns {void}
+	 */
 	function renderExportMessages(result) {
 		const errors = Array.isArray(result.errors) ? result.errors : [];
 		const warnings = Array.isArray(result.warnings) ? result.warnings : [];
@@ -291,6 +354,12 @@
 			return;
 		}
 
+		/**
+		 * @param {ExportIssue[]} items
+		 * @param {string} cls
+		 * @param {string} title
+		 * @returns {string}
+		 */
 		const renderItems = (items, cls, title) => {
 			if (items.length === 0) return '';
 			return `<div class="alert ${cls} py-2 mb-2">
@@ -311,6 +380,12 @@
 		);
 	}
 
+	/**
+	 * @param {string} content
+	 * @param {string} filename
+	 * @param {string} mimeType
+	 * @returns {void}
+	 */
 	function downloadExportContent(content, filename, mimeType) {
 		const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
 		const url = URL.createObjectURL(blob);
@@ -327,6 +402,10 @@
 
 	//#region Manage / Configure
 
+	/**
+	 * @param {string=} page
+	 * @returns {void}
+	 */
 	function initConfigSetters(page) {
 		$('.rome-plugin-page').on('change', '[data-rome-setting]', function (e) {
 			const $el = $(e.target);
@@ -371,6 +450,7 @@
 
 		let ontologiesLoaded = false;
 		let rcBioPortalTokenAvailable = false;
+		/** @type {EditMode} */
 		let editMode = 'create';
 
 		const $modalEl = $('#romeRemoteSourceModal');
@@ -393,12 +473,16 @@
 		const $snowRefreshBtn = $('#rome_snowstorm_branch_refresh');
 		const $snowBranchesEl = $('#rome_snowstorm_branches');
 
-		const bsModal = new bootstrap.Modal($modalEl.get(0), { backdrop: 'static' });
+		const bsModal = new bootstrap.Modal(requireElement($modalEl), { backdrop: 'static' });
 
 		$modalEl.on('hide.bs.modal', function () {
-			$(document.activeElement).trigger('blur');
+			blurActiveElement();
 		});
 
+		/**
+		 * @param {string} msg
+		 * @returns {void}
+		 */
 		function showError(msg) {
 			$errEl.text(msg);
 			$errEl.removeClass('d-none');
@@ -408,6 +492,10 @@
 			$errEl.addClass('d-none');
 		}
 
+		/**
+		 * @param {string|string[]|number|undefined} type
+		 * @returns {void}
+		 */
 		function setType(type) {
 			if (type === 'snowstorm') {
 				$blockBio.addClass('d-none');
@@ -418,6 +506,10 @@
 			}
 		}
 
+		/**
+		 * @param {string|SnowstormAuthData} dataOrMode
+		 * @returns {void}
+		 */
 		function setSnowAuthMode(dataOrMode) {
 			const mode = typeof dataOrMode === 'string' ? dataOrMode : dataOrMode.snowstorm_auth_mode;
 			if (typeof dataOrMode === 'object') {
@@ -436,7 +528,7 @@
 			if (!token) return;
 			$bioTestTokenBtn.prop('disabled', true);
 			try {
-				const res = await JSMO.ajax('test-bioportal-token', { token });
+				const res = await getJSMO().ajax('test-bioportal-token', { token });
 				log('Tested bioportal token', res);
 				$bioOntTokenEl.addClass(res ? 'is-valid' : 'is-invalid');
 			}
@@ -452,17 +544,17 @@
 			if (ontologiesLoaded && !forceRefresh) return;
 			$bioOntEl.html('<option value="">Loading…</option>');
 			try {
-				const res = await JSMO.ajax('get-bioportal-ontologies', {
+				const res = /** @type {{ error?: string, ontologies: BioPortalOntology[], rc_enabled: boolean }} */ (await getJSMO().ajax('get-bioportal-ontologies', {
 					forceRefresh: forceRefresh,
 					token: $bioOntTokenEl.val() ?? null
-				});
+				}));
 				log('Loaded bioportal ontologies', res);
 				if (res.error) throw res.error;
 				const placeholder = res.ontologies.length === 0
 					? 'Provide a token and refresh'
 					: 'Select an ontology ...';
 				$bioOntEl.prop('disabled', res.ontologies.length === 0);
-				const select2Data = res.ontologies.map(o => ({
+				const select2Data = res.ontologies.map((/** @type {BioPortalOntology} */ o) => ({
 					id: o.acronym,
 					text: `${o.acronym} ${o.name}`,
 					name: o.name
@@ -488,6 +580,10 @@
 			}
 		}
 
+		/**
+		 * @param {Select2Option} data
+		 * @returns {string|JQuery<HTMLElement>}
+		 */
 		function formatOntology(data) {
 			// Placeholder / loading entry
 			if (!data.id) return data.text;
@@ -511,7 +607,7 @@
 		function resetFormForCreate() {
 			$modalEl.find('[data-rome-reset]').each(function () {
 				const $this = $(this);
-				$this.val($this.attr('data-rome-reset')).trigger('change');
+				$this.val($this.attr('data-rome-reset') ?? '').trigger('change');
 			});
 			$snowBranchesEl.html('').trigger('change');
 			$($bioOntEl).val('').trigger('change');
@@ -523,6 +619,11 @@
 			setSnowAuthMode({ snowstorm_auth_mode: 'none' });
 		}
 
+		/**
+		 * @param {EditMode} mode
+		 * @param {PluginSourceInfo=} sourceData
+		 * @returns {Promise<void>}
+		 */
 		async function openRemoteSourceDialog(mode, sourceData) {
 			resetFormForCreate();
 			editMode = mode;
@@ -600,6 +701,7 @@
 			ev.preventDefault();
 			clearError();
 
+			/** @type {RemoteSourcePayload} */
 			let payload = {
 				context: config.page,
 				title: `${$('#rome_title').val()}`.trim(),
@@ -615,7 +717,7 @@
 				payload.type = type;
 				if (type === 'snowstorm') {
 					payload.ss_baseurl = `${$('#rome_snowstorm_base_url').val() ?? ''}`.trim();
-					payload.ss_branch = $('#rome_snowstorm_branches').val() ?? '';
+					payload.ss_branch = `${$('#rome_snowstorm_branches').val() ?? ''}`;
 					payload.ss_auth = `${$('#rome_snowstorm_auth_mode').val() ?? ''}`.trim();
 					payload.ss_username = `${$('#rome_snowstorm_basic_user').val() ?? ''}`.trim();
 					payload.ss_password = `${$('#rome_snowstorm_basic_pass').val() ?? ''}`.trim();
@@ -666,9 +768,9 @@
 			// Save
 			try {
 				$('#romeRemoteSourceSaveBtn').prop('disabled', true);
-				const res = await JSMO.ajax('save-remote-source', payload);
+				const res = /** @type {{ error?: string, source: PluginSourceInfo }} */ (await getJSMO().ajax('save-remote-source', payload));
 				if (res.error) throw `Failed to save remote source: ${res.error}`;
-				$(document.activeElement).trigger('blur');
+				blurActiveElement();
 				bsModal.hide();
 				refreshSourcesTable(res.source);
 			}
@@ -685,7 +787,15 @@
 			$snowBranchesEl.html(`<option value="">Loading…</option>`);
 			$snowRefreshBtn.prop('disabled', true);
 
-			const payload = {};
+			/** @type {SnowstormPayload} */
+			const payload = {
+				ss_baseurl: '',
+				ss_branch: '',
+				ss_auth: '',
+				ss_username: '',
+				ss_password: '',
+				ss_token: ''
+			};
 			payload.ss_baseurl = `${$('#rome_snowstorm_base_url').val() ?? ''}`.trim();
 			payload.ss_branch = `${$('#rome_snowstorm_branch').val() ?? ''}`.trim();
 			payload.ss_auth = `${$('#rome_snowstorm_auth_mode').val() ?? ''}`.trim();
@@ -694,14 +804,14 @@
 			payload.ss_token = `${$('#rome_snowstorm_bearer').val() ?? ''}`.trim();
 
 			try {
-				const res = await JSMO.ajax('get-snowstorm-branches', payload);
+				const res = /** @type {{ error?: string, branches: string[] }} */ (await getJSMO().ajax('get-snowstorm-branches', payload));
 				log('Loaded Snowstorm branches', res);
 				if (res.error) throw res.error;
 				const placeholder = res.branches.length === 0
 					? 'Refresh to load branches ...'
 					: 'Select a branch ...';
 				$snowBranchesEl.prop('disabled', res.branches.length === 0);
-				const select2Data = res.branches.map(o => ({
+				const select2Data = res.branches.map((/** @type {string} */ o) => ({
 					id: o,
 					text: o
 				}));
@@ -734,15 +844,16 @@
 		const $modalEl = $('#romeLocalSourceModal');
 		const $titleEl = $('#romeLocalSourceModalTitle');
 		const $errEl = $('#romeLocalSourceError');
-		const bsModal = new bootstrap.Modal($modalEl.get(0), { backdrop: 'static' });
+		const bsModal = new bootstrap.Modal(requireElement($modalEl), { backdrop: 'static' });
 		let localSourceFileContent = '';
 		let localSourceFileName = '';
+		/** @type {EditMode} */
 		let editMode = 'create';
 
 		// Wire events
 
 		$modalEl.on('hide.bs.modal', function () {
-			$(document.activeElement).trigger('blur');
+			blurActiveElement();
 		});
 
 		$('#rome-add-local-source').on('click', () => {
@@ -756,7 +867,7 @@
 		$('#rome-file-input').on('change', async function (ev) {
 			// Get file info
 			const $fi = $(this);
-			const files = $fi.prop('files');
+			const files = /** @type {FileList|undefined} */ ($fi.prop('files'));
 			if (!files || ((files?.length ?? 0) === 0)) {
 				localSourceFileContent = '';
 				localSourceFileName = '';
@@ -768,7 +879,7 @@
 			const file = files[0];
 			try {
 				const fileText = await file.text();
-				const json = JSON.parse(fileText);
+				const json = /** @type {{ title?: string, description?: string }} */ (JSON.parse(fileText));
 				$('#rome-title-from-file').text(json.title ?? '');
 				$('#rome-description-from-file').text(json.description ?? '');
 				localSourceFileContent = fileText;
@@ -814,7 +925,7 @@
 				// Disable form elements
 				$modalEl.find('input, textarea').prop('disabled', true);
 				$('#romeLocalSourceSaveBtn').prop('disabled', true);
-				const res = await JSMO.ajax('save-local-source', payload);
+				const res = /** @type {{ error?: string, source: PluginSourceInfo }} */ (await getJSMO().ajax('save-local-source', payload));
 				if (res.error) throw `Failed to save local source: ${res.error}`;
 				bsModal.hide();
 				refreshSourcesTable(res.source);
@@ -834,6 +945,10 @@
 			openLocalSourceDialog('edit', source, file);
 		};
 
+		/**
+		 * @param {string} msg
+		 * @returns {void}
+		 */
 		function showError(msg) {
 			$errEl.text(msg);
 			$errEl.removeClass('d-none');
@@ -847,7 +962,7 @@
 		function resetFormForCreate() {
 			$modalEl.find('[data-rome-reset]').each(function () {
 				const $this = $(this);
-				$this.val($this.attr('data-rome-reset')).trigger('change');
+				$this.val($this.attr('data-rome-reset') ?? '').trigger('change');
 			});
 
 			$('#rome_local_source_id').val('');
@@ -863,10 +978,16 @@
 			clearError();
 		}
 
+		/**
+		 * @param {EditMode} mode
+		 * @param {PluginSourceInfo=} sourceData
+		 * @param {SourceFileInfo=} fileData
+		 * @returns {Promise<void>}
+		 */
 		async function openLocalSourceDialog(mode, sourceData, fileData) {
 			resetFormForCreate();
 			editMode = mode;
-			if (mode === 'edit') {
+			if (mode === 'edit' && sourceData) {
 				$titleEl.text('Edit a local source');
 				$('#rome_local_source_id').val(sourceData.key || '');
 				$('#rome-title-from-file').text(sourceData.title || '');
@@ -877,7 +998,7 @@
 				if (sourceData.description !== sourceData.description_resolved) {
 					$('#rome_local_description').val(sourceData.description_resolved || '');
 				}
-				$('#rome-file-info').text(fileData.name || '');
+				$('#rome-file-info').text(fileData?.name || '');
 				$('#rome-replace-file-checkbox').removeClass('d-none');
 				$('#rome-file-drop-area').addClass('d-none');
 			} else {
@@ -892,14 +1013,17 @@
 		const $modalEl = $('#romeSystemSourceModal');
 		const $titleEl = $('#romeSystemSourceModalTitle');
 		const $errEl = $('#romeSystemSourceError');
-		const bsModal = new bootstrap.Modal($modalEl.get(0), { backdrop: 'static' });
+		const bsModal = new bootstrap.Modal(requireElement($modalEl), { backdrop: 'static' });
+		/** @type {EditMode} */
 		let editMode = 'create';
+		/** @type {string|null} */
 		let selectedSystemSourceId = null;
+		/** @type {MinimalDataTableApi|null} */
 		let ssDtInstance = null;
 
 		// Wire events
 		$modalEl.on('hide.bs.modal', function () {
-			$(document.activeElement).trigger('blur');
+			blurActiveElement();
 		});
 
 		$('#rome-add-system-source').on('click', () => {
@@ -920,7 +1044,7 @@
 				systemSourceId: selectedSystemSourceId
 			};
 			// Validation
-			if (editMode === 'create' && payload.selectedSystemSourceId === null) {
+			if (editMode === 'create' && payload.systemSourceId === null) {
 				showError('A system source must be selected');
 				return;
 			}
@@ -930,7 +1054,7 @@
 				// Disable form elements
 				$modalEl.find('input, textarea').prop('disabled', true);
 				$('#romeSystemSourceSaveBtn').prop('disabled', true);
-				const res = await JSMO.ajax('save-system-source', payload);
+				const res = /** @type {{ error?: string, source: PluginSourceInfo }} */ (await getJSMO().ajax('save-system-source', payload));
 				if (res.error) throw `Failed to save system source: ${res.error}`;
 				bsModal.hide();
 				refreshSourcesTable(res.source);
@@ -953,6 +1077,10 @@
 		// Setup table
 		initSystemSourcesTable();
 
+		/**
+		 * @param {string} msg
+		 * @returns {void}
+		 */
 		function showError(msg) {
 			$errEl.text(msg);
 			$errEl.removeClass('d-none');
@@ -966,7 +1094,7 @@
 		function resetFormForCreate() {
 			$modalEl.find('[data-rome-reset]').each(function () {
 				const $this = $(this);
-				$this.val($this.attr('data-rome-reset')).trigger('change');
+				$this.val($this.attr('data-rome-reset') ?? '').trigger('change');
 			});
 
 			$('#rome_system_source_id').val('');
@@ -979,10 +1107,15 @@
 			refreshSystemSourcesTable();
 		}
 
+		/**
+		 * @param {EditMode} mode
+		 * @param {PluginSourceInfo=} sourceData
+		 * @returns {Promise<void>}
+		 */
 		async function openSystemSourceDialog(mode, sourceData) {
 			resetFormForCreate();
 			editMode = mode;
-			if (mode === 'edit') {
+			if (mode === 'edit' && sourceData) {
 				$titleEl.text('Edit a system source');
 				$('#rome_system_source_id').val(sourceData.key || '');
 				$('#rome-title-from-source').text(sourceData.title || '');
@@ -1008,13 +1141,13 @@
 			const $table = $('#rome-system-sources-table');
 
 			//#region Datatable
-			ssDtInstance = $table.DataTable({
+			ssDtInstance = /** @type {MinimalDataTableApi} */ ($table.DataTable({
 				autoWidth: true,
 				data: config.sysSources ?? [],
 				columns: [
 					{
 						data: null,
-						render: (_data, type, row) => {
+						render: (/** @type {unknown} */ _data, /** @type {string} */ type, /** @type {PluginSourceInfo} */ row) => {
 							if (type === 'sort' || type === 'type') {
 								return row.checked ? 'checked' : 'unchecked';
 							}
@@ -1023,7 +1156,7 @@
 					},
 					{
 						data: null,
-						render: (_data, type, row) => {
+						render: (/** @type {unknown} */ _data, /** @type {string} */ type, /** @type {PluginSourceInfo} */ row) => {
 							if (type === 'sort' || type === 'type') {
 								return row.type;
 							}
@@ -1032,7 +1165,7 @@
 					},
 					{
 						data: null,
-						render: (_data, type, row) => {
+						render: (/** @type {unknown} */ _data, /** @type {string} */ type, /** @type {PluginSourceInfo} */ row) => {
 							if (type === 'sort' || type === 'type') {
 								return `${row.title_resolved} ${row.description_resolved}`;
 							}
@@ -1042,7 +1175,7 @@
 					{
 						data: null,
 						searchable: false,
-						render: (_data, type, row) => {
+						render: (/** @type {unknown} */ _data, /** @type {string} */ type, /** @type {PluginSourceInfo} */ row) => {
 							if (type === 'sort' || type === 'type') {
 								return row?.item_count ?? 0;
 							}
@@ -1060,14 +1193,15 @@
 				pageLength: 5,
 				order: [[2, 'asc']],
 				createdRow: (rowEl, rowData) => {
-					$(rowEl).data('source-key', rowData['key'] ?? '');
+					const source = /** @type {PluginSourceInfo} */ (rowData);
+					$(rowEl).data('source-key', source.key ?? '');
 				}
-			});
+			}));
 
 
 			/**
 			 * Renders "Type" column cell content.
-			 * @param {Object} row
+			 * @param {PluginSourceInfo} row
 			 * @returns {string}
 			 */
 			function renderTypeColumn(row) {
@@ -1076,35 +1210,35 @@
 
 			/**
 			 * Renders "Checked" column cell content.
-			 * @param {Object} row
+			 * @param {PluginSourceInfo} row
 			 * @returns {string}
 			 */
 			function renderCheckedColumn(row) {
 				const checked = (row?.checked ?? false) === true;
 				return `
 					<div class="form-radio">
-						<input class="form-radio-input" type="radio" name="system-source-selected" data-source="${row.key}" data-action="select-source" ${checked ? 'checked' : ''} aria-label="Select row ${escapeHTML(row.title_resolved)}">
+						<input class="form-radio-input" type="radio" name="system-source-selected" data-source="${row.key}" data-action="select-source" ${checked ? 'checked' : ''} aria-label="Select row ${escapeHTML(row.title_resolved ?? '')}">
 					</div>
 				`;
 			}
 
 			/**
 			 * Renders "Title/Description" column cell content.
-			 * @param {Object} row
+			 * @param {PluginSourceInfo} row
 			 * @returns {string}
 			 */
 			function renderTitleColumn(row) {
 				return `
 					<div class="rome-system-source-select" data-action="select-source" data-source="${row.key}">
-						<div class="rome-source-title">${escapeHTML(row.title_resolved)}</div>
-						<div class="rome-source-description">${escapeHTML(row.description_resolved)}</div>
+						<div class="rome-source-title">${escapeHTML(row.title_resolved ?? '')}</div>
+						<div class="rome-source-description">${escapeHTML(row.description_resolved ?? '')}</div>
 					</div>
 				`;
 			}
 
 			/**
 			 * Renders "Stats" column cell content.
-			 * @param {Object} row
+			 * @param {PluginSourceInfo} row
 			 * @returns {string}
 			 */
 			function renderStatsColumn(row) {
@@ -1126,9 +1260,9 @@
 				if (action === 'select-source') {
 					const key = $el.attr('data-source');
 					log('System source action', { action, key });
-					selectedSystemSourceId = key;
-					const source = config.sysSources.find(s => s.key === key);
-					setSystemSourceInfo(source);
+					selectedSystemSourceId = key ?? null;
+					const source = (config.sysSources ?? []).find(s => s.key === key);
+					if (source) setSystemSourceInfo(source);
 					refreshSystemSourcesTable();
 				}
 			});
@@ -1136,6 +1270,10 @@
 
 		}
 
+		/**
+		 * @param {PluginSourceInfo} source
+		 * @returns {void}
+		 */
 		function setSystemSourceInfo(source) {
 			$('#rome-system-source-info').html(getSourceTypeIcon(source)).append(
 				`<span class="ms-1">${source.type === 'remote' ? 'Remote' : 'Local'}</span>`
@@ -1150,10 +1288,14 @@
 			for (const source of data) {
 				source['checked'] = source.key === selectedSystemSourceId;
 			}
-			ssDtInstance.clear().rows.add(data).draw();
+			ssDtInstance?.clear().rows.add(data).draw();
 		}
 	}
 
+	/**
+	 * @param {PluginSourceInfo} source
+	 * @returns {string}
+	 */
 	function getSourceTypeIcon(source) {
 		let s = '';
 		if (source.type === 'local') {
@@ -1181,13 +1323,13 @@
 		const adv = data.length > 10;
 
 		//#region Datatable
-		dtInstance = $table.DataTable({
+		dtInstance = /** @type {MinimalDataTableApi} */ ($table.DataTable({
 			autoWidth: true,
 			data: data,
 			columns: [
 				{
 					data: null,
-					render: (_data, type, row) => {
+					render: (/** @type {unknown} */ _data, /** @type {string} */ type, /** @type {PluginSourceInfo} */ row) => {
 						if (type === 'sort' || type === 'type') {
 							return row.type;
 						}
@@ -1196,7 +1338,7 @@
 				},
 				{
 					data: null,
-					render: (_data, type, row) => {
+					render: (/** @type {unknown} */ _data, /** @type {string} */ type, /** @type {PluginSourceInfo} */ row) => {
 						if (type === 'sort' || type === 'type') {
 							return row.enabled ? 'enabled' : 'disabled';
 						}
@@ -1205,7 +1347,7 @@
 				},
 				{
 					data: null,
-					render: (_data, type, row) => {
+					render: (/** @type {unknown} */ _data, /** @type {string} */ type, /** @type {PluginSourceInfo} */ row) => {
 						if (type === 'sort' || type === 'type') {
 							return `${row.title_resolved} ${row.description_resolved}`;
 						}
@@ -1215,7 +1357,7 @@
 				{
 					data: null,
 					searchable: false,
-					render: (_data, type, row) => {
+					render: (/** @type {unknown} */ _data, /** @type {string} */ type, /** @type {PluginSourceInfo} */ row) => {
 						if (type === 'sort' || type === 'type') {
 							return row?.item_count ?? 0;
 						}
@@ -1226,7 +1368,7 @@
 					data: null,
 					orderable: false,
 					searchable: false,
-					render: (_data, _type, row) => renderActionColumn(row)
+					render: (/** @type {unknown} */ _data, /** @type {string} */ _type, /** @type {PluginSourceInfo} */ row) => renderActionColumn(row)
 				}
 			],
 			language: {
@@ -1239,14 +1381,15 @@
 			pageLength: 10,
 			order: [[2, 'asc']],
 			createdRow: (rowEl, rowData) => {
-				$(rowEl).data('source-entry', rowData);
+				const source = /** @type {PluginSourceInfo} */ (rowData);
+				$(rowEl).data('source-entry', source);
 			}
-		});
+		}));
 
 
 		/**
 		 * Renders "Type" column cell content.
-		 * @param {Object} row
+		 * @param {PluginSourceInfo} row
 		 * @returns {string}
 		 */
 		function renderTypeColumn(row) {
@@ -1255,7 +1398,7 @@
 
 		/**
 		 * Renders "Enabled" column cell content.
-		 * @param {Object} row
+		 * @param {PluginSourceInfo} row
 		 * @returns {string}
 		 */
 		function renderEnabledColumn(row) {
@@ -1271,20 +1414,20 @@
 
 		/**
 		 * Renders "Title/Description" column cell content.
-		 * @param {Object} row
+		 * @param {PluginSourceInfo} row
 		 * @returns {string}
 		 */
 		function renderTitleColumn(row) {
 			return `
-				<div class="rome-source-title">${escapeHTML(row.title_resolved)}</div>
-				<div class="rome-source-description">${escapeHTML(row.description_resolved)}</div>
-				${(typeof row.system_state === 'string' && row.system_state !== 'enabled') ? `<div class="rome-source-state">${escapeHTML(row.message)}</div>` : ''}
+				<div class="rome-source-title">${escapeHTML(row.title_resolved ?? '')}</div>
+				<div class="rome-source-description">${escapeHTML(row.description_resolved ?? '')}</div>
+				${(typeof row.system_state === 'string' && row.system_state !== 'enabled') ? `<div class="rome-source-state">${escapeHTML(row.message ?? '')}</div>` : ''}
 			`;
 		}
 
 		/**
 		 * Renders "Stats" column cell content.
-		 * @param {Object} row
+		 * @param {PluginSourceInfo} row
 		 * @returns {string}
 		 */
 		function renderStatsColumn(row) {
@@ -1300,7 +1443,7 @@
 
 		/**
 		 * Renders "Action" column cell content.
-		 * @param {Object} row
+		 * @param {PluginSourceInfo} row
 		 * @returns {string}
 		 */
 		function renderActionColumn(row) {
@@ -1337,14 +1480,20 @@
 			}
 		});
 
+		/**
+		 * @param {string|undefined} key
+		 * @param {JQuery<HTMLElement>} $btn
+		 * @returns {Promise<void>}
+		 */
 		async function toggleSourceEnabled(key, $btn) {
+			if (!key) return;
 			const toState = $btn.prop('disabled', true).is(':checked');
 			try {
-				const res = await JSMO.ajax('toggle-source-enabled', {
+				const res = /** @type {{ error?: string, source: PluginSourceInfo }} */ (await getJSMO().ajax('toggle-source-enabled', {
 					key: key,
 					enabled: toState,
 					context: config.page
-				});
+				}));
 				if (res.error) throw res.error;
 				refreshSourcesTable(res.source);
 			}
@@ -1357,15 +1506,22 @@
 			}
 		}
 
+		/**
+		 * @param {string|undefined} key
+		 * @param {JQuery<HTMLElement>} $btn
+		 * @returns {Promise<void>}
+		 */
 		async function editSource(key, $btn) {
-			const source = config.sources.find(s => s.key === key);
+			if (!key) return;
+			const source = (config.sources ?? []).find(s => s.key === key);
+			if (!source) return;
 			if (source.from_system) {
 				editSystemSource(source);
 			}
 			else if (source.type === 'local') {
 				// We need to get file details from the server
 				try {
-					const res = await JSMO.ajax('get-source-file-info', { key });
+					const res = /** @type {{ error?: string, file: SourceFileInfo }} */ (await getJSMO().ajax('get-source-file-info', { key }));
 					if (res.error) throw res.error;
 					editLocalSource(source, res.file);
 				}
@@ -1379,8 +1535,14 @@
 			}
 		}
 
+		/**
+		 * @param {string|undefined} key
+		 * @param {JQuery<HTMLElement>} $btn
+		 * @returns {Promise<void>}
+		 */
 		async function deleteSource(key, $btn) {
-			const source = config.sources.find(s => s.key === key);
+			if (!key) return;
+			const source = (config.sources ?? []).find(s => s.key === key);
 			const sourceTitle = source?.title_resolved ?? '(unnamed source)';
 			const confirmed = await confirmModal({
 				title: 'DELETE',
@@ -1395,9 +1557,9 @@
 
 			try {
 				$btn.prop('disabled', true);
-				const res = await JSMO.ajax('delete-source', { key });
+				const res = /** @type {{ error?: string }} */ (await getJSMO().ajax('delete-source', { key }));
 				if (res.error) throw res.error;
-				config.sources = config.sources.filter(s => s.key !== key);
+				config.sources = (config.sources ?? []).filter(s => s.key !== key);
 				refreshSourcesTable();
 			}
 			catch (err) {
@@ -1410,14 +1572,19 @@
 		//#endregion Events
 	}
 
+	/**
+	 * @param {PluginSourceInfo|null} [source]
+	 * @returns {void}
+	 */
 	function refreshSourcesTable(source = null) {
+		config.sources = config.sources ?? [];
 		// Remove existing entry from config.sources (identify by key)
 		if (source && typeof source.key === 'string') {
 			config.sources = config.sources.filter(s => s.key !== source.key);
 			config.sources.push(source);
 		}
 		log('Refreshing sources table', config.sources);
-		dtInstance.clear().rows.add(config.sources).draw();
+		dtInstance?.clear().rows.add(config.sources).draw();
 	}
 
 
@@ -1432,15 +1599,16 @@
 	function initDiscovery() {
 		JSMO?.ajax('discover', {})
 			.then(function (response) {
-				ds.data = response;
-				log('Received discover info: ', ds.data);
-				if (!Array.isArray(ds.data.fields)) ds.data.fields = [];
-				if (!ds.data.projects) ds.data.projects = {};
-				const options = ds.data.fields.map((field, idx) => ({
+				ds.data = /** @type {DiscoveryData} */ (response);
+				const data = ds.data;
+				log('Received discover info: ', data);
+				if (!Array.isArray(data.fields)) data.fields = [];
+				if (!data.projects) data.projects = {};
+				const options = data.fields.map((field, idx) => ({
 					'id': idx,
 					'title': `${field.display} [${field.system}: ${field.code}], n=${field.projects.length}`
 				}));
-				if (ds.data.fields.length == 0) {
+				if (data.fields.length == 0) {
 					$('#rome-matching-projects-message').hide();
 					$('.rome-discover-select-waiter').text('No ontology annotations found in any projects.').addClass('rome-no-annotations red mb-2');
 					$('#rome-discover-select').prop('disabled', true);
@@ -1454,12 +1622,11 @@
 						'labelField': 'title',
 						'searchField': 'title'
 					};
-					// @ts-ignore
-					ds.TS = new window.TomSelect('#rome-discover-select', settings);
+					if (romeWindow.TomSelect) {
+						ds.TS = /** @type {DiscoveryTomSelect} */ (/** @type {unknown} */ (new romeWindow.TomSelect('#rome-discover-select', settings)));
+					}
 				}
-				if (ds.data) {
-					$('.rome-discover-project-count').text(Object.keys(ds.data.projects).length);
-				}
+				$('.rome-discover-project-count').text(Object.keys(data.projects).length);
 			})
 			.catch(function (err) {
 				console.error('Error requesting ROME info', err);
@@ -1467,25 +1634,27 @@
 	}
 
 	function updateDiscoveredProjectsTable() {
-		if (!ds.data) return;
+		const data = ds.data;
+		if (!data) return;
 		if (!ds.TS || ds.TS.getValue().length == 0) {
 			$("#resulttable").html("<i>Nothing to show.</i>");
 			return;
 		}
 		const values = ds.TS.getValue();
 
-		const fieldnamesForProject = (/** @type Number */ pid) => values
-			.filter(i => ds.data.fields[i].field_names[pid])
-			.map(i => `${ds.data.fields[i].display}: ${ds.data.fields[i].field_names[pid]}`)
+		const fieldnamesForProject = (/** @type {number} */ pid) => values
+			.filter(i => data.fields[i].field_names[pid])
+			.map(i => `${data.fields[i].display}: ${data.fields[i].field_names[pid]}`)
 			.join('<br>');
-		const formatProjectId = (/** @type Number */ pid) => config.isAdmin && pid != config.pid
-			? `<a href="${window['app_path_webroot']}index.php?pid=${pid}" target="_blank">${pid}</a>`
+		const formatProjectId = (/** @type {number} */ pid) => config.isAdmin && pid != config.pid
+			? `<a href="${romeWindow.app_path_webroot ?? ''}index.php?pid=${pid}" target="_blank">${pid}</a>`
 			: `${pid}`;
 
-		const sets = values.map(field_index => (new Set(ds.data.fields[field_index].projects)));
+		const sets = values.map(field_index => (new Set(data.fields[field_index].projects)));
 		let project_ids = sets.pop() || new Set();
 		while (project_ids.size > 0 && sets.length > 0) {
-			project_ids = project_ids.intersection(sets.pop());
+			const nextSet = sets.pop();
+			if (nextSet) project_ids = project_ids.intersection(nextSet);
 		}
 		// Build table
 		const html =
@@ -1498,9 +1667,9 @@
 				<tbody>` + [...project_ids].map(project_id =>
 				`<tr>
 						<td>${formatProjectId(project_id)}</td>
-						<td>${ds.data.projects[project_id].app_title}</td>
-						<td>${ds.data.projects[project_id].contact}</td>
-						<td>${ds.data.projects[project_id].email}</td>
+						<td>${data.projects[project_id].app_title}</td>
+						<td>${data.projects[project_id].contact}</td>
+						<td>${data.projects[project_id].email}</td>
 						<td>${fieldnamesForProject(project_id)}</td>
 					</tr>`).join('') +
 			`</tbody>
@@ -1556,14 +1725,14 @@
 		return new Promise((resolve) => {
 			$('body').append(modalHtml);
 			const $modal = $(`#${modalId}`);
-			const bsModal = new bootstrap.Modal($modal.get(0), { backdrop: 'static' });
+			const bsModal = new bootstrap.Modal(requireElement($modal), { backdrop: 'static' });
 			let confirmed = false;
 			$modal.find('[data-rome-action="confirm"]').on('click', function () {
 				confirmed = true;
 				bsModal.hide();
 			});
 			$modal.on('hide.bs.modal', function () {
-				$(document.activeElement).trigger('blur');
+				blurActiveElement();
 			});
 			$modal.on('hidden.bs.modal', function () {
 
