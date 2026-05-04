@@ -43,14 +43,12 @@ $formats = [
 		<?php endif; ?>
 		<div id="rome-export-options">
 			<div class="mb-3">
-				<div class="d-flex align-items-center justify-content-between gap-2">
-					<label for="rome-export-forms" class="form-label mb-1">Include annotations from these forms:</label>
-					<div class="btn-group btn-group-sm" role="group" aria-label="Form selection shortcuts">
-						<button type="button" id="rome-export-add-all" class="btn btn-outline-secondary">Add all</button>
-						<button type="button" id="rome-export-clear-all" class="btn btn-outline-secondary">Clear all</button>
-					</div>
+				<label for="rome-export-forms" class="form-label mb-1">Include annotations from these forms:</label>
+				<div role="group" class="ms-3 mb-1 fs11" aria-label="Form selection shortcuts">
+					<a href="#" id="rome-export-add-all">Add all</a> &bull;
+					<a href="#" id="rome-export-clear-all">Clear all</a>
 				</div>
-				<select id="rome-export-forms" class="form-select" multiple></select>
+				<select id="rome-export-forms" class="" multiple></select>
 			</div>
 			<div class="row g-3 align-items-end">
 				<div class="col-sm-6">
