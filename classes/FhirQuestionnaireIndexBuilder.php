@@ -215,7 +215,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 	{
 		if (!is_array($extension)) return null;
 		$url = isset($extension['url']) ? (string)$extension['url'] : '';
-		if (!in_array($url, [RomeFhirExtensions::QUESTIONNAIRE_UNIT, RomeFhirExtensions::ROME_QUESTIONNAIRE_UNIT], true)) {
+		if (!in_array($url, [ROME_FHIR_Extensions::QUESTIONNAIRE_UNIT, ROME_FHIR_Extensions::ROME_QUESTIONNAIRE_UNIT], true)) {
 			return null;
 		}
 		return $this->codingToEntry($extension['valueCoding'] ?? null, $itemType, 'unit');
@@ -226,7 +226,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 		if (empty($answerOption['extension']) || !is_array($answerOption['extension'])) return '';
 		foreach ($answerOption['extension'] as $extension) {
 			if (!is_array($extension)) continue;
-			if (($extension['url'] ?? '') !== RomeFhirExtensions::ROME_REDCAP_CHOICE) continue;
+			if (($extension['url'] ?? '') !== ROME_FHIR_Extensions::ROME_REDCAP_CHOICE) continue;
 			if (empty($extension['extension']) || !is_array($extension['extension'])) continue;
 			foreach ($extension['extension'] as $part) {
 				if (!is_array($part)) continue;

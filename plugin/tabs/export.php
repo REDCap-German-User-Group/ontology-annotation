@@ -12,17 +12,35 @@ $ih = $module->getInjectionHelper();
 $ih->css("libs/tom-select_2.4.3/tom-select.css");
 $ih->js("libs/tom-select_2.4.3/tom-select.complete.min.js");
 
+$project = new \Project($module->getProjectId());
+$hasDraft = $project->isDraftMode();
+$defaultMetadataState = $hasDraft ? 'draft' : 'production';
+$formats = [
+	'native' => 'Native ROME JSON',
+	'fhir_questionnaire' => 'FHIR Questionnaire',
+];
+
 ?>
 <div class="rome-plugin-page">
 	<h2>Export ontology annotations</h2>
 	<div class="rome-export-form">
-		<div class="mb-3 d-none" id="rome-export-metadata-state-wrap">
-			<label for="rome-export-metadata-state" class="form-label">Metadata state:</label>
-			<select id="rome-export-metadata-state" class="form-select form-select-sm">
-				<option value="draft">Draft</option>
-				<option value="production">Production</option>
-			</select>
-		</div>
+		<?php if ($hasDraft): ?>
+			<div class="mb-3" id="rome-export-metadata-state-wrap">
+				<div class="form-label">Metadata state:</div>
+				<div class="d-flex align-items-center gap-3">
+					<label class="form-check-label">
+						<input type="radio" class="form-check-input" name="rome-export-metadata-state" value="draft" <?= $defaultMetadataState === 'draft' ? 'checked' : '' ?>>
+						Draft
+					</label>
+					<label class="form-check-label">
+						<input type="radio" class="form-check-input" name="rome-export-metadata-state" value="production" <?= $defaultMetadataState === 'production' ? 'checked' : '' ?>>
+						Production
+					</label>
+				</div>
+			</div>
+		<?php else: ?>
+			<input type="hidden" name="rome-export-metadata-state" value="production">
+		<?php endif; ?>
 		<div id="rome-export-options">
 			<div class="mb-3">
 				<div class="d-flex align-items-center justify-content-between gap-2">
@@ -36,8 +54,15 @@ $ih->js("libs/tom-select_2.4.3/tom-select.complete.min.js");
 			</div>
 			<div class="row g-3 align-items-end">
 				<div class="col-sm-6">
-					<label for="rome-export-format" class="form-label">Format:</label>
-					<select id="rome-export-format" class="form-select form-select-sm"></select>
+					<div class="form-label">Format:</div>
+					<div class="d-flex align-items-center gap-3">
+						<?php foreach ($formats as $formatValue => $formatLabel): ?>
+							<label class="form-check-label">
+								<input type="radio" class="form-check-input" name="rome-export-format" value="<?= htmlspecialchars($formatValue, ENT_QUOTES) ?>" <?= $formatValue === 'native' ? 'checked' : '' ?>>
+								<?= htmlspecialchars($formatLabel) ?>
+							</label>
+						<?php endforeach; ?>
+					</div>
 				</div>
 			</div>
 			<div class="mt-3 d-flex align-items-center gap-2">

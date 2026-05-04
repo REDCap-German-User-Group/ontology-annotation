@@ -8,18 +8,14 @@ Example: A radio field, _Education Level_, with three options.
 {
     "resourceType": "ROME_Ontology_Annotations",
     // For exports, the value for url will be set to the base url of the
-    // originating REDCap instance + project id [ + form name/report id]
+    // originating REDCap instance + project id
     // depending on the export scope.
     "url": "https://...",
     "meta": {
         "version": "1.0.0",
         "created": "2025-07-25T12:45:00+02:00",
-        "updated": "2025-07-25T13:05:00+02:00",
         "creator": "ROME v1.0.0",
-        "language": "de",
-        "profile": [
-            "https://..."
-        ]
+        "metadataState": "development|production|draft",
     },
     "dataElements": [
         {
@@ -88,13 +84,8 @@ Notes:
 ```jsonc
 "meta": {
     "version": "1.0.0",                       // Format/schema version
-    "created": "2025-07-25T12:25:00+02:00",   // Initial annotation
-    "updated": "2025-07-25T14:00:00+02:00",   // When this field's annotation was last changed
+    "created": "2025-07-25T12:25:00+02:00",   // Timestamp of the export
     "creator": "ROME v1.0.0",                 // Tool used to create the annotation
-    "language": "de",                         // The language of REDCap field-derived labels (only available when MLM is configured)
-    "profile": [
-        "https://..."
-    ]
 }
 ```
 
@@ -109,14 +100,12 @@ a) Export JSON
     "meta": {
         "version": "1.0.0",
         "created": "2025-07-25T12:50:00+02:00",
-        "updated": "2025-07-25T13:10:00+02:00",
-        "creator": "ROME v1.0.0",
-        "language": "de"
+        "creator": "ROME v1.0.0"
     },
     "dataElement": {
         "name": "email",
         "text": "E-Mail-Adresse des Patienten",
-        "type": "text",
+        "type": "string",
         "format": "email",
         "coding": [
             {
@@ -137,9 +126,7 @@ Example of a numerical data type (height) with a unit
     "meta": {
         "version": "1.0.0",
         "created": "2025-07-25T12:55:00+02:00",
-        "updated": "2025-07-25T13:15:00+02:00",
-        "creator": "ROME v1.0.0",
-        "language": "de"
+        "creator": "ROME v1.0.0"
     },
     "dataElement": {
         "name": "body_height",
@@ -175,9 +162,11 @@ Example of a numerical data type (height) with a unit
 | `"checkbox"`  | Multi-choice categorical field (0 to N)       | Multi-select           | Use `valueCodingMap`                               |
 | `"dropdown"`  | Single-choice via dropdown UI (same as radio) | Single-select          | Semantically same as `"radio"`                     |
 | `"number"`    | Numeric field (integer or decimal)            | Direct input           | Add `numericType`, `precision`, `unit`             |
-| `"text"`      | Free-text entry                               | Direct input           | Use `format` if structured (email, url, etc.)      |
-| `"date"`      | Date field (various formats)                  | Date picker/input      | Use `unit` (with format code or UCUM date unit)    |
+| `"string"`    | Free-text entry (single line)                 | Direct input           | Use `format` if structured (email, url, etc.)      |
+| `"text"`      | Free-text entry (multi-line)                  | Direct input           | Large(r) body of text                              |
+| `"date"`      | Date field (various formats)                  | Date picker/input      | Has `format` (`dmy`, `ymd`, `mdy`) and (optionally) `precision` |
 | `"datetime"`  | Date + time field                             | Timestamp picker/input | Same as `"date"`                                   |
+| `"time"`      | Time field                                    | Time picker/input      | Same as `"date"`                                   |
 | `"yesno"`     | Boolean-like binary choice                    | Single-select          | Alias of `"radio"` with 2 values (`Yes`, `No`)     |
 | `"truefalse"` | Boolean-like binary choice                    | Single-select          | Alias of `"radio"` with 2 values (`True`, `False`) |
 
@@ -186,9 +175,9 @@ Example of a numerical data type (height) with a unit
 | Field            | Used With                             | Purpose                                     |
 | ---------------- | ------------------------------------- | ------------------------------------------- |
 | `numericType`    | `"number"`                            | `"integer"` or `"decimal"`                  |
-| `precision`      | `"number"`                            | Decimal places if `numericType = "decimal"` |
-| `format`         | `"text"`                              | `"email"`, `"url"`, `"phone"`, etc.         |
-| `unit`           | `"number"`, `"date"`, `"datetime"`    | As `CodeableConcept`                        |
+| `precision`      | `"number"`, `"datetime"`, `"time"`    | Decimal places if `numericType` = `"decimal"` or `seconds` or `minutes` in case of `datetime` and `time` |
+| `format`         | `"text"`, `"date"`, `"datetime"`      | `"email"`, `"url"`, `"phone"`, etc.         |
+| `unit`           | _any field type_                      | As `CodeableConcept`                        |
 | `valueCodingMap` | `"radio"`, `"checkbox"`, `"dropdown"` | Maps codes to concept labels and codes      |
 
 
@@ -219,8 +208,8 @@ Provide standard generic annotations for REDCap-built-in Missing Data Codes.
 | Radio              | `"radio"`                                              | With `valueCodingMap`          |
 | Dropdown           | `"dropdown"`                                           | Same as `"radio"` semantically |
 | Checkbox           | `"checkbox"`                                           | Multi-select                   |
-| Yes-No             | `"radio"` or `"yesno"`                                 | Semantically boolean           |
-| True-False         | `"radio"` or `"truefalse"`                             | Semantically boolean           |
+| Yes-No             | `"yesno"`                                              | Semantically boolean           |
+| True-False         | `"truefalse"`                                          | Semantically boolean           |
 
 **Note:** Default ontology annotations for `"Yes"`, `"No"`, `"True"`, `"False"` should probably be provided. However, the 
 actual meaning / appropriate annotation of these may vary based on the field's annotation.

@@ -95,23 +95,10 @@
 
 	function initExport() {
 		const exportConfig = config.export || {};
-		const formats = Array.isArray(exportConfig.formats) ? exportConfig.formats : [];
 		const metadataState = exportConfig.defaultMetadataState || 'production';
 
 		const $forms = $('#rome-export-forms');
-		const $format = $('#rome-export-format');
-		const $metadataWrap = $('#rome-export-metadata-state-wrap');
-		const $metadataState = $('#rome-export-metadata-state');
 		const $download = $('#rome-export-download');
-
-		$format.html(formats.map(format => {
-			return `<option value="${escapeHTML(format.value)}">${escapeHTML(format.label)}</option>`;
-		}).join(''));
-
-		$metadataState.val(metadataState);
-		if (exportConfig.hasDraft) {
-			$metadataWrap.removeClass('d-none');
-		}
 
 		if (window.TomSelect && $forms.length) {
 			// @ts-ignore
@@ -126,14 +113,22 @@
 		}
 
 		$forms.on('change', () => refreshExportStatus());
-		$metadataState.on('change', function () {
-			populateExportFormsForState(`${$metadataState.val() || ''}`);
+		$('input[name="rome-export-metadata-state"]').on('change', function () {
+			populateExportFormsForState(getSelectedExportMetadataState());
 			renderExportMessages({ errors: [], warnings: [] });
 		});
 		$('#rome-export-add-all').on('click', selectAllExportForms);
 		$('#rome-export-clear-all').on('click', clearExportForms);
 		$download.on('click', runExportDownload);
-		populateExportFormsForState(`${$metadataState.val() || metadataState}`);
+		populateExportFormsForState(getSelectedExportMetadataState() || metadataState);
+	}
+
+	function getSelectedExportMetadataState() {
+		return `${$('input[name="rome-export-metadata-state"]:checked').val() || $('input[name="rome-export-metadata-state"]').val() || config.export?.defaultMetadataState || 'production'}`;
+	}
+
+	function getSelectedExportFormat() {
+		return `${$('input[name="rome-export-format"]:checked').val() || 'native'}`;
 	}
 
 	function getExportFormsForState(state) {
@@ -189,7 +184,7 @@
 	}
 
 	function setExportOptionsEnabled(enabled) {
-		$('#rome-export-format, #rome-export-add-all, #rome-export-clear-all').prop('disabled', !enabled);
+		$('input[name="rome-export-format"], #rome-export-add-all, #rome-export-clear-all').prop('disabled', !enabled);
 		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
 		if (select?.tomselect) {
 			if (enabled) select.tomselect.enable();
@@ -200,7 +195,7 @@
 	}
 
 	function selectAllExportForms() {
-		const forms = getExportFormsForState(`${$('#rome-export-metadata-state').val() || config.export?.defaultMetadataState || 'production'}`);
+		const forms = getExportFormsForState(getSelectedExportMetadataState());
 		const values = forms.filter(form => getExportFormValidCount(form) > 0).map(form => form.name);
 		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
 		if (select?.tomselect) {
@@ -225,7 +220,7 @@
 
 	function refreshExportStatus(message = '') {
 		const forms = getSelectedExportForms();
-		const stateForms = getExportFormsForState(`${$('#rome-export-metadata-state').val() || config.export?.defaultMetadataState || 'production'}`);
+		const stateForms = getExportFormsForState(getSelectedExportMetadataState());
 		let count = 0;
 		for (const formName of forms) {
 			const form = stateForms.find(f => f.name === formName);
@@ -240,7 +235,7 @@
 		if (select?.tomselect) {
 			const value = select.tomselect.getValue();
 			const values = Array.isArray(value) ? value : String(value || '').split(',').filter(Boolean);
-			const enabled = new Set(getExportFormsForState(`${$('#rome-export-metadata-state').val() || config.export?.defaultMetadataState || 'production'}`)
+			const enabled = new Set(getExportFormsForState(getSelectedExportMetadataState())
 				.filter(form => getExportFormValidCount(form) > 0)
 				.map(form => form.name));
 			return values.filter(value => enabled.has(value));
@@ -253,8 +248,8 @@
 		if (!JSMO || exportPending) return;
 		const payload = {
 			forms: getSelectedExportForms(),
-			format: $('#rome-export-format').val() || 'native',
-			metadataState: $('#rome-export-metadata-state').val() || 'production',
+			format: getSelectedExportFormat(),
+			metadataState: getSelectedExportMetadataState(),
 		};
 		if (payload.forms.length === 0) {
 			renderExportMessages({ errors: [{ message: 'Select at least one form with exportable annotations.' }], warnings: [] });

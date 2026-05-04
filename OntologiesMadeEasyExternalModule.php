@@ -280,8 +280,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			throw new Exception('Unsupported export format.');
 		}
 
-		$metadataState = (string)($payload['metadataState'] ?? ($this->proj->isDraftMode() ? 'draft' : 'production'));
-		if ($metadataState !== 'draft' || !$this->proj->isDraftMode()) $metadataState = 'production';
+		$metadataState = 'development';
+		if ($this->proj->isProduction()) {
+			$metadataState = (string)($payload['metadataState'] ?? ($this->proj->isDraftMode() ? 'draft' : 'production'));
+			if ($metadataState === 'draft' && !$this->proj->isDraftMode()) $metadataState = 'production';
+		}
 		$metadata = $this->getProjectMetadataForState($metadataState);
 		$knownForms = $this->getProjectFormsForExport($metadata);
 		if (count($forms) === 0) $forms = array_keys($knownForms);
@@ -306,11 +309,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 
 		if ($format === 'fhir_questionnaire') {
-			$doc = $this->buildFhirQuestionnaireExport($scan['dataElements'], $forms, $knownForms, $metadataState);
-			$filename = $this->buildExportFilename('fhir-questionnaire', $forms, 'json');
+			$doc = $this->buildFhirQuestionnaireExport($scan['dataElements'], $forms, $knownForms, $metadataState, $metadata);
+			$filename = $this->buildExportFilename('fhir-questionnaire', 'json');
 		} else {
-			$doc = $this->buildNativeAnnotationExport($scan['dataElements'], $forms, $knownForms, $metadataState);
-			$filename = $this->buildExportFilename('rome-annotations', $forms, 'json');
+			$doc = $this->buildNativeAnnotationExport($scan['dataElements'], $metadataState, $metadata);
+			$filename = $this->buildExportFilename('rome-annotations', 'json');
 		}
 
 		return [
@@ -388,7 +391,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	private function collectExportAnnotations(array $metadata, array $forms): array
 	{
 		$parser = $this->getExportAnnotationParser();
-		$formLabels = $this->getProjectFormsForExport($metadata);
 		$dataElements = [];
 		$errors = [];
 		$warnings = [];
@@ -419,10 +421,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				continue;
 			}
 
-			$dataElements[] = $this->buildExportDataElement(
+			$dataElements[(string)$fieldName] = $this->buildExportDataElement(
 				(string)$fieldName,
 				$fieldData,
-				$formLabels[$formName] ?? $formName,
 				$annotation
 			);
 		}
@@ -459,17 +460,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return false;
 	}
 
-	private function buildExportDataElement(string $fieldName, array $fieldData, string $formLabel, array $annotation): array
+	private function buildExportDataElement(string $fieldName, array $fieldData, array $annotation): array
 	{
 		$de = $annotation['dataElement'] ?? [];
 		if (!is_array($de)) $de = [];
 		$out = [
-			'form' => (string)($fieldData['form_name'] ?? ''),
-			'formText' => $formLabel,
 			'name' => $fieldName,
 			'text' => (string)($fieldData['element_label'] ?? $fieldName),
+			'type' => (string)($fieldData['element_type'] ?? 'text'),
 		];
-		$out = array_merge($out, $this->getExportTypeInfo($fieldData));
 
 		if (!empty($de['coding']) && is_array($de['coding'])) {
 			$out['coding'] = array_values($de['coding']);
@@ -479,41 +478,15 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		}
 		if (!empty($de['valueCodingMap']) && is_array($de['valueCodingMap'])) {
 			$choices = $this->getChoiceLabelsForField($fieldData);
-			$valueCodingMap = [];
+			$valueCodingMap = new stdClass();
+			$count = 0;
 			foreach ($de['valueCodingMap'] as $code => $entry) {
 				if (!is_array($entry) || empty($entry['coding']) || !is_array($entry['coding'])) continue;
 				$entry['text'] = $choices[(string)$code] ?? (string)($entry['text'] ?? $code);
-				$valueCodingMap[(string)$code] = $entry;
+				$valueCodingMap->$code = $entry;
+				$count++;
 			}
-			if (count($valueCodingMap) > 0) $out['valueCodingMap'] = $valueCodingMap;
-		}
-
-		return $out;
-	}
-
-	private function getExportTypeInfo(array $fieldData): array
-	{
-		$redcapType = (string)($fieldData['element_type'] ?? '');
-		$validation = strtolower((string)($fieldData['element_validation_type'] ?? ''));
-		$type = $redcapType === 'select' ? 'dropdown' : $redcapType;
-		$out = ['type' => $type];
-
-		if ($redcapType === 'text') {
-			if (strpos($validation, 'date') === 0) {
-				$out['type'] = strpos($validation, 'datetime') === 0 ? 'datetime' : 'date';
-				$out['format'] = $validation;
-			} else if (strpos($validation, 'integer') !== false) {
-				$out['type'] = 'number';
-				$out['numericType'] = 'integer';
-			} else if (strpos($validation, 'number') !== false) {
-				$out['type'] = 'number';
-				$out['numericType'] = 'decimal';
-				if (preg_match('/_(\d+)dp$/', $validation, $m)) {
-					$out['precision'] = (int)$m[1];
-				}
-			} else if ($validation !== '') {
-				$out['format'] = $validation;
-			}
+			if ($count > 0) $out['valueCodingMap'] = $valueCodingMap;
 		}
 
 		return $out;
@@ -528,20 +501,17 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		} else {
 			$enum = (string)($fieldData['element_enum'] ?? '');
 		}
-
-		$choices = [];
-		foreach (preg_split('/\r\n|\r|\n/', $enum) as $line) {
-			if (trim($line) === '') continue;
-			$parts = explode(',', $line, 2);
-			$code = trim((string)($parts[0] ?? ''));
-			if ($code === '') continue;
-			$choices[$code] = trim((string)($parts[1] ?? $code));
-		}
-		return $choices;
+		return parseEnum($enum);
 	}
 
-	private function buildNativeAnnotationExport(array $dataElements, array $forms, array $knownForms, string $metadataState): array
+	private function buildNativeAnnotationExport(array $dataElements, string $metadataState, array $metadata): array
 	{
+		// Transform data elements to output format
+		$out = [];
+		foreach ($dataElements as $fieldname => $de) {
+			$out[] = $this->buildNativeExportDataElement($de, $metadata[$fieldname]);
+		}
+
 		return [
 			'resourceType' => 'ROME_Ontology_Annotations',
 			'url' => $this->getExportSourceUrl(),
@@ -550,24 +520,84 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				'created' => date('c'),
 				'creator' => 'ROME ' . $this->VERSION,
 				'metadataState' => $metadataState,
-				'forms' => array_map(function ($form) use ($knownForms) {
-					return [
-						'name' => $form,
-						'text' => $knownForms[$form] ?? $form,
-					];
-				}, $forms),
 			],
-			'dataElements' => $dataElements,
+			'dataElements' => $out,
 		];
 	}
 
-	private function buildFhirQuestionnaireExport(array $dataElements, array $forms, array $knownForms, string $metadataState): array
+	private function buildNativeExportDataElement(array $de, array $fmd): array
+	{
+		$out = $de;
+		// Type mapping from REDCap types to ROME types (depending on type and validation type)
+		$vt = $fmd['element_validation_type'] ?? '';
+		if ($fmd['element_type'] === 'text') {
+			$out['type'] = 'string';
+			switch ($vt) {
+				case '': break;
+				case 'time':
+					$out['type'] = 'time';
+					$out['precision'] = 'minutes';
+					break;
+				case 'time_hh_mm_ss':
+					$out['type'] = 'time';
+					$out['precision'] = 'seconds';
+					break;
+				case 'int':
+					$out['type'] = 'number';
+					$out['numericType'] = 'integer';
+					break;
+				case 'float':
+				case 'number_comma_decimal':
+					$out['type'] = 'number';
+					$out['numericType'] = 'decimal';
+					break;
+				case 'number_1dp':
+				case 'number_1dp_comma_decimal':
+				case 'number_2dp':
+				case 'number_2dp_comma_decimal':
+				case 'number_3dp':
+				case 'number_3dp_comma_decimal':
+				case 'number_4dp':
+				case 'number_4dp_comma_decimal':
+					$out['type'] = 'number';
+					$out['numericType'] = 'decimal';
+					$out['precision'] = intval(substr($vt, 7, 1));
+					break;
+				case 'date_ymd':
+				case 'date_dmy':
+				case 'date_mdy':
+					$out['format'] = substr($vt, -3);
+					break;
+				case 'datetime_ymd':
+				case 'datetime_dmy':
+				case 'datetime_mdy':
+					$out['format'] = substr($vt, -3);
+					$out['precision'] = 'minutes';
+					break;
+				case 'datetime_seconds_ymd':
+				case 'datetime_seconds_dmy':
+				case 'datetime_seconds_mdy':
+					$out['format'] = substr($vt, -3);
+					$out['precision'] = 'seconds';
+					break;
+				default:
+					$out['format'] = $vt;
+					break;
+			}
+		}
+		else if ($fmd['element_type'] === 'textarea') {
+			$out['type'] = 'text';
+		}
+		return $out;
+	}
+
+	private function buildFhirQuestionnaireExport(array $dataElements, array $forms, array $knownForms, string $metadataState, array $metadata): array
 	{
 		$itemsByForm = [];
-		foreach ($dataElements as $de) {
-			$form = (string)$de['form'];
+		foreach ($dataElements as $fieldname => $de) {
+			$form = $metadata[$fieldname]['form_name'];
 			if (!isset($itemsByForm[$form])) $itemsByForm[$form] = [];
-			$itemsByForm[$form][] = $this->buildFhirQuestionnaireItem($de);
+			$itemsByForm[$form][] = $this->buildFhirQuestionnaireItem($de, $metadata[$fieldname]);
 		}
 
 		$formItems = [];
@@ -587,7 +617,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'status' => 'active',
 			'title' => 'ROME ontology annotations',
 			'date' => date('c'),
-			'publisher' => 'ROME v' . $this->VERSION,
+			'publisher' => 'ROME ' . $this->VERSION,
 			'extension' => [[
 				'url' => 'https://rub.de/rome/fhir/StructureDefinition/metadata-state',
 				'valueCode' => $metadataState,
@@ -596,68 +626,118 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 	}
 
-	private function buildFhirQuestionnaireItem(array $de): array
+	private function buildFhirQuestionnaireItem(array $de, array $fmd): array
 	{
 		$item = [
 			'linkId' => (string)$de['name'],
 			'text' => (string)$de['text'],
-			'type' => $this->mapExportTypeToFhirQuestionnaireType($de),
+			'type' => $this->mapTypeToFhirQuestionnaireType($fmd),
 		];
 
 		if (!empty($de['coding']) && is_array($de['coding'])) {
 			$item['code'] = array_values($de['coding']);
 		}
-
-		if (!empty($de['valueCodingMap']) && is_array($de['valueCodingMap'])) {
+		// Check if stdClass has any entries
+		if (is_object($de['valueCodingMap']) && count(get_object_vars($de['valueCodingMap'])) > 0) {
 			$item['answerOption'] = [];
-				foreach ($de['valueCodingMap'] as $choiceCode => $entry) {
-					if (empty($entry['coding']) || !is_array($entry['coding'])) continue;
+			foreach ($de['valueCodingMap'] as $choiceCode => $entry) {
+				// Add REDCap choice as valueCoding
+				$answerOption = [
+					'valueCoding' => [
+						'system' => ROME_FHIR_Extensions::ROME_REDCAP_CHOICE,
+						'code' => (string)$choiceCode,
+						'display' => (string)($entry['text'] ?? $choiceCode),
+					],
+				];
+				// Add codings as extension
+				if (!empty($entry['coding']) && is_array($entry['coding'])) {
+					$extensions = [];
 					foreach ($entry['coding'] as $coding) {
 						if (!is_array($coding)) continue;
-						$item['answerOption'][] = [
-							'valueCoding' => $coding,
-							'extension' => [[
-								'url' => RomeFhirExtensions::ROME_REDCAP_CHOICE,
-								'extension' => [
-									['url' => 'code', 'valueString' => (string)$choiceCode],
-									['url' => 'text', 'valueString' => (string)($entry['text'] ?? $choiceCode)],
-								],
-							]],
+						$extension = [
+							'url' => ROME_FHIR_Extensions::ROME_ANSWEROPTION_ONTOLOGYANNOTATION,
+							'extension' => [
+								'url' => 'code',
+								'valueCoding' => $coding,
+							],
 						];
+						$extensions[] = $extension;
 					}
+					$answerOption['extension'] = $extensions;
 				}
+				$item['answerOption'][] = $answerOption;
 			}
-
+		}
+		if ((string)($fmd['element_type'] ?? '') === 'checkbox') {
+			$item['repeats'] = true;
+		}
 		if (!empty($de['unit']['coding']) && is_array($de['unit']['coding'])) {
 			foreach ($de['unit']['coding'] as $coding) {
 				if (!is_array($coding)) continue;
 				$item['extension'][] = [
-					'url' => $this->isNumericExportType($de) ? RomeFhirExtensions::QUESTIONNAIRE_UNIT : RomeFhirExtensions::ROME_QUESTIONNAIRE_UNIT,
+					'url' => ROME_FHIR_Extensions::QUESTIONNAIRE_UNIT,
 					'valueCoding' => $coding,
 				];
 			}
 		}
 
-		if ((string)($de['type'] ?? '') === 'checkbox') {
-			$item['repeats'] = true;
-		}
-
 		return $item;
 	}
 
-	private function mapExportTypeToFhirQuestionnaireType(array $de): string
+	private function mapTypeToFhirQuestionnaireType(array $fmd): string
 	{
-		$type = (string)($de['type'] ?? '');
-		if (in_array($type, ['radio', 'dropdown', 'checkbox', 'yesno', 'truefalse', 'slider'], true)) return 'choice';
-		if ($type === 'number') return (string)($de['numericType'] ?? '') === 'integer' ? 'integer' : 'decimal';
-		if ($type === 'date') return 'date';
-		if ($type === 'datetime') return 'dateTime';
+		$type = (string)($fmd['element_type'] ?? '');
+		switch ($type) {
+			case 'textarea':
+				return 'text';
+			case 'yesno':
+			case 'truefalse':
+				return 'boolean';
+			case 'radio':
+			case 'dropdown':
+			case 'checkbox':
+				return 'coding';
+			case 'file':
+				return 'attachment';
+			case 'slider':
+				return 'choice';
+			case 'sql':
+				return 'string';
+		}
+		// Remaining are all text
+		$vt = (string)($fmd['element_validation_type'] ?? '');
+		switch ($vt) {
+			case '': 
+				return 'string';
+			case 'time':
+			case 'time_hh_mm_ss':
+				return 'time';
+			case 'int':
+				return 'integer';
+			case 'float':
+			case 'number_comma_decimal':
+			case 'number_1dp':
+			case 'number_1dp_comma_decimal':
+			case 'number_2dp':
+			case 'number_2dp_comma_decimal':
+			case 'number_3dp':
+			case 'number_3dp_comma_decimal':
+			case 'number_4dp':
+			case 'number_4dp_comma_decimal':
+				return 'decimal';
+			case 'date_ymd':
+			case 'date_dmy':
+			case 'date_mdy':
+				return 'date';
+			case 'datetime_ymd':
+			case 'datetime_dmy':
+			case 'datetime_mdy':
+			case 'datetime_seconds_ymd':
+			case 'datetime_seconds_dmy':
+			case 'datetime_seconds_mdy':
+				return 'dateTime';
+		}
 		return 'string';
-	}
-
-	private function isNumericExportType(array $de): bool
-	{
-		return (string)($de['type'] ?? '') === 'number';
 	}
 
 	private function getExportSourceUrl(): string
@@ -668,11 +748,9 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return $url;
 	}
 
-	private function buildExportFilename(string $prefix, array $forms, string $extension): string
+	private function buildExportFilename(string $prefix, string $extension): string
 	{
-		$scope = count($forms) === 1 ? $forms[0] : 'all-forms';
-		$scope = preg_replace('/[^A-Za-z0-9_.-]+/', '-', $scope) ?? 'export';
-		return $prefix . '-' . $scope . '-' . date('Ymd-His') . '.' . $extension;
+		return $prefix . '-' . date('Ymd-His') . '.' . $extension;
 	}
 
 	#endregion
