@@ -126,7 +126,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			// A) item.code[] (Coding)
 			if (isset($item['code']) && is_array($item['code'])) {
 				foreach ($item['code'] as $coding) {
-					$e = $this->codingToEntry($coding, $itemType, 'field');
+					$e = $this->codingToEntry($coding, $itemType);
 					if ($e !== null) {
 						$entries[] = $e;
 					}
@@ -138,9 +138,23 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 				foreach ($item['answerOption'] as $ao) {
 					if (!is_array($ao)) continue;
 					if (isset($ao['valueCoding'])) {
-						$e = $this->codingToEntry($ao['valueCoding'], $itemType, 'choice', $this->getChoiceTargetName($ao));
+						$e = $this->codingToEntry($ao['valueCoding'], $itemType);
 						if ($e !== null) {
 							$entries[] = $e;
+						}
+					}
+					// Check REDCap extensions
+					if (isset($ao['extension']) && is_array($ao['extension'])) {
+						foreach ($ao['extension'] ?? [] as $extension) {
+							$url = $extension['url'] ?? '';
+							if ($url !== ROME_FHIR_Extensions::ROME_ANSWEROPTION_ONTOLOGYANNOTATION) continue;
+							$nestedExtension = $extension['extension'] ?? [];
+							$url = $nestedExtension['url'] ?? '';
+							if ($url !== 'code' || !isset($nestedExtension['valueCoding'])) continue;
+							$e = $this->codingToEntry($nestedExtension['valueCoding'], $itemType);
+							if ($e !== null) {
+								$entries[] = $e;
+							}
 						}
 					}
 				}
@@ -168,15 +182,19 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 	 *
 	 * @param mixed $coding
 	 * @param string $itemType FHIR Questionnaire item.type
-	 * @param string $target ROME target type: field, choice, or unit
-	 * @param string $targetName Optional native target identifier
 	 * @return array|null
 	 */
-	private function codingToEntry($coding, string $itemType, string $target, string $targetName = ''): ?array
+	private function codingToEntry($coding, string $itemType): ?array
 	{
 		if (!is_array($coding)) return null;
 
 		$system  = isset($coding['system']) ? trim((string)$coding['system']) : '';
+
+		// Skip REDCap's own codes
+		if ($system === ROME_FHIR_Extensions::ROME_REDCAP_CHOICE) {
+			return null;
+		}
+
 		$code    = isset($coding['code']) ? trim((string)$coding['code']) : '';
 		$display = isset($coding['display']) ? trim((string)$coding['display']) : '';
 
@@ -195,12 +213,8 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			'native' => [
 				'format' => 'fhir',
 				'item_type' => $itemType,
-				'target' => $target,
 			],
 		];
-		if ($targetName !== '') {
-			$type['native']['target_name'] = $targetName;
-		}
 
 		return [
 			'system' => $system,
@@ -218,24 +232,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 		if (!in_array($url, [ROME_FHIR_Extensions::QUESTIONNAIRE_UNIT, ROME_FHIR_Extensions::ROME_QUESTIONNAIRE_UNIT], true)) {
 			return null;
 		}
-		return $this->codingToEntry($extension['valueCoding'] ?? null, $itemType, 'unit');
-	}
-
-	private function getChoiceTargetName(array $answerOption): string
-	{
-		if (empty($answerOption['extension']) || !is_array($answerOption['extension'])) return '';
-		foreach ($answerOption['extension'] as $extension) {
-			if (!is_array($extension)) continue;
-			if (($extension['url'] ?? '') !== ROME_FHIR_Extensions::ROME_REDCAP_CHOICE) continue;
-			if (empty($extension['extension']) || !is_array($extension['extension'])) continue;
-			foreach ($extension['extension'] as $part) {
-				if (!is_array($part)) continue;
-				if (($part['url'] ?? '') === 'code' && isset($part['valueString'])) {
-					return (string)$part['valueString'];
-				}
-			}
-		}
-		return '';
+		return $this->codingToEntry($extension['valueCoding'] ?? null, $itemType);
 	}
 
 	private function normalizeForSearch(string $s): string
