@@ -1164,6 +1164,9 @@
 		if (source?.kind === 'fhir_questionnaire') {
 			s += '<i class="fa-solid fa-fire fa-sm ms-1 text-warning"></i>';
 		}
+		else if (source?.kind === 'native_rome') {
+			s += '<i class="fa-solid fa-building-columns fa-sm ms-1"></i>';
+		}
 		if (source?.from_system ?? false) {
 			s += '<i class="fa-solid fa-hard-drive fa-sm ms-1 text-info"></i>';
 		}

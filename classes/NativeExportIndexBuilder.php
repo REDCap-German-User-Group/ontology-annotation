@@ -10,12 +10,12 @@ use RuntimeException;
 use stdClass;
 
 /**
- * FHIR Questionnaire Index Builder (v0).
+ * Native export Index Builder (v0).
  *
  * Extracts codings from:
- *  - item.code[] (Coding)
- *  - item.answerOption[].valueCoding (Coding)
- *  - item.extension[].valueCoding for Questionnaire unit annotations
+ *  - dataElements.coding[] (Coding)
+ *  - dataElements.valueCodingMap. (Coding)
+ *  - dataElements.unit (Coding)
  *
  * Produces a flat payload:
  *  [
@@ -38,11 +38,11 @@ use stdClass;
  *  - No scoring/indexing here; v0 search scans entries.
  */
 
-final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
+final class NativeExportIndexBuilder implements LocalSourceIndexBuilder
 {
 	public function supports(string $kind): bool
 	{
-		return $kind === 'fhir_questionnaire';
+		return $kind === 'native_rome';
 	}
 
 	public function buildFromDocId(int $docId, array $options = []): BuildResult
@@ -56,12 +56,12 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 	{
 		$data = json_decode($jsonString, true);
 		if (!is_array($data)) {
-			throw new RuntimeException('Invalid JSON in Questionnaire file.');
+			throw new RuntimeException('Invalid JSON in ROME_Ontology_Annotations file.');
 		}
 
-		// resourceType should be "Questionnaire"
+		// resourceType should be "ROME_Ontology_Annotations"
 		$rt = isset($data['resourceType']) ? (string)$data['resourceType'] : '';
-		if ($rt !== '' && $rt !== 'Questionnaire') {
+		if ($rt !== '' && $rt !== 'ROME_Ontology_Annotations') {
 			// TODO: Should we throw an exception here?
 			// We can continue and do a best effort scan
 		}
@@ -82,9 +82,9 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 		}
 
 		$entries = [];
-		$items = $data['item'] ?? [];
+		$items = $data['dataElements'] ?? [];
 		if (is_array($items)) {
-			$this->walkItems($items, $entries, []);
+			$this->walkItems($items, $entries);
 		}
 
 		// Deduplicate by system|code|display (keeps payload smaller and search stable)
@@ -101,31 +101,26 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			'entries' => $entries,
 		];
 
-		return new BuildResult('fhir_questionnaire', count($entries), $payload);
+		return new BuildResult('native_rome', count($entries), $payload);
 	}
 
 	/**
-	 * Recursively walk Questionnaire.item[].
+	 * Recursively walk ROME_Ontology_Annotations.dataElements[].
 	 *
 	 * @param array $items
 	 * @param array $entries out
-	 * @param array $path linkId path (internal only; not exposed to client)
 	 * @return void
 	 */
-	private function walkItems(array $items, array &$entries, array $path): void
+	private function walkItems(array $items, array &$entries): void
 	{
 		foreach ($items as $item) {
 			if (!is_array($item)) continue;
 
-			$linkId = isset($item['linkId']) ? (string)$item['linkId'] : '';
-			$nextPath = $path;
-			if ($linkId !== '') $nextPath[] = $linkId;
-
 			$itemType = isset($item['type']) ? (string)$item['type'] : '';
 
-			// A) item.code[] (Coding)
-			if (isset($item['code']) && is_array($item['code'])) {
-				foreach ($item['code'] as $coding) {
+			// A) dataElements.coding[] (Coding)
+			if (isset($item['coding']) && is_array($item['coding'])) {
+				foreach ($item['coding'] as $coding) {
 					$e = $this->codingToEntry($coding, $itemType);
 					if ($e !== null) {
 						$entries[] = $e;
@@ -133,25 +128,13 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 				}
 			}
 
-			// B) item.answerOption[].valueCoding (Coding)
-			if (isset($item['answerOption']) && is_array($item['answerOption'])) {
-				foreach ($item['answerOption'] as $ao) {
-					if (!is_array($ao)) continue;
-					if (isset($ao['valueCoding'])) {
-						$e = $this->codingToEntry($ao['valueCoding'], $itemType);
-						if ($e !== null) {
-							$entries[] = $e;
-						}
-					}
-					// Check REDCap extensions
-					if (isset($ao['extension']) && is_array($ao['extension'])) {
-						foreach ($ao['extension'] ?? [] as $extension) {
-							$url = $extension['url'] ?? '';
-							if ($url !== ROME_FHIR_Extensions::ROME_ANSWEROPTION_ONTOLOGYANNOTATION) continue;
-							$nestedExtension = $extension['extension'] ?? [];
-							$url = $nestedExtension['url'] ?? '';
-							if ($url !== 'code' || !isset($nestedExtension['valueCoding'])) continue;
-							$e = $this->codingToEntry($nestedExtension['valueCoding'], $itemType);
+			// B) dataElements.valueCodingMap[].coding (Coding)
+			if (isset($item['valueCodingMap']) && is_array($item['valueCodingMap'])) {
+				foreach ($item['valueCodingMap'] as $code => $vcm) {
+					if (!is_array($vcm)) continue;
+					if (isset($vcm['coding']) && is_array($vcm['coding'])) {
+						foreach ($vcm['coding'] as $coding) {
+							$e = $this->codingToEntry($coding, $itemType);
 							if ($e !== null) {
 								$entries[] = $e;
 							}
@@ -160,28 +143,24 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 				}
 			}
 
-			// C) item.extension[].valueCoding for unit annotations
-			if (isset($item['extension']) && is_array($item['extension'])) {
-				foreach ($item['extension'] as $extension) {
-					$e = $this->extensionToUnitEntry($extension, $itemType);
+			// C) dataElements.unit[].coding for unit annotations
+			if (isset($item['unit']) && is_array($item['unit'])) {
+				$unitCodings = $item['unit']['coding'] ?? [];
+				foreach ($unitCodings as $coding) {
+					$e = $this->codingToEntry($coding, $itemType);
 					if ($e !== null) {
 						$entries[] = $e;
 					}
 				}
 			}
-
-			// Recurse into nested items
-			if (isset($item['item']) && is_array($item['item'])) {
-				$this->walkItems($item['item'], $entries, $nextPath);
-			}
 		}
 	}
 
 	/**
-	 * Convert a FHIR Coding array into a normalized entry.
+	 * Convert a Coding array into a normalized entry.
 	 *
 	 * @param mixed $coding
-	 * @param string $itemType FHIR Questionnaire item.type
+	 * @param string $itemType ROME_Ontology_Annotations dataElements.type
 	 * @return array|null
 	 */
 	private function codingToEntry($coding, string $itemType): ?array
@@ -211,7 +190,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 		$type = [
 			'mapped' => new stdClass(), // to be filled later
 			'native' => [
-				'format' => 'fhir',
+				'format' => 'rome',
 				'item_type' => $itemType,
 			],
 		];
@@ -223,16 +202,6 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			'type' => $type,
 			'_q' => $q,
 		];
-	}
-
-	private function extensionToUnitEntry($extension, string $itemType): ?array
-	{
-		if (!is_array($extension)) return null;
-		$url = isset($extension['url']) ? (string)$extension['url'] : '';
-		if (!in_array($url, [ROME_FHIR_Extensions::QUESTIONNAIRE_UNIT, ROME_FHIR_Extensions::ROME_QUESTIONNAIRE_UNIT], true)) {
-			return null;
-		}
-		return $this->codingToEntry($extension['valueCoding'] ?? null, $itemType);
 	}
 
 	private function normalizeForSearch(string $s): string

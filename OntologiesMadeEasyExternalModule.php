@@ -3034,10 +3034,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	{
 		require_once __DIR__ . '/classes/CacheBuilder.php';
 		require_once __DIR__ . '/classes/FhirQuestionnaireIndexBuilder.php';
+		require_once __DIR__ . '/classes/NativeExportIndexBuilder.php';
 
 		// Builders
 		$builders = [
 			new FhirQuestionnaireIndexBuilder(),
+			new NativeExportIndexBuilder(),
 		];
 
 		if ($kind === null) return $builders;
