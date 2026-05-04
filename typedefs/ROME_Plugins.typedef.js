@@ -21,42 +21,6 @@
  * @property {(config_data?: ROMEPluginConfig, jsmo?: JavascriptModuleObject) => void} init
  */
 
-/**
- * Logger configuration.
- * @typedef {Object} ConsoleDebugLoggerConfig
- * @property {boolean=} active
- * @property {string=} name
- * @property {string=} version
- */
-
-/**
- * Lazy log thunk.
- * @callback LazyArgsThunk
- * @returns {any[]}
- */
-
-/**
- * Console logger instance returned by ConsoleDebugLogger.create().
- * @typedef {Object} ConsoleDebugLoggerInstance
- * @property {(...args: any[]) => void} log
- * @property {(...args: any[]) => void} info
- * @property {(...args: any[]) => void} warn
- * @property {(...args: any[]) => void} error
- * @property {(thunk: LazyArgsThunk) => void} logLazy
- * @property {(thunk: LazyArgsThunk) => void} infoLazy
- * @property {(thunk: LazyArgsThunk) => void} warnLazy
- * @property {(thunk: LazyArgsThunk) => void} errorLazy
- * @property {(cfg?: ConsoleDebugLoggerConfig) => ConsoleDebugLoggerInstance} configure
- */
-
-/**
- * Console logger factory.
- * @typedef {Object} ConsoleDebugLoggerFactory
- * @property {(cfg?: ConsoleDebugLoggerConfig) => ConsoleDebugLoggerInstance} create
- */
-
-/** @type {ConsoleDebugLoggerFactory} */
-var ConsoleDebugLogger;
 
 /**
  * REDCap toast helper available on pages that use this plugin.
