@@ -37,6 +37,8 @@
 	let editLocalSource;
 	/** @type {Function} */
 	let editSystemSource;
+	/** @type {Object|null} */
+	let lastExport = null;
 
 	/**
 	 * Implements the public init method.
@@ -66,6 +68,7 @@
 				case 'utilities':
 					break;
 				case 'export':
+					initExport();
 					break;
 				case 'manage':
 					initRemoteSourcesManagement();
@@ -85,6 +88,175 @@
 		});
 	}
 
+
+
+	//#region Export
+
+	function initExport() {
+		const exportConfig = config.export || {};
+		const forms = Array.isArray(exportConfig.forms) ? exportConfig.forms : [];
+		const formats = Array.isArray(exportConfig.formats) ? exportConfig.formats : [];
+		const metadataState = exportConfig.defaultMetadataState || 'production';
+
+		const $forms = $('#rome-export-forms');
+		const $format = $('#rome-export-format');
+		const $metadataWrap = $('#rome-export-metadata-state-wrap');
+		const $metadataState = $('#rome-export-metadata-state');
+		const $download = $('#rome-export-download');
+
+		$forms.html(forms.map(form => {
+			const stateCounts = form.annotationCounts?.[metadataState] || { valid: 0, invalid: 0 };
+			const suffix = ` (${stateCounts.valid || 0} annotated${stateCounts.invalid ? `, ${stateCounts.invalid} invalid` : ''})`;
+			return `<option value="${escapeHTML(form.name)}" selected>${escapeHTML(form.label + suffix)}</option>`;
+		}).join(''));
+
+		$format.html(formats.map(format => {
+			return `<option value="${escapeHTML(format.value)}">${escapeHTML(format.label)}</option>`;
+		}).join(''));
+
+		$metadataState.val(metadataState);
+		if (exportConfig.hasDraft) {
+			$metadataWrap.removeClass('d-none');
+		}
+
+		if (window.TomSelect && $forms.length) {
+			// @ts-ignore
+			new window.TomSelect('#rome-export-forms', {
+				plugins: ['remove_button'],
+				valueField: 'value',
+				labelField: 'text',
+				searchField: 'text',
+				hideSelected: true,
+				onChange: () => refreshExportStatus(),
+			});
+		}
+
+		$forms.on('change', () => refreshExportStatus());
+		$metadataState.on('change', refreshExportFormLabels);
+		$download.on('click', runExportDownload);
+		refreshExportStatus();
+	}
+
+	function refreshExportFormLabels() {
+		const exportConfig = config.export || {};
+		const state = `${$('#rome-export-metadata-state').val() || exportConfig.defaultMetadataState || 'production'}`;
+		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		if (!select?.tomselect || !Array.isArray(exportConfig.forms)) return;
+
+		for (const form of exportConfig.forms) {
+			const counts = form.annotationCounts?.[state] || { valid: 0, invalid: 0 };
+			const suffix = ` (${counts.valid || 0} annotated${counts.invalid ? `, ${counts.invalid} invalid` : ''})`;
+			select.tomselect.updateOption(form.name, {
+				value: form.name,
+				text: form.label + suffix
+			});
+		}
+		select.tomselect.refreshOptions(false);
+		select.tomselect.refreshItems();
+		refreshExportStatus();
+	}
+
+	function refreshExportStatus(message = '') {
+		const exportConfig = config.export || {};
+		const state = `${$('#rome-export-metadata-state').val() || exportConfig.defaultMetadataState || 'production'}`;
+		const forms = getSelectedExportForms();
+		let count = 0;
+		for (const formName of forms) {
+			const form = (exportConfig.forms || []).find(f => f.name === formName);
+			count += form?.annotationCounts?.[state]?.valid || 0;
+		}
+		$('#rome-export-status').text(message || `${count} annotation${count === 1 ? '' : 's'} ready`);
+		$('#rome-export-download').prop('disabled', forms.length === 0);
+	}
+
+	function getSelectedExportForms() {
+		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		if (select?.tomselect) {
+			const value = select.tomselect.getValue();
+			return Array.isArray(value) ? value : String(value || '').split(',').filter(Boolean);
+		}
+		const value = $('#rome-export-forms').val();
+		return Array.isArray(value) ? value.map(String) : [];
+	}
+
+	async function runExportDownload() {
+		if (!JSMO) return;
+		const payload = {
+			forms: getSelectedExportForms(),
+			format: $('#rome-export-format').val() || 'native',
+			metadataState: $('#rome-export-metadata-state').val() || 'production',
+		};
+		if (payload.forms.length === 0) {
+			renderExportMessages({ errors: [{ message: 'Select at least one form.' }], warnings: [] });
+			return;
+		}
+
+		const $download = $('#rome-export-download');
+		$download.prop('disabled', true);
+		refreshExportStatus('Preparing export ...');
+		renderExportMessages({ errors: [], warnings: [] });
+
+		try {
+			const res = await JSMO.ajax('export-annotations', payload);
+			lastExport = res || null;
+			renderExportMessages(res || {});
+			if (res?.success && res.content && res.filename) {
+				downloadExportContent(res.content, res.filename, res.mimeType || 'application/json');
+				refreshExportStatus(`Downloaded ${res.annotationCount || 0} annotation${res.annotationCount === 1 ? '' : 's'}`);
+			} else {
+				refreshExportStatus(res?.error || 'No export file generated');
+			}
+		} catch (err) {
+			error('Export failed', err);
+			renderExportMessages({ errors: [{ message: 'Export failed. Check the browser console for details.' }], warnings: [] });
+			refreshExportStatus('Export failed');
+		} finally {
+			$download.prop('disabled', getSelectedExportForms().length === 0);
+		}
+	}
+
+	function renderExportMessages(result) {
+		const errors = Array.isArray(result.errors) ? result.errors : [];
+		const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+		const $messages = $('#rome-export-messages');
+		if (errors.length === 0 && warnings.length === 0) {
+			$messages.empty();
+			return;
+		}
+
+		const renderItems = (items, cls, title) => {
+			if (items.length === 0) return '';
+			return `<div class="alert ${cls} py-2 mb-2">
+				<strong>${escapeHTML(title)}</strong>
+				<ul class="mb-0 ps-3">
+					${items.map(item => {
+						const where = [item.form, item.field].filter(Boolean).join(' / ');
+						const prefix = where ? `${where}: ` : '';
+						return `<li>${escapeHTML(prefix + (item.message || 'Unknown issue'))}</li>`;
+					}).join('')}
+				</ul>
+			</div>`;
+		};
+
+		$messages.html(
+			renderItems(errors, 'alert-warning', 'Export issues') +
+			renderItems(warnings, 'alert-secondary', 'Warnings')
+		);
+	}
+
+	function downloadExportContent(content, filename, mimeType) {
+		const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+
+	//#endregion
 
 
 	//#region Manage / Configure

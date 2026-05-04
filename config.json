@@ -80,7 +80,8 @@
 		"save-system-source",
 		"toggle-source-enabled",
 		"delete-source",
-		"get-source-file-info"
+		"get-source-file-info",
+		"export-annotations"
 	],
 	"no-csrf-pages": [
         "ajax/search",

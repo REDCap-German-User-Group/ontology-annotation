@@ -13,6 +13,7 @@ use stdClass;
  * Extracts codings from:
  *  - item.code[] (Coding)
  *  - item.answerOption[].valueCoding (Coding)
+ *  - item.extension[].valueCoding for Questionnaire unit annotations
  *
  * Produces a flat payload:
  *  [
@@ -37,6 +38,10 @@ use stdClass;
 
 final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 {
+	private const FHIR_QUESTIONNAIRE_UNIT_EXTENSION = 'http://hl7.org/fhir/StructureDefinition/questionnaire-unit';
+	private const ROME_FHIR_UNIT_EXTENSION = 'https://rub.de/rome/fhir/StructureDefinition/questionnaire-unit-annotation';
+	private const ROME_FHIR_CHOICE_EXTENSION = 'https://rub.de/rome/fhir/StructureDefinition/redcap-choice';
+
 	public function supports(string $kind): bool
 	{
 		return $kind === 'fhir_questionnaire';
@@ -123,7 +128,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			// A) item.code[] (Coding)
 			if (isset($item['code']) && is_array($item['code'])) {
 				foreach ($item['code'] as $coding) {
-					$e = $this->codingToEntry($coding, $itemType);
+					$e = $this->codingToEntry($coding, $itemType, 'field');
 					if ($e !== null) {
 						$entries[] = $e;
 					}
@@ -135,10 +140,20 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 				foreach ($item['answerOption'] as $ao) {
 					if (!is_array($ao)) continue;
 					if (isset($ao['valueCoding'])) {
-						$e = $this->codingToEntry($ao['valueCoding'], $itemType);
+						$e = $this->codingToEntry($ao['valueCoding'], $itemType, 'choice', $this->getChoiceTargetName($ao));
 						if ($e !== null) {
 							$entries[] = $e;
 						}
+					}
+				}
+			}
+
+			// C) item.extension[].valueCoding for unit annotations
+			if (isset($item['extension']) && is_array($item['extension'])) {
+				foreach ($item['extension'] as $extension) {
+					$e = $this->extensionToUnitEntry($extension, $itemType);
+					if ($e !== null) {
+						$entries[] = $e;
 					}
 				}
 			}
@@ -155,9 +170,11 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 	 *
 	 * @param mixed $coding
 	 * @param string $itemType FHIR Questionnaire item.type
+	 * @param string $target ROME target type: field, choice, or unit
+	 * @param string $targetName Optional native target identifier
 	 * @return array|null
 	 */
-	private function codingToEntry($coding, string $itemType): ?array
+	private function codingToEntry($coding, string $itemType, string $target, string $targetName = ''): ?array
 	{
 		if (!is_array($coding)) return null;
 
@@ -170,9 +187,6 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			return null;
 		}
 
-		// Add system to set
-		$systemSet[$system] = true;
-
 		// Pre-normalized search text (internal): code, display
 		$q = $this->normalizeForSearch($code . ' ' . $display);
 
@@ -183,8 +197,12 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			'native' => [
 				'format' => 'fhir',
 				'item_type' => $itemType,
+				'target' => $target,
 			],
 		];
+		if ($targetName !== '') {
+			$type['native']['target_name'] = $targetName;
+		}
 
 		return [
 			'system' => $system,
@@ -193,6 +211,33 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 			'type' => $type,
 			'_q' => $q,
 		];
+	}
+
+	private function extensionToUnitEntry($extension, string $itemType): ?array
+	{
+		if (!is_array($extension)) return null;
+		$url = isset($extension['url']) ? (string)$extension['url'] : '';
+		if (!in_array($url, [self::FHIR_QUESTIONNAIRE_UNIT_EXTENSION, self::ROME_FHIR_UNIT_EXTENSION], true)) {
+			return null;
+		}
+		return $this->codingToEntry($extension['valueCoding'] ?? null, $itemType, 'unit');
+	}
+
+	private function getChoiceTargetName(array $answerOption): string
+	{
+		if (empty($answerOption['extension']) || !is_array($answerOption['extension'])) return '';
+		foreach ($answerOption['extension'] as $extension) {
+			if (!is_array($extension)) continue;
+			if (($extension['url'] ?? '') !== self::ROME_FHIR_CHOICE_EXTENSION) continue;
+			if (empty($extension['extension']) || !is_array($extension['extension'])) continue;
+			foreach ($extension['extension'] as $part) {
+				if (!is_array($part)) continue;
+				if (($part['url'] ?? '') === 'code' && isset($part['valueString'])) {
+					return (string)$part['valueString'];
+				}
+			}
+		}
+		return '';
 	}
 
 	private function normalizeForSearch(string $s): string
@@ -209,7 +254,12 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 		$out = [];
 		foreach ($entries as $e) {
 			if (!is_array($e)) continue;
-			$k = ($e['system'] ?? '') . "\n" . ($e['code'] ?? '') . "\n" . ($e['display'] ?? '');
+			$native = $e['type']['native'] ?? [];
+			$k = ($e['system'] ?? '') . "\n" .
+				($e['code'] ?? '') . "\n" .
+				($e['display'] ?? '') . "\n" .
+				($native['target'] ?? '') . "\n" .
+				($native['target_name'] ?? '');
 			if (isset($seen[$k])) continue;
 			$seen[$k] = true;
 			$out[] = $e;

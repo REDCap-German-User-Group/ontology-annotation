@@ -31,6 +31,10 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	private $project_id = null;
 
 	const AT_ONTOLOGY = '@ONTOLOGY';
+	const EXPORT_FORMAT_VERSION = '1.0.0';
+	const FHIR_QUESTIONNAIRE_UNIT_EXTENSION = 'http://hl7.org/fhir/StructureDefinition/questionnaire-unit';
+	const ROME_FHIR_UNIT_EXTENSION = 'https://rub.de/rome/fhir/StructureDefinition/questionnaire-unit-annotation';
+	const ROME_FHIR_CHOICE_EXTENSION = 'https://rub.de/rome/fhir/StructureDefinition/redcap-choice';
 
 
 
@@ -165,6 +169,18 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				return $this->deleteSource($payload);
 			case 'get-source-file-info':
 				return $this->getSourceFileInfo($payload);
+			case 'export-annotations':
+				try {
+					return $this->exportAnnotations($payload);
+				} catch (Throwable $e) {
+					return [
+						'success' => false,
+						'error' => $e->getMessage(),
+						'errors' => [[
+							'message' => $e->getMessage(),
+						]],
+					];
+				}
 		}
 	}
 
@@ -199,9 +215,450 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		} else if ($page === 'manage' && $pid !== null) {
 			$jsConfig['sources'] = $this->getProjectSources($pid);
 			$jsConfig['sysSources'] = $this->getSystemSources(true);
+		} else if ($page === 'export' && $pid !== null) {
+			$jsConfig['export'] = $this->getExportPageConfig();
 		}
 
 		return $jsConfig;
+	}
+
+	#endregion
+
+	#region Export
+
+	private function getExportPageConfig(): array
+	{
+		$hasDraft = $this->proj !== null && $this->proj->isDraftMode();
+		$states = ['production'];
+		if ($hasDraft) $states[] = 'draft';
+
+		$formStats = [];
+		foreach ($states as $state) {
+			$metadata = $this->getProjectMetadataForState($state);
+			foreach ($this->getProjectFormsForExport() as $formName => $formLabel) {
+				if (!isset($formStats[$formName])) {
+					$formStats[$formName] = [
+						'name' => $formName,
+						'label' => $formLabel,
+						'fieldCount' => 0,
+						'annotationCounts' => [
+							'production' => ['valid' => 0, 'invalid' => 0],
+							'draft' => ['valid' => 0, 'invalid' => 0],
+						],
+					];
+				}
+				$stats = $this->countExportableAnnotations($metadata, [$formName]);
+				$formStats[$formName]['fieldCount'] = max($formStats[$formName]['fieldCount'], $stats['fieldCount']);
+				$formStats[$formName]['annotationCounts'][$state] = [
+					'valid' => $stats['valid'],
+					'invalid' => $stats['invalid'],
+				];
+			}
+		}
+
+		return [
+			'forms' => array_values($formStats),
+			'formats' => [
+				['value' => 'native', 'label' => 'Native ROME JSON'],
+				['value' => 'fhir_questionnaire', 'label' => 'FHIR Questionnaire'],
+			],
+			'hasDraft' => $hasDraft,
+			'defaultMetadataState' => $hasDraft ? 'draft' : 'production',
+		];
+	}
+
+	private function exportAnnotations($payload): array
+	{
+		$forms = $payload['forms'] ?? [];
+		if (!is_array($forms)) $forms = [];
+		$forms = array_values(array_filter(array_map('strval', $forms)));
+
+		$knownForms = $this->getProjectFormsForExport();
+		if (count($forms) === 0) $forms = array_keys($knownForms);
+		$forms = array_values(array_intersect($forms, array_keys($knownForms)));
+		if (count($forms) === 0) {
+			throw new Exception('No valid forms selected for export.');
+		}
+
+		$format = (string)($payload['format'] ?? 'native');
+		if (!in_array($format, ['native', 'fhir_questionnaire'], true)) {
+			throw new Exception('Unsupported export format.');
+		}
+
+		$metadataState = (string)($payload['metadataState'] ?? ($this->proj->isDraftMode() ? 'draft' : 'production'));
+		if ($metadataState !== 'draft' || !$this->proj->isDraftMode()) $metadataState = 'production';
+		$metadata = $this->getProjectMetadataForState($metadataState);
+		$scan = $this->collectExportAnnotations($metadata, $forms);
+
+		$warnings = $scan['warnings'];
+		if (count($scan['dataElements']) === 0) {
+			return [
+				'success' => false,
+				'filename' => null,
+				'mimeType' => 'application/json',
+				'content' => '',
+				'annotationCount' => 0,
+				'errors' => $scan['errors'],
+				'warnings' => $warnings,
+				'error' => 'No viable ontology annotations found in the selected forms.',
+			];
+		}
+
+		if ($format === 'fhir_questionnaire') {
+			$doc = $this->buildFhirQuestionnaireExport($scan['dataElements'], $forms, $knownForms, $metadataState);
+			$filename = $this->buildExportFilename('fhir-questionnaire', $forms, 'json');
+		} else {
+			$doc = $this->buildNativeAnnotationExport($scan['dataElements'], $forms, $knownForms, $metadataState);
+			$filename = $this->buildExportFilename('rome-annotations', $forms, 'json');
+		}
+
+		return [
+			'success' => true,
+			'filename' => $filename,
+			'mimeType' => 'application/json',
+			'content' => json_encode($doc, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR),
+			'annotationCount' => count($scan['dataElements']),
+			'errors' => $scan['errors'],
+			'warnings' => $warnings,
+		];
+	}
+
+	private function getProjectFormsForExport(): array
+	{
+		$forms = [];
+		if ($this->proj === null || !is_array($this->proj->forms)) return $forms;
+		foreach ($this->proj->forms as $formName => $formInfo) {
+			$label = $formName;
+			if (is_array($formInfo) && isset($formInfo['menu']) && trim((string)$formInfo['menu']) !== '') {
+				$label = (string)$formInfo['menu'];
+			}
+			$forms[(string)$formName] = $label;
+		}
+		return $forms;
+	}
+
+	private function getProjectMetadataForState(string $state): array
+	{
+		if ($this->proj === null) return [];
+		if ($state === 'draft' && $this->proj->isDraftMode() && is_array($this->proj->metadata_temp)) {
+			return $this->proj->metadata_temp;
+		}
+		return is_array($this->proj->metadata) ? $this->proj->metadata : [];
+	}
+
+	private function countExportableAnnotations(array $metadata, array $forms): array
+	{
+		$fieldCount = 0;
+		$valid = 0;
+		$invalid = 0;
+		$parser = $this->getExportAnnotationParser();
+		foreach ($metadata as $fieldName => $fieldData) {
+			if (!is_array($fieldData)) continue;
+			if (!in_array((string)($fieldData['form_name'] ?? ''), $forms, true)) continue;
+			$fieldCount++;
+			$parsed = $parser->parse((string)($fieldData['misc'] ?? ''));
+			if ($parsed['numTags'] === 0) continue;
+			if ($parsed['error']) {
+				$invalid++;
+				continue;
+			}
+			if ($this->annotationHasExportableCoding($parsed['json'] ?? [])) $valid++;
+		}
+		return [
+			'fieldCount' => $fieldCount,
+			'valid' => $valid,
+			'invalid' => $invalid,
+		];
+	}
+
+	private function collectExportAnnotations(array $metadata, array $forms): array
+	{
+		$parser = $this->getExportAnnotationParser();
+		$formLabels = $this->getProjectFormsForExport();
+		$dataElements = [];
+		$errors = [];
+		$warnings = [];
+
+		foreach ($metadata as $fieldName => $fieldData) {
+			if (!is_array($fieldData)) continue;
+			$formName = (string)($fieldData['form_name'] ?? '');
+			if (!in_array($formName, $forms, true)) continue;
+
+			$parsed = $parser->parse((string)($fieldData['misc'] ?? ''));
+			if ($parsed['numTags'] === 0) continue;
+			if ($parsed['error']) {
+				$errors[] = [
+					'form' => $formName,
+					'field' => (string)$fieldName,
+					'message' => $parsed['errorMessage'] ?: 'Invalid @ONTOLOGY JSON.',
+				];
+				continue;
+			}
+
+			$annotation = $parsed['json'] ?? [];
+			if (!$this->annotationHasExportableCoding($annotation)) {
+				$warnings[] = [
+					'form' => $formName,
+					'field' => (string)$fieldName,
+					'message' => 'Annotation contains no exportable codings.',
+				];
+				continue;
+			}
+
+			$dataElements[] = $this->buildExportDataElement(
+				(string)$fieldName,
+				$fieldData,
+				$formLabels[$formName] ?? $formName,
+				$annotation
+			);
+		}
+
+		return [
+			'dataElements' => $dataElements,
+			'errors' => $errors,
+			'warnings' => $warnings,
+		];
+	}
+
+	private function getExportAnnotationParser()
+	{
+		return $this->createOntologyAnnotationParser([
+			'tag' => self::AT_ONTOLOGY,
+			'getMinAnnotation' => function () {
+				return json_decode($this->getMinimalAnnotationJSON(), true);
+			},
+			'validate' => null,
+		]);
+	}
+
+	private function annotationHasExportableCoding(array $annotation): bool
+	{
+		$de = $annotation['dataElement'] ?? [];
+		if (!is_array($de)) return false;
+		if (!empty($de['coding']) && is_array($de['coding'])) return true;
+		if (!empty($de['unit']['coding']) && is_array($de['unit']['coding'])) return true;
+		if (!empty($de['valueCodingMap']) && is_array($de['valueCodingMap'])) {
+			foreach ($de['valueCodingMap'] as $entry) {
+				if (!empty($entry['coding']) && is_array($entry['coding'])) return true;
+			}
+		}
+		return false;
+	}
+
+	private function buildExportDataElement(string $fieldName, array $fieldData, string $formLabel, array $annotation): array
+	{
+		$de = $annotation['dataElement'] ?? [];
+		if (!is_array($de)) $de = [];
+		$out = [
+			'form' => (string)($fieldData['form_name'] ?? ''),
+			'formText' => $formLabel,
+			'name' => $fieldName,
+			'text' => (string)($fieldData['element_label'] ?? $fieldName),
+		];
+		$out = array_merge($out, $this->getExportTypeInfo($fieldData));
+
+		if (!empty($de['coding']) && is_array($de['coding'])) {
+			$out['coding'] = array_values($de['coding']);
+		}
+		if (!empty($de['unit']) && is_array($de['unit']) && !empty($de['unit']['coding']) && is_array($de['unit']['coding'])) {
+			$out['unit'] = $de['unit'];
+		}
+		if (!empty($de['valueCodingMap']) && is_array($de['valueCodingMap'])) {
+			$choices = $this->getChoiceLabelsForField($fieldData);
+			$valueCodingMap = [];
+			foreach ($de['valueCodingMap'] as $code => $entry) {
+				if (!is_array($entry) || empty($entry['coding']) || !is_array($entry['coding'])) continue;
+				$entry['text'] = $choices[(string)$code] ?? (string)($entry['text'] ?? $code);
+				$valueCodingMap[(string)$code] = $entry;
+			}
+			if (count($valueCodingMap) > 0) $out['valueCodingMap'] = $valueCodingMap;
+		}
+
+		return $out;
+	}
+
+	private function getExportTypeInfo(array $fieldData): array
+	{
+		$redcapType = (string)($fieldData['element_type'] ?? '');
+		$validation = strtolower((string)($fieldData['element_validation_type'] ?? ''));
+		$type = $redcapType === 'select' ? 'dropdown' : $redcapType;
+		$out = ['type' => $type];
+
+		if ($redcapType === 'text') {
+			if (strpos($validation, 'date') === 0) {
+				$out['type'] = strpos($validation, 'datetime') === 0 ? 'datetime' : 'date';
+				$out['format'] = $validation;
+			} else if (strpos($validation, 'integer') !== false) {
+				$out['type'] = 'number';
+				$out['numericType'] = 'integer';
+			} else if (strpos($validation, 'number') !== false) {
+				$out['type'] = 'number';
+				$out['numericType'] = 'decimal';
+				if (preg_match('/_(\d+)dp$/', $validation, $m)) {
+					$out['precision'] = (int)$m[1];
+				}
+			} else if ($validation !== '') {
+				$out['format'] = $validation;
+			}
+		}
+
+		return $out;
+	}
+
+	private function getChoiceLabelsForField(array $fieldData): array
+	{
+		$fieldType = (string)($fieldData['element_type'] ?? '');
+		if (in_array($fieldType, ['truefalse', 'yesno', 'slider'], true)) {
+			$fixed = $this->getFixedEnums();
+			$enum = $fixed[$fieldType] ?? '';
+		} else {
+			$enum = (string)($fieldData['element_enum'] ?? '');
+		}
+
+		$choices = [];
+		foreach (preg_split('/\r\n|\r|\n/', $enum) as $line) {
+			if (trim($line) === '') continue;
+			$parts = explode(',', $line, 2);
+			$code = trim((string)($parts[0] ?? ''));
+			if ($code === '') continue;
+			$choices[$code] = trim((string)($parts[1] ?? $code));
+		}
+		return $choices;
+	}
+
+	private function buildNativeAnnotationExport(array $dataElements, array $forms, array $knownForms, string $metadataState): array
+	{
+		return [
+			'resourceType' => 'ROME_Ontology_Annotations',
+			'url' => $this->getExportSourceUrl(),
+			'meta' => [
+				'version' => self::EXPORT_FORMAT_VERSION,
+				'created' => date('c'),
+				'creator' => 'ROME v' . $this->VERSION,
+				'metadataState' => $metadataState,
+				'forms' => array_map(function ($form) use ($knownForms) {
+					return [
+						'name' => $form,
+						'text' => $knownForms[$form] ?? $form,
+					];
+				}, $forms),
+			],
+			'dataElements' => $dataElements,
+		];
+	}
+
+	private function buildFhirQuestionnaireExport(array $dataElements, array $forms, array $knownForms, string $metadataState): array
+	{
+		$itemsByForm = [];
+		foreach ($dataElements as $de) {
+			$form = (string)$de['form'];
+			if (!isset($itemsByForm[$form])) $itemsByForm[$form] = [];
+			$itemsByForm[$form][] = $this->buildFhirQuestionnaireItem($de);
+		}
+
+		$formItems = [];
+		foreach ($forms as $form) {
+			if (empty($itemsByForm[$form])) continue;
+			$formItems[] = [
+				'linkId' => $form,
+				'text' => $knownForms[$form] ?? $form,
+				'type' => 'group',
+				'item' => $itemsByForm[$form],
+			];
+		}
+
+		return [
+			'resourceType' => 'Questionnaire',
+			'url' => $this->getExportSourceUrl($forms),
+			'status' => 'active',
+			'title' => 'ROME ontology annotations',
+			'date' => date('c'),
+			'publisher' => 'ROME v' . $this->VERSION,
+			'extension' => [[
+				'url' => 'https://rub.de/rome/fhir/StructureDefinition/metadata-state',
+				'valueCode' => $metadataState,
+			]],
+			'item' => $formItems,
+		];
+	}
+
+	private function buildFhirQuestionnaireItem(array $de): array
+	{
+		$item = [
+			'linkId' => (string)$de['name'],
+			'text' => (string)$de['text'],
+			'type' => $this->mapExportTypeToFhirQuestionnaireType($de),
+		];
+
+		if (!empty($de['coding']) && is_array($de['coding'])) {
+			$item['code'] = array_values($de['coding']);
+		}
+
+		if (!empty($de['valueCodingMap']) && is_array($de['valueCodingMap'])) {
+			$item['answerOption'] = [];
+			foreach ($de['valueCodingMap'] as $choiceCode => $entry) {
+				if (empty($entry['coding']) || !is_array($entry['coding'])) continue;
+				foreach ($entry['coding'] as $coding) {
+					if (!is_array($coding)) continue;
+					$item['answerOption'][] = [
+						'valueCoding' => $coding,
+						'extension' => [[
+							'url' => self::ROME_FHIR_CHOICE_EXTENSION,
+							'extension' => [
+								['url' => 'code', 'valueString' => (string)$choiceCode],
+								['url' => 'text', 'valueString' => (string)($entry['text'] ?? $choiceCode)],
+							],
+						]],
+					];
+				}
+			}
+		}
+
+		if (!empty($de['unit']['coding']) && is_array($de['unit']['coding'])) {
+			foreach ($de['unit']['coding'] as $coding) {
+				if (!is_array($coding)) continue;
+				$item['extension'][] = [
+					'url' => $this->isNumericExportType($de) ? self::FHIR_QUESTIONNAIRE_UNIT_EXTENSION : self::ROME_FHIR_UNIT_EXTENSION,
+					'valueCoding' => $coding,
+				];
+			}
+		}
+
+		if ((string)($de['type'] ?? '') === 'checkbox') {
+			$item['repeats'] = true;
+		}
+
+		return $item;
+	}
+
+	private function mapExportTypeToFhirQuestionnaireType(array $de): string
+	{
+		$type = (string)($de['type'] ?? '');
+		if (in_array($type, ['radio', 'dropdown', 'checkbox', 'yesno', 'truefalse', 'slider'], true)) return 'choice';
+		if ($type === 'number') return (string)($de['numericType'] ?? '') === 'integer' ? 'integer' : 'decimal';
+		if ($type === 'date') return 'date';
+		if ($type === 'datetime') return 'dateTime';
+		return 'string';
+	}
+
+	private function isNumericExportType(array $de): bool
+	{
+		return (string)($de['type'] ?? '') === 'number';
+	}
+
+	private function getExportSourceUrl(): string
+	{
+		if (!defined('APP_PATH_WEBROOT_FULL') || !defined('REDCAP_VERSION')) return '';
+		$base = APP_PATH_WEBROOT_FULL . 'redcap_v' . REDCAP_VERSION . '/';
+		$url = $base . 'index.php?pid=' . $this->project_id;
+		return $url;
+	}
+
+	private function buildExportFilename(string $prefix, array $forms, string $extension): string
+	{
+		$scope = count($forms) === 1 ? $forms[0] : 'all-forms';
+		$scope = preg_replace('/[^A-Za-z0-9_.-]+/', '-', $scope) ?? 'export';
+		return $prefix . '-' . $scope . '-' . date('Ymd-His') . '.' . $extension;
 	}
 
 	#endregion
