@@ -2,6 +2,8 @@
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+require_once __DIR__ . '/classes/RomeFhirExtensions.php';
+
 use BioPortal;
 use Exception;
 use InvalidArgumentException;
@@ -32,9 +34,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	const AT_ONTOLOGY = '@ONTOLOGY';
 	const EXPORT_FORMAT_VERSION = '1.0.0';
-	const FHIR_QUESTIONNAIRE_UNIT_EXTENSION = 'http://hl7.org/fhir/StructureDefinition/questionnaire-unit';
-	const ROME_FHIR_UNIT_EXTENSION = 'https://rub.de/rome/fhir/StructureDefinition/questionnaire-unit-annotation';
-	const ROME_FHIR_CHOICE_EXTENSION = 'https://rub.de/rome/fhir/StructureDefinition/redcap-choice';
 
 
 
@@ -232,38 +231,41 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$states = ['production'];
 		if ($hasDraft) $states[] = 'draft';
 
-		$formStats = [];
+		$stateConfigs = [];
 		foreach ($states as $state) {
 			$metadata = $this->getProjectMetadataForState($state);
-			foreach ($this->getProjectFormsForExport() as $formName => $formLabel) {
-				if (!isset($formStats[$formName])) {
-					$formStats[$formName] = [
-						'name' => $formName,
-						'label' => $formLabel,
-						'fieldCount' => 0,
-						'annotationCounts' => [
-							'production' => ['valid' => 0, 'invalid' => 0],
-							'draft' => ['valid' => 0, 'invalid' => 0],
-						],
-					];
-				}
+			$forms = [];
+			foreach ($this->getProjectFormsForExport($metadata) as $formName => $formLabel) {
 				$stats = $this->countExportableAnnotations($metadata, [$formName]);
-				$formStats[$formName]['fieldCount'] = max($formStats[$formName]['fieldCount'], $stats['fieldCount']);
-				$formStats[$formName]['annotationCounts'][$state] = [
-					'valid' => $stats['valid'],
-					'invalid' => $stats['invalid'],
+				$forms[] = [
+					'name' => $formName,
+					'label' => $formLabel,
+					'fieldCount' => $stats['fieldCount'],
+					'validAnnotationCount' => $stats['valid'],
+					'invalidAnnotationCount' => $stats['invalid'],
+					'annotationCounts' => [
+						$state => [
+							'valid' => $stats['valid'],
+							'invalid' => $stats['invalid'],
+						],
+					],
 				];
 			}
+			$stateConfigs[$state] = [
+				'forms' => $forms,
+			];
 		}
 
+		$defaultMetadataState = $hasDraft ? 'draft' : 'production';
 		return [
-			'forms' => array_values($formStats),
+			'states' => $stateConfigs,
+			'forms' => $stateConfigs[$defaultMetadataState]['forms'] ?? [],
 			'formats' => [
 				['value' => 'native', 'label' => 'Native ROME JSON'],
 				['value' => 'fhir_questionnaire', 'label' => 'FHIR Questionnaire'],
 			],
 			'hasDraft' => $hasDraft,
-			'defaultMetadataState' => $hasDraft ? 'draft' : 'production',
+			'defaultMetadataState' => $defaultMetadataState,
 		];
 	}
 
@@ -273,13 +275,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if (!is_array($forms)) $forms = [];
 		$forms = array_values(array_filter(array_map('strval', $forms)));
 
-		$knownForms = $this->getProjectFormsForExport();
-		if (count($forms) === 0) $forms = array_keys($knownForms);
-		$forms = array_values(array_intersect($forms, array_keys($knownForms)));
-		if (count($forms) === 0) {
-			throw new Exception('No valid forms selected for export.');
-		}
-
 		$format = (string)($payload['format'] ?? 'native');
 		if (!in_array($format, ['native', 'fhir_questionnaire'], true)) {
 			throw new Exception('Unsupported export format.');
@@ -288,6 +283,12 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$metadataState = (string)($payload['metadataState'] ?? ($this->proj->isDraftMode() ? 'draft' : 'production'));
 		if ($metadataState !== 'draft' || !$this->proj->isDraftMode()) $metadataState = 'production';
 		$metadata = $this->getProjectMetadataForState($metadataState);
+		$knownForms = $this->getProjectFormsForExport($metadata);
+		if (count($forms) === 0) $forms = array_keys($knownForms);
+		$forms = array_values(array_intersect($forms, array_keys($knownForms)));
+		if (count($forms) === 0) {
+			throw new Exception('No valid forms selected for export.');
+		}
 		$scan = $this->collectExportAnnotations($metadata, $forms);
 
 		$warnings = $scan['warnings'];
@@ -323,16 +324,29 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 	}
 
-	private function getProjectFormsForExport(): array
+	private function getProjectFormsForExport(?array $metadata = null): array
 	{
 		$forms = [];
+		$formLabels = [];
+		if ($this->proj !== null && is_array($this->proj->forms)) {
+			foreach ($this->proj->forms as $formName => $formInfo) {
+				if (is_array($formInfo) && isset($formInfo['menu']) && trim((string)$formInfo['menu']) !== '') {
+					$formLabels[(string)$formName] = (string)$formInfo['menu'];
+				}
+			}
+		}
+		if ($metadata !== null) {
+			foreach ($metadata as $fieldData) {
+				if (!is_array($fieldData)) continue;
+				$formName = (string)($fieldData['form_name'] ?? '');
+				if ($formName === '' || isset($forms[$formName])) continue;
+				$forms[$formName] = $formLabels[$formName] ?? $formName;
+			}
+			return $forms;
+		}
 		if ($this->proj === null || !is_array($this->proj->forms)) return $forms;
 		foreach ($this->proj->forms as $formName => $formInfo) {
-			$label = $formName;
-			if (is_array($formInfo) && isset($formInfo['menu']) && trim((string)$formInfo['menu']) !== '') {
-				$label = (string)$formInfo['menu'];
-			}
-			$forms[(string)$formName] = $label;
+			$forms[(string)$formName] = $formLabels[(string)$formName] ?? (string)$formName;
 		}
 		return $forms;
 	}
@@ -374,7 +388,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	private function collectExportAnnotations(array $metadata, array $forms): array
 	{
 		$parser = $this->getExportAnnotationParser();
-		$formLabels = $this->getProjectFormsForExport();
+		$formLabels = $this->getProjectFormsForExport($metadata);
 		$dataElements = [];
 		$errors = [];
 		$warnings = [];
@@ -534,7 +548,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 			'meta' => [
 				'version' => self::EXPORT_FORMAT_VERSION,
 				'created' => date('c'),
-				'creator' => 'ROME v' . $this->VERSION,
+				'creator' => 'ROME ' . $this->VERSION,
 				'metadataState' => $metadataState,
 				'forms' => array_map(function ($form) use ($knownForms) {
 					return [
@@ -569,7 +583,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		return [
 			'resourceType' => 'Questionnaire',
-			'url' => $this->getExportSourceUrl($forms),
+			'url' => $this->getExportSourceUrl(),
 			'status' => 'active',
 			'title' => 'ROME ontology annotations',
 			'date' => date('c'),
@@ -596,29 +610,29 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 		if (!empty($de['valueCodingMap']) && is_array($de['valueCodingMap'])) {
 			$item['answerOption'] = [];
-			foreach ($de['valueCodingMap'] as $choiceCode => $entry) {
-				if (empty($entry['coding']) || !is_array($entry['coding'])) continue;
-				foreach ($entry['coding'] as $coding) {
-					if (!is_array($coding)) continue;
-					$item['answerOption'][] = [
-						'valueCoding' => $coding,
-						'extension' => [[
-							'url' => self::ROME_FHIR_CHOICE_EXTENSION,
-							'extension' => [
-								['url' => 'code', 'valueString' => (string)$choiceCode],
-								['url' => 'text', 'valueString' => (string)($entry['text'] ?? $choiceCode)],
-							],
-						]],
-					];
+				foreach ($de['valueCodingMap'] as $choiceCode => $entry) {
+					if (empty($entry['coding']) || !is_array($entry['coding'])) continue;
+					foreach ($entry['coding'] as $coding) {
+						if (!is_array($coding)) continue;
+						$item['answerOption'][] = [
+							'valueCoding' => $coding,
+							'extension' => [[
+								'url' => RomeFhirExtensions::ROME_REDCAP_CHOICE,
+								'extension' => [
+									['url' => 'code', 'valueString' => (string)$choiceCode],
+									['url' => 'text', 'valueString' => (string)($entry['text'] ?? $choiceCode)],
+								],
+							]],
+						];
+					}
 				}
 			}
-		}
 
 		if (!empty($de['unit']['coding']) && is_array($de['unit']['coding'])) {
 			foreach ($de['unit']['coding'] as $coding) {
 				if (!is_array($coding)) continue;
 				$item['extension'][] = [
-					'url' => $this->isNumericExportType($de) ? self::FHIR_QUESTIONNAIRE_UNIT_EXTENSION : self::ROME_FHIR_UNIT_EXTENSION,
+					'url' => $this->isNumericExportType($de) ? RomeFhirExtensions::QUESTIONNAIRE_UNIT : RomeFhirExtensions::ROME_QUESTIONNAIRE_UNIT,
 					'valueCoding' => $coding,
 				];
 			}

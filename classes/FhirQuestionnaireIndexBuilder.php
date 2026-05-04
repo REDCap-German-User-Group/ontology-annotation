@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace DE\RUB\OntologiesMadeEasyExternalModule;
 
+require_once __DIR__ . '/RomeFhirExtensions.php';
+
 use RuntimeException;
 use stdClass;
 
@@ -38,10 +40,6 @@ use stdClass;
 
 final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 {
-	private const FHIR_QUESTIONNAIRE_UNIT_EXTENSION = 'http://hl7.org/fhir/StructureDefinition/questionnaire-unit';
-	private const ROME_FHIR_UNIT_EXTENSION = 'https://rub.de/rome/fhir/StructureDefinition/questionnaire-unit-annotation';
-	private const ROME_FHIR_CHOICE_EXTENSION = 'https://rub.de/rome/fhir/StructureDefinition/redcap-choice';
-
 	public function supports(string $kind): bool
 	{
 		return $kind === 'fhir_questionnaire';
@@ -217,7 +215,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 	{
 		if (!is_array($extension)) return null;
 		$url = isset($extension['url']) ? (string)$extension['url'] : '';
-		if (!in_array($url, [self::FHIR_QUESTIONNAIRE_UNIT_EXTENSION, self::ROME_FHIR_UNIT_EXTENSION], true)) {
+		if (!in_array($url, [RomeFhirExtensions::QUESTIONNAIRE_UNIT, RomeFhirExtensions::ROME_QUESTIONNAIRE_UNIT], true)) {
 			return null;
 		}
 		return $this->codingToEntry($extension['valueCoding'] ?? null, $itemType, 'unit');
@@ -228,7 +226,7 @@ final class FhirQuestionnaireIndexBuilder implements LocalSourceIndexBuilder
 		if (empty($answerOption['extension']) || !is_array($answerOption['extension'])) return '';
 		foreach ($answerOption['extension'] as $extension) {
 			if (!is_array($extension)) continue;
-			if (($extension['url'] ?? '') !== self::ROME_FHIR_CHOICE_EXTENSION) continue;
+			if (($extension['url'] ?? '') !== RomeFhirExtensions::ROME_REDCAP_CHOICE) continue;
 			if (empty($extension['extension']) || !is_array($extension['extension'])) continue;
 			foreach ($extension['extension'] as $part) {
 				if (!is_array($part)) continue;

@@ -39,6 +39,7 @@
 	let editSystemSource;
 	/** @type {Object|null} */
 	let lastExport = null;
+	let exportPending = false;
 
 	/**
 	 * Implements the public init method.
@@ -94,7 +95,6 @@
 
 	function initExport() {
 		const exportConfig = config.export || {};
-		const forms = Array.isArray(exportConfig.forms) ? exportConfig.forms : [];
 		const formats = Array.isArray(exportConfig.formats) ? exportConfig.formats : [];
 		const metadataState = exportConfig.defaultMetadataState || 'production';
 
@@ -103,12 +103,6 @@
 		const $metadataWrap = $('#rome-export-metadata-state-wrap');
 		const $metadataState = $('#rome-export-metadata-state');
 		const $download = $('#rome-export-download');
-
-		$forms.html(forms.map(form => {
-			const stateCounts = form.annotationCounts?.[metadataState] || { valid: 0, invalid: 0 };
-			const suffix = ` (${stateCounts.valid || 0} annotated${stateCounts.invalid ? `, ${stateCounts.invalid} invalid` : ''})`;
-			return `<option value="${escapeHTML(form.name)}" selected>${escapeHTML(form.label + suffix)}</option>`;
-		}).join(''));
 
 		$format.html(formats.map(format => {
 			return `<option value="${escapeHTML(format.value)}">${escapeHTML(format.label)}</option>`;
@@ -132,69 +126,145 @@
 		}
 
 		$forms.on('change', () => refreshExportStatus());
-		$metadataState.on('change', refreshExportFormLabels);
+		$metadataState.on('change', function () {
+			populateExportFormsForState(`${$metadataState.val() || ''}`);
+			renderExportMessages({ errors: [], warnings: [] });
+		});
+		$('#rome-export-add-all').on('click', selectAllExportForms);
+		$('#rome-export-clear-all').on('click', clearExportForms);
 		$download.on('click', runExportDownload);
+		populateExportFormsForState(`${$metadataState.val() || metadataState}`);
+	}
+
+	function getExportFormsForState(state) {
+		const exportConfig = config.export || {};
+		const stateConfig = exportConfig.states?.[state] || {};
+		if (Array.isArray(stateConfig.forms)) return stateConfig.forms;
+		if (state === (exportConfig.defaultMetadataState || 'production') && Array.isArray(exportConfig.forms)) {
+			return exportConfig.forms;
+		}
+		return [];
+	}
+
+	function populateExportFormsForState(state) {
+		const forms = getExportFormsForState(state);
+		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		if (select?.tomselect) {
+			select.tomselect.clear(true);
+			select.tomselect.clearOptions();
+			for (const form of forms) {
+				const valid = getExportFormValidCount(form);
+				select.tomselect.addOption({
+					value: form.name,
+					text: formatExportFormOptionLabel(form),
+					disabled: valid === 0,
+				});
+				if (valid > 0) select.tomselect.addItem(form.name, true);
+			}
+			select.tomselect.refreshOptions(false);
+			select.tomselect.refreshItems();
+		} else {
+			$('#rome-export-forms').html(forms.map(form => {
+				const disabled = getExportFormValidCount(form) === 0;
+				return `<option value="${escapeHTML(form.name)}" ${disabled ? 'disabled' : 'selected'}>${escapeHTML(formatExportFormOptionLabel(form))}</option>`;
+			}).join(''));
+		}
+
+		setExportOptionsEnabled(state !== '');
 		refreshExportStatus();
 	}
 
-	function refreshExportFormLabels() {
-		const exportConfig = config.export || {};
-		const state = `${$('#rome-export-metadata-state').val() || exportConfig.defaultMetadataState || 'production'}`;
-		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
-		if (!select?.tomselect || !Array.isArray(exportConfig.forms)) return;
+	function formatExportFormOptionLabel(form) {
+		const valid = getExportFormValidCount(form);
+		const invalid = getExportFormInvalidCount(form);
+		return `${form.label} (${valid} annotated${invalid ? `, ${invalid} invalid` : ''})`;
+	}
 
-		for (const form of exportConfig.forms) {
-			const counts = form.annotationCounts?.[state] || { valid: 0, invalid: 0 };
-			const suffix = ` (${counts.valid || 0} annotated${counts.invalid ? `, ${counts.invalid} invalid` : ''})`;
-			select.tomselect.updateOption(form.name, {
-				value: form.name,
-				text: form.label + suffix
-			});
+	function getExportFormValidCount(form) {
+		return Number(form.validAnnotationCount || 0);
+	}
+
+	function getExportFormInvalidCount(form) {
+		return Number(form.invalidAnnotationCount || 0);
+	}
+
+	function setExportOptionsEnabled(enabled) {
+		$('#rome-export-format, #rome-export-add-all, #rome-export-clear-all').prop('disabled', !enabled);
+		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		if (select?.tomselect) {
+			if (enabled) select.tomselect.enable();
+			else select.tomselect.disable();
+		} else {
+			$('#rome-export-forms').prop('disabled', !enabled);
 		}
-		select.tomselect.refreshOptions(false);
-		select.tomselect.refreshItems();
+	}
+
+	function selectAllExportForms() {
+		const forms = getExportFormsForState(`${$('#rome-export-metadata-state').val() || config.export?.defaultMetadataState || 'production'}`);
+		const values = forms.filter(form => getExportFormValidCount(form) > 0).map(form => form.name);
+		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		if (select?.tomselect) {
+			select.tomselect.clear(true);
+			for (const value of values) select.tomselect.addItem(value, true);
+			select.tomselect.refreshItems();
+		} else {
+			$('#rome-export-forms').val(values);
+		}
+		refreshExportStatus();
+	}
+
+	function clearExportForms() {
+		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
+		if (select?.tomselect) {
+			select.tomselect.clear(true);
+		} else {
+			$('#rome-export-forms').val([]);
+		}
 		refreshExportStatus();
 	}
 
 	function refreshExportStatus(message = '') {
-		const exportConfig = config.export || {};
-		const state = `${$('#rome-export-metadata-state').val() || exportConfig.defaultMetadataState || 'production'}`;
 		const forms = getSelectedExportForms();
+		const stateForms = getExportFormsForState(`${$('#rome-export-metadata-state').val() || config.export?.defaultMetadataState || 'production'}`);
 		let count = 0;
 		for (const formName of forms) {
-			const form = (exportConfig.forms || []).find(f => f.name === formName);
-			count += form?.annotationCounts?.[state]?.valid || 0;
+			const form = stateForms.find(f => f.name === formName);
+			count += form ? getExportFormValidCount(form) : 0;
 		}
 		$('#rome-export-status').text(message || `${count} annotation${count === 1 ? '' : 's'} ready`);
-		$('#rome-export-download').prop('disabled', forms.length === 0);
+		$('#rome-export-download').prop('disabled', exportPending || forms.length === 0);
 	}
 
 	function getSelectedExportForms() {
 		const select = /** @type {any} */ ($('#rome-export-forms').get(0));
 		if (select?.tomselect) {
 			const value = select.tomselect.getValue();
-			return Array.isArray(value) ? value : String(value || '').split(',').filter(Boolean);
+			const values = Array.isArray(value) ? value : String(value || '').split(',').filter(Boolean);
+			const enabled = new Set(getExportFormsForState(`${$('#rome-export-metadata-state').val() || config.export?.defaultMetadataState || 'production'}`)
+				.filter(form => getExportFormValidCount(form) > 0)
+				.map(form => form.name));
+			return values.filter(value => enabled.has(value));
 		}
 		const value = $('#rome-export-forms').val();
 		return Array.isArray(value) ? value.map(String) : [];
 	}
 
 	async function runExportDownload() {
-		if (!JSMO) return;
+		if (!JSMO || exportPending) return;
 		const payload = {
 			forms: getSelectedExportForms(),
 			format: $('#rome-export-format').val() || 'native',
 			metadataState: $('#rome-export-metadata-state').val() || 'production',
 		};
 		if (payload.forms.length === 0) {
-			renderExportMessages({ errors: [{ message: 'Select at least one form.' }], warnings: [] });
+			renderExportMessages({ errors: [{ message: 'Select at least one form with exportable annotations.' }], warnings: [] });
 			return;
 		}
 
-		const $download = $('#rome-export-download');
-		$download.prop('disabled', true);
+		exportPending = true;
 		refreshExportStatus('Preparing export ...');
 		renderExportMessages({ errors: [], warnings: [] });
+		let finalStatus = '';
 
 		try {
 			const res = await JSMO.ajax('export-annotations', payload);
@@ -202,16 +272,17 @@
 			renderExportMessages(res || {});
 			if (res?.success && res.content && res.filename) {
 				downloadExportContent(res.content, res.filename, res.mimeType || 'application/json');
-				refreshExportStatus(`Downloaded ${res.annotationCount || 0} annotation${res.annotationCount === 1 ? '' : 's'}`);
+				finalStatus = `Downloaded ${res.annotationCount || 0} annotation${res.annotationCount === 1 ? '' : 's'}`;
 			} else {
-				refreshExportStatus(res?.error || 'No export file generated');
+				finalStatus = res?.error || 'No export file generated';
 			}
 		} catch (err) {
 			error('Export failed', err);
 			renderExportMessages({ errors: [{ message: 'Export failed. Check the browser console for details.' }], warnings: [] });
-			refreshExportStatus('Export failed');
+			finalStatus = 'Export failed';
 		} finally {
-			$download.prop('disabled', getSelectedExportForms().length === 0);
+			exportPending = false;
+			refreshExportStatus(finalStatus);
 		}
 	}
 
@@ -257,7 +328,6 @@
 	}
 
 	//#endregion
-
 
 	//#region Manage / Configure
 
