@@ -40,9 +40,9 @@
 	 * Configuration data supplied from the server 
 	 * @type {ROMEOnlineDesignerConfig}
 	*/
-	let config = {};
-	/** @type {JavascriptModuleObject|null} */
-	let JSMO = null;
+	let config;
+	/** @type {JavascriptModuleObject} */
+	let JSMO;
 
 
 	/** @type {OntologyAnnotationParser} */
@@ -54,10 +54,10 @@
 
 	/**
 	 * Implements the public init method.
-	 * @param {ROMEOnlineDesignerConfig=} config_data
-	 * @param {JavascriptModuleObject=} jsmo
+	 * @param {ROMEOnlineDesignerConfig} config_data
+	 * @param {JavascriptModuleObject} jsmo
 	 */
-	function initialize(config_data, jsmo = null) {
+	function initialize(config_data, jsmo) {
 
 		config = config_data;
 		JSMO = jsmo;
@@ -112,7 +112,7 @@
 	 * @returns {void}
 	 */
 	function injectAnnotationsEditor() {
-		if (odState.$dlg.find('.rome-edit-field-ui-container').length == 0) {
+		if (odState.$dlg?.find('.rome-edit-field-ui-container').length == 0) {
 			initAnnotationEditor();
 			log('UI initialized.', odState);
 		}
@@ -129,16 +129,16 @@
 		}, 10);
 		// Disable search when there are errors and add error indicator
 		if (config.errors?.length ?? 0 > 0) {
-			odState.$editor.find('#rome-search-bar :input').prop('disabled', true);
+			odState.$editor?.find('#rome-search-bar :input').prop('disabled', true);
 			showSearchErrorBadge(config.errors.join('\n'));
 		}
 	}
 
 	function refitDialog() {
 		try {
-			const winh = $(window).height();
-			odState.$dlg.dialog('option', 'height', winh - 20);
-			odState.$dlg.dialog('option', 'position', { my: 'center', at: 'center', of: window });
+			const winh = $(window).height() ?? 500;
+			odState.$dlg?.dialog('option', 'height', winh - 20);
+			odState.$dlg?.dialog('option', 'position', { my: 'center', at: 'center', of: window });
 		} 
 		catch (e) {
 			// Ignored 
@@ -150,7 +150,7 @@
 	 * @returns {boolean}
 	 */
 	function isExcludedCheckboxChecked() {
-		const checked = odState.$dlg.find('input.rome-em-exclude').prop('checked');
+		const checked = odState.$dlg?.find('input.rome-em-exclude').prop('checked');
 		return checked;
 	}
 
@@ -160,11 +160,11 @@
 	function setInitialExcludedCheckboxState() {
 		let enabled = true;
 		if (odState.editType == 'matrix') {
-			const matrixGroupName = '' + odState.$dlg.find('#grid_name').val();
+			const matrixGroupName = '' + odState.$dlg?.find('#grid_name').val();
 			enabled = !config.matrixGroupsExcluded.includes(matrixGroupName);
 		}
 		else {
-			const fieldName = '' + odState.$dlg.find('input[name="field_name"]').val();
+			const fieldName = '' + odState.$dlg?.find('input[name="field_name"]').val();
 			enabled = !config.fieldsExcluded.includes(fieldName);
 		}
 		updateExcludedCheckboxStateAndHiddenInput(enabled);
@@ -176,7 +176,7 @@
 	 */
 	function updateExcludedCheckboxStateAndHiddenInput(enabled) {
 		odState.enabled = enabled;
-		odState.$dlg.find('input.rome-em-exclude').prop('checked', !enabled);
+		odState.$dlg?.find('input.rome-em-exclude').prop('checked', !enabled);
 		$('input[name="rome-em-exclude"]').val(enabled ? '0' : '1');
 	}
 
@@ -184,7 +184,7 @@
 	 * Updates the excluded hidden field before saving.
 	 */
 	function updateExcludedCheckboxHiddenInput() {
-		const exclude = odState.$dlg.find('input.rome-em-exclude').prop('checked');
+		const exclude = odState.$dlg?.find('input.rome-em-exclude').prop('checked');
 		$('input[name="rome-em-exclude"]').val(exclude ? '1' : '0');
 	}
 
@@ -205,7 +205,7 @@
 		if (odState.editType == 'matrix') {
 			$editor.find('.rome-em-exclude-field').remove();
 			// Insert at end of the dialog
-			odState.$dlg.append($editor);
+			odState.$dlg?.append($editor);
 		}
 		else {
 			$editor.find('.rome-em-exclude-matrix').remove();
@@ -224,7 +224,7 @@
 			const actiontagsVisible = window.getComputedStyle(actiontagsDIV).display !== 'none';
 			$editor.css('display', actiontagsVisible ? 'block' : 'none');
 			// Add a hidden field to transfer exclusion
-			odState.$dlg.find('#addFieldForm').prepend(
+			odState.$dlg?.find('#addFieldForm').prepend(
 				'<input type="hidden" name="rome-em-exclude" value="0">'
 			);
 
@@ -234,7 +234,7 @@
 			// Insert the UI as a new table row
 			const $tr = $('<tr><td colspan="2"></td></tr>');
 			$tr.find('td').append($editor);
-			odState.$dlg.find('#quesTextDiv > table > tbody').append($tr);
+			odState.$dlg?.find('#quesTextDiv > table > tbody').append($tr);
 		}
 
 		initSearchInput();
@@ -242,7 +242,7 @@
 		initDatatable();
 
 		// Table events
-		odState.$dlg.find('.rome-edit-field-ui-list').off('change').off('click')
+		odState.$dlg?.find('.rome-edit-field-ui-list').off('change').off('click')
 		.on('change', '.rome-row-target', dispatchTableEvent)
 		.on('click', '.rome-row-delete', dispatchTableEvent);
 		// Add new annotation event
@@ -252,16 +252,22 @@
 	}
 
 
+
+
+	/**
+	 * @param {Event} event 
+	 */
 	function dispatchTableEvent(event) {
 
+		if (event.target === null) return;
 		// Get row, then find the DataTable entry for the row
 		const $tr = $(event.target).closest('tr');
-		const rowIndex = odState.dtInstance.row($tr).index();
+		const rowIndex = odState.dtInstance?.row($tr).index();
 		const row = odState.rows[rowIndex];
 
 		const action = event.type === 'change' ? 'assign-taget' : 'delete-row';
 		if (action === 'assign-taget') {
-			const newTarget = $(event.target).val();
+			const newTarget = `${$(event.target).val()}`;
 			assignRowToTarget(row, newTarget);
 		}
 		else {
@@ -294,6 +300,10 @@
 		setAnnotations();
 	}
 
+	/**
+	 * 
+	 * @param {ROME_AnnotationRow} row 
+	 */
 	function deleteAnnotationRow(row) {
 		log('Deleting row', row);
 		odState.rows.splice(odState.rows.indexOf(row), 1);
@@ -304,7 +314,7 @@
 
 	function addAnnotationRow() {
 		if (!odState.selected) return;
-		const target = `${odState.$dlg.find('#rome-field-choice').val() ?? ''}`;
+		const target = `${odState.$dlg?.find('#rome-field-choice').val() ?? ''}`;
 		if (target === '') return;
 		const targetType = target === 'unit' ? 'unit' : (target.startsWith('choice:') ? 'choice' : 'field');
 		const targetName = targetType === 'unit' ? '' : (targetType === 'choice' ? target.substring(7) : target.substring(6));
@@ -329,18 +339,20 @@
 	 * @param {boolean} removeNonExistentChoices When true, non-existent choices will be removed
 	 */
 	function setAnnotations(removeNonExistentChoices = false) {
-		getWatcher().pause();
+		getWatcher()?.pause();
 		// Build unit and choice stub
 		const stub = getMinimalOntologyAnnotation();
 		// Unit annotation(s)
 		odState.rows.filter(r => r.targetType === 'unit').forEach(r => {
-			stub.dataElement.unit.coding.push(r.annotation);
+			stub.dataElement.unit?.coding.push(r.annotation);
 		});
-		if (stub.dataElement.unit.coding.length === 0) {
+		if (stub.dataElement.unit?.coding.length === 0) {
 			delete stub.dataElement.unit;
 		}
 		else {
-			stub.dataElement.unit.text = stub.dataElement.unit.coding[0].display ?? '';
+			if (stub.dataElement.unit) {
+				stub.dataElement.unit.text = stub.dataElement.unit.coding[0].display ?? '';
+			}
 		}
 		// Choice annotations
 		for (const code of Object.keys(odState.choiceLabelMap)) {
@@ -362,7 +374,7 @@
 		}
 		// Field annotations
 		const selector = odState.editType === 'field' ? '#field_annotation' : 'textarea[name=addFieldMatrixRow-annotation]';
-		odState.$dlg.find(selector).each(function () {
+		odState.$dlg?.find(selector).each(function () {
 			const $annotation = $(this);
 			const rowId = odState.editType === 'field' ? '' : ensureMatrixRowId($annotation.closest('tr'));
 			odState.rows
@@ -397,7 +409,7 @@
 			// Clear codings for next iteration
 			stub.dataElement.coding = [];
 		});
-		getWatcher().resume();
+		getWatcher()?.resume();
 		initAnnotationState();
 		log('Updating annotations with current state.', odState);
 	}
@@ -408,7 +420,7 @@
 	 * Initializes the DataTable instance for annotation display and manipulation.
 	 */
 	function initDatatable() {
-		const $table = odState.$dlg.find('#rome-annotation-table');
+		const $table = odState.$dlg?.find('#rome-annotation-table');
 		odState.dtInstance = $table.DataTable({
 			autoWidth: true,
 			data: odState.rows,
@@ -814,7 +826,7 @@
 			customClass: 'rome-annotation-popover',
 			html: true,
 			sanitize: false,
-			container: odState.$dlg.get(0),
+			container: odState.$dlg?.get(0),
 			content: () => getSelectedAnnotationPopoverHtml(),
 			title: 'Annotation to be added',
 			placement: 'top'
@@ -879,8 +891,9 @@
 	 * @returns {JQuery<HTMLElement>[]}
 	 */
 	function getMatrixRows() {
+		/** @type {JQuery<HTMLElement>[]} */
 		const rows = [];
-		odState.$dlg.find('.addFieldMatrixRowParent .addFieldMatrixRow').each(function () {
+		odState.$dlg?.find('.addFieldMatrixRowParent .addFieldMatrixRow').each(function () {
 			rows.push($(this));
 		});
 		return rows;
@@ -982,7 +995,7 @@
 	 * @returns {void}
 	 */
 	function showMissingChoiceSaveDialog(count, onProceed = null) {
-		odState.$dlg.find('.rome-missing-choice-save-dialog').remove();
+		odState.$dlg?.find('.rome-missing-choice-save-dialog').remove();
 		const $dlg = $('<div></div>')
 			.addClass('rome-missing-choice-save-dialog')
 			.html(
@@ -2427,7 +2440,7 @@
 
 	function resetSearchState() {
 		stopSearch();
-		odState.$search.val('');
+		odState.$search?.val('');
 		searchState.term = '';
 		searchState.lastTerm = '';
 		searchState.lastTermCompleted = false;

@@ -73,24 +73,24 @@
 
 /**
  * @typedef {Object} ROMEOnlineDesignerConfig
- * @property {string=} atName
- * @property {boolean=} debug
- * @property {boolean=} isAdmin
- * @property {string[]=} errors
- * @property {string[]=} warnings
- * @property {string=} moduleDisplayName
- * @property {Number=} pid
- * @property {string=} version
- * @property {string=} form
- * @property {string=} minimalAnnotation
- * @property {Object<string, string>=} knownLinks
- * @property {string[]=} fieldsExcluded
- * @property {string[]=} matrixGroupsExcluded
- * @property {SourceInfo[]=} sources
- * @property {string=} searchEndpoint
- * @property {string=} pollEndpoint
- * @property {Number=} minSearchLength
- * @property {Object<?string,string>=} fixedEnums
+ * @property {string} atName
+ * @property {boolean} debug
+ * @property {boolean} isAdmin
+ * @property {string[]} errors
+ * @property {string[]} warnings
+ * @property {string} moduleDisplayName
+ * @property {Number} pid
+ * @property {string} version
+ * @property {string} form
+ * @property {string} minimalAnnotation
+ * @property {Object<string, string>} knownLinks
+ * @property {string[]} fieldsExcluded
+ * @property {string[]} matrixGroupsExcluded
+ * @property {SourceInfo[]} sources
+ * @property {string} searchEndpoint
+ * @property {string} pollEndpoint
+ * @property {Number} minSearchLength
+ * @property {Object<?string,string>} fixedEnums
  */
 
 /**
@@ -129,8 +129,8 @@
  * @typedef {Object} OntologyAnnotationDataElement
  * @property {string=} text
  * @property {OntologyAnnotationCoding[]} coding
- * @property {Object<string, {coding:OntologyAnnotationCoding[]}>} valueCodingMap
- * @property {OntologyAnnotationUnit} unit
+ * @property {Object<string, {coding:OntologyAnnotationCoding[]}>=} valueCodingMap
+ * @property {OntologyAnnotationUnit=} unit
  */
 
 /**
@@ -165,7 +165,7 @@
  * @property {() => OntologyAnnotationJSON} getMinAnnotation
  *   Factory for a minimal/fallback annotation JSON object.
  *   NOTE: This minimal object is NOT schema-validated (even if validate is provided).
- * @property {string} tag
+ * @property {string=} tag
  *   Marker to search for (no quotes), e.g. "@ONTOLOGY".
  * @property {OntologyAnnotationValidator|null} [validate=null]
  *   Optional validator for parsed JSON objects (NOT applied to the minimal fallback).
@@ -226,24 +226,24 @@
  *   backup copy will be retained in case the user flips the switch before saving (in case
  *   of matrix groups and field name changes, field annotations that cannot be matched
  *   must be shown as unassigned; these will definitely be lost if not reassigned.
- * @property {WatchHandle=} fieldWatcher
+ * @property {WatchHandle?} fieldWatcher
  *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer.
- * @property {WatchHandle=} matrixWatcher
+ * @property {WatchHandle?} matrixWatcher
  *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer.
- * @property {SelectedAnnotationHit=} selected
+ * @property {SelectedAnnotationHit?} selected
  *   Current search selection used by the Add button flow.
- * @property {Object} dtInstance DataTables instance (TODO - type this properly)
+ * @property {DataTables.Api?} dtInstance DataTables instance (TODO - type this properly)
  * @property {boolean} dtAdvancedUiEnabled
- * @property {JQuery<HTMLElement>=} $dlg
+ * @property {JQuery<HTMLElement>?} $dlg
  *   The field or matrix edit dialog
- * @property {JQuery<HTMLElement>=} $editor
+ * @property {JQuery<HTMLElement>?} $editor
  *   The ROME annotation editor surface
- * @property {JQuery<HTMLElement>=} $add
- * @property {JQuery<HTMLElement>=} $info
- * @property {JQuery<HTMLElement>=} $error
- * @property {JQuery<HTMLElement>=} $search
- * @property {JQuery<HTMLElement>=} $searchSpinner
- * @property {string=} helpContent
+ * @property {JQuery<HTMLElement>?} $add
+ * @property {JQuery<HTMLElement>?} $info
+ * @property {JQuery<HTMLElement>?} $error
+ * @property {JQuery<HTMLElement>?} $search
+ * @property {JQuery<HTMLElement>?} $searchSpinner
+ * @property {string?} helpContent
  * @property {Number} minItemsForSelect2
  * @property {ROME_TargetOption[]} targetOptions
  * @property {Object<?string,{label:string, pos:Number}>} choiceLabelMap
@@ -253,8 +253,8 @@
 
 /**
  * @typedef {Object} ROME_AnnotationRow
- * @property {Object=} annotation
- * @property {string=} targetName
+ * @property {OntologyAnnotationCoding} annotation
+ * @property {string?} targetName
  * @property {'field'|'unit'|'choice'} targetType
  * 
  */
