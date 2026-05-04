@@ -90,13 +90,14 @@
  * @property {string} searchEndpoint
  * @property {string} pollEndpoint
  * @property {Number} minSearchLength
- * @property {Object<?string,string>} fixedEnums
+ * @property {Object<string,string>} fixedEnums
  */
 
 /**
  * @typedef {Object} SourceInfo
  * @property {string=} id
  * @property {string} key
+ * @property {string=} label
  * @property {string=} title
  * @property {string=} title_resolved
  * @property {string=} description
@@ -128,7 +129,7 @@
 /**
  * @typedef {Object} OntologyAnnotationDataElement
  * @property {string=} text
- * @property {OntologyAnnotationCoding[]} coding
+ * @property {OntologyAnnotationCoding[]=} coding
  * @property {Object<string, {coding:OntologyAnnotationCoding[]}>=} valueCodingMap
  * @property {OntologyAnnotationUnit=} unit
  */
@@ -179,7 +180,7 @@
 
 /**
  * @typedef {Object} OntologyAnnotationParser
- * @property {(fieldName: string, text: string) => OntologyAnnotationParseResult} parse
+ * @property {(rowId: string, text: string) => OntologyAnnotationParseResult} parse
  *   Parse the LAST valid tag JSON object from the given text.
  */
 
@@ -232,31 +233,135 @@
  *   WatchHandle returned by WatchTargets.watch, used to stop watching when exiting the designer.
  * @property {SelectedAnnotationHit?} selected
  *   Current search selection used by the Add button flow.
- * @property {DataTables.Api?} dtInstance DataTables instance (TODO - type this properly)
+ * @property {any} dtInstance DataTables instance
  * @property {boolean} dtAdvancedUiEnabled
- * @property {JQuery<HTMLElement>?} $dlg
+ * @property {JQuery<HTMLElement>} $dlg
  *   The field or matrix edit dialog
- * @property {JQuery<HTMLElement>?} $editor
+ * @property {JQuery<HTMLElement>} $editor
  *   The ROME annotation editor surface
- * @property {JQuery<HTMLElement>?} $add
- * @property {JQuery<HTMLElement>?} $info
- * @property {JQuery<HTMLElement>?} $error
- * @property {JQuery<HTMLElement>?} $search
- * @property {JQuery<HTMLElement>?} $searchSpinner
+ * @property {JQuery<HTMLElement>} $add
+ * @property {JQuery<HTMLElement>} $info
+ * @property {JQuery<HTMLElement>} $error
+ * @property {JQuery<HTMLElement>} $search
+ * @property {JQuery<HTMLElement>} $searchSpinner
  * @property {string?} helpContent
  * @property {Number} minItemsForSelect2
  * @property {ROME_TargetOption[]} targetOptions
- * @property {Object<?string,{label:string, pos:Number}>} choiceLabelMap
- * @property {Object<?string,string>} rowIdFieldMap
+ * @property {Object<string,{label:string, pos:Number}>} choiceLabelMap
+ * @property {Object<string,string>} rowIdFieldMap
  * @property {boolean} showUnitWarning
  */
 
 /**
  * @typedef {Object} ROME_AnnotationRow
  * @property {OntologyAnnotationCoding} annotation
- * @property {string?} targetName
+ * @property {string} targetName
  * @property {'field'|'unit'|'choice'} targetType
  * 
+ */
+
+/**
+ * @typedef {Object} ROMESearchPending
+ * @property {string} token
+ * @property {number=} after_ms
+ */
+
+/**
+ * @typedef {Object} ROMESearchAutocompleteItem
+ * @property {string} label
+ * @property {string} labelHtml
+ * @property {string} value
+ * @property {any} hit
+ * @property {string} sourceId
+ */
+
+/**
+ * @typedef {Object} ROMESearchCacheSnapshot
+ * @property {Object<string, any[]>} resultsBySource
+ * @property {Object<string, ROMESearchPending>=} pending
+ * @property {boolean} completed
+ * @property {ROMESearchAutocompleteItem[]} items
+ */
+
+/**
+ * @typedef {Object} ROMESearchState
+ * @property {number} rid
+ * @property {string} term
+ * @property {string} lastTerm
+ * @property {boolean} lastTermCompleted
+ * @property {Object<string, any[]>} resultsBySource
+ * @property {ROMESearchAutocompleteItem[]} items
+ * @property {Object<string, ROMESearchPending>} pending
+ * @property {number|null} pollTimer
+ * @property {JQuery.jqXHR<any>|null} xhr
+ * @property {number|null} debounceTimer
+ * @property {boolean} refreshing
+ * @property {boolean} errorRaised
+ * @property {Map<string, ROMESearchCacheSnapshot>} cache
+ */
+
+/**
+ * @typedef {((...args:any[]) => any) & {__romeWrapped?: boolean}} ROMEWrappedFunction
+ * @typedef {Window & Record<string, any>} ROMEGlobalWindow
+ * @typedef {JQuery<HTMLElement> & {DataTable: (options?: any) => any}} ROMEDataTableJQuery
+ */
+
+/**
+ * Minimal Bootstrap/jQuery popover options used by Online Designer.
+ * Kept local because REDCap can load a Bootstrap/jQuery bridge that does not
+ * exactly match the installed package typedefs.
+ *
+ * @typedef {Object} ROMEBootstrapPopoverOptions
+ * @property {string=} trigger
+ * @property {string=} customClass
+ * @property {boolean=} html
+ * @property {boolean=} sanitize
+ * @property {Element|JQuery<HTMLElement>|string=} container
+ * @property {string|Element|JQuery<HTMLElement>|(() => string|Element|JQuery<HTMLElement>)=} content
+ * @property {string|Element|JQuery<HTMLElement>|(() => string|Element|JQuery<HTMLElement>)=} title
+ * @property {string|(() => string)=} placement
+ */
+
+/**
+ * Minimal Select2 options used by Online Designer.
+ *
+ * @typedef {Object} ROMESelect2Options
+ * @property {string=} width
+ * @property {JQuery<HTMLElement>|Element|string=} dropdownParent
+ * @property {number=} minimumResultsForSearch
+ */
+
+/**
+ * jQuery plugin bridges used by REDCap/ROME.
+ *
+ * @typedef {JQuery<HTMLElement> & {
+ *   popover: (options?: ROMEBootstrapPopoverOptions|string) => JQuery<HTMLElement>
+ * }} ROMEBootstrapPopoverJQuery
+ *
+ * @typedef {JQuery<HTMLElement> & {
+ *   select2: {
+ *     (options?: ROMESelect2Options): JQuery<HTMLElement>,
+ *     (method: 'destroy'): JQuery<HTMLElement>,
+ *     (method: string, ...args: any[]): JQuery<HTMLElement>
+ *   }
+ * }} ROMESelect2JQuery
+ *
+ * @typedef {JQuery<HTMLElement> & {
+ *   select2?: ROMESelect2JQuery['select2']
+ * }} ROMESelect2PluginRegistry
+ */
+
+/**
+ * Minimal Bootstrap browser-global type used by Online Designer.
+ * This avoids pulling in the full Bootstrap jQuery bridge typings, which can
+ * conflict with jQuery UI plugin names in REDCap pages.
+ *
+ * @typedef {Object} ROMEBootstrapTooltip
+ * @property {() => void} enable
+ * @property {() => void} dispose
+ *
+ * @typedef {Object} ROMEBootstrapGlobal
+ * @property {new (element: Element, options?: any) => ROMEBootstrapTooltip} Tooltip
  */
 
 /**
@@ -383,4 +488,3 @@
 //
 //#endregion JSMO
 //
-

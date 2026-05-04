@@ -26,15 +26,17 @@
 		version: '??'
 	});
 	const { log, warn, error } = LOGGER;
+	/** @type {ROMEGlobalWindow} */
+	const globalWindow = /** @type {ROMEGlobalWindow} */ (window);
+	/** @type {ROMEBootstrapGlobal|undefined} */
+	const bootstrapGlobal = globalWindow.bootstrap;
 
 	/** @type {ROMEOnlineDesignerPublic} */
-	// @ts-ignore
-	const EM = window[NS_PREFIX + EM_NAME] ?? {
+	const EM = globalWindow[NS_PREFIX + EM_NAME] ?? {
 		init: initialize,
 		showFieldHelp: showHelp
 	};
-	// @ts-ignore
-	window[NS_PREFIX + EM_NAME] = EM;
+	globalWindow[NS_PREFIX + EM_NAME] = EM;
 
 	/** 
 	 * Configuration data supplied from the server 
@@ -128,7 +130,7 @@
 			});
 		}, 10);
 		// Disable search when there are errors and add error indicator
-		if (config.errors?.length ?? 0 > 0) {
+		if ((config.errors?.length ?? 0) > 0) {
 			odState.$editor?.find('#rome-search-bar :input').prop('disabled', true);
 			showSearchErrorBadge(config.errors.join('\n'));
 		}
@@ -151,7 +153,7 @@
 	 */
 	function isExcludedCheckboxChecked() {
 		const checked = odState.$dlg?.find('input.rome-em-exclude').prop('checked');
-		return checked;
+		return checked === true;
 	}
 
 	/**
@@ -193,7 +195,7 @@
 	 * Inserts the ROME UI surface into the active REDCap dialog and wires handlers.
 	 */
 	function initAnnotationEditor() {
-		const editorHtml = $('#rome-em-fieldedit-ui-template').html().replaceAll('\n', '');
+		const editorHtml = String($('#rome-em-fieldedit-ui-template').html() ?? '').replaceAll('\n', '');
 		const $editor = $(editorHtml);
 		odState.$editor = $editor;
 		odState.$add = $editor.find('#rome-add-button');
@@ -263,7 +265,9 @@
 		// Get row, then find the DataTable entry for the row
 		const $tr = $(event.target).closest('tr');
 		const rowIndex = odState.dtInstance?.row($tr).index();
+		if (typeof rowIndex !== 'number') return;
 		const row = odState.rows[rowIndex];
+		if (!row) return;
 
 		const action = event.type === 'change' ? 'assign-taget' : 'delete-row';
 		if (action === 'assign-taget') {
@@ -340,57 +344,66 @@
 	 */
 	function setAnnotations(removeNonExistentChoices = false) {
 		getWatcher()?.pause();
-		// Build unit and choice stub
-		const stub = getMinimalOntologyAnnotation();
-		// Unit annotation(s)
-		odState.rows.filter(r => r.targetType === 'unit').forEach(r => {
-			stub.dataElement.unit?.coding.push(r.annotation);
-		});
-		if (stub.dataElement.unit?.coding.length === 0) {
-			delete stub.dataElement.unit;
-		}
-		else {
-			if (stub.dataElement.unit) {
-				stub.dataElement.unit.text = stub.dataElement.unit.coding[0].display ?? '';
-			}
-		}
-		// Choice annotations
+
+		const unitCodings = odState.rows
+			.filter(r => r.targetType === 'unit')
+			.map(r => r.annotation);
+
+		/** @type {Object<string, {coding: OntologyAnnotationCoding[]}>} */
+		const choiceCodingMap = {};
 		for (const code of Object.keys(odState.choiceLabelMap)) {
-			stub.dataElement.valueCodingMap[code] = { coding: [] };
+			choiceCodingMap[code] = { coding: [] };
 		}
 		odState.rows.filter(r => r.targetType === 'choice').forEach(r => {
 			if (!odState.choiceLabelMap[r.targetName]) {
 				if (removeNonExistentChoices) return;
-				if(!stub.dataElement.valueCodingMap[r.targetName]) {
-					stub.dataElement.valueCodingMap[r.targetName] = { coding: [] };
+				if(!choiceCodingMap[r.targetName]) {
+					choiceCodingMap[r.targetName] = { coding: [] };
 				}
 			}
-			stub.dataElement.valueCodingMap[r.targetName].coding.push(r.annotation);
+			choiceCodingMap[r.targetName].coding.push(r.annotation);
 		});
-		for (const code of Object.keys(stub.dataElement.valueCodingMap)) {
-			if (stub.dataElement.valueCodingMap[code].coding.length === 0) {
-				delete stub.dataElement.valueCodingMap[code];
+		for (const code of Object.keys(choiceCodingMap)) {
+			if (choiceCodingMap[code].coding.length === 0) {
+				delete choiceCodingMap[code];
 			}
 		}
+
 		// Field annotations
 		const selector = odState.editType === 'field' ? '#field_annotation' : 'textarea[name=addFieldMatrixRow-annotation]';
 		odState.$dlg?.find(selector).each(function () {
 			const $annotation = $(this);
 			const rowId = odState.editType === 'field' ? '' : ensureMatrixRowId($annotation.closest('tr'));
-			odState.rows
+			const stub = normalizeAnnotation(getMinimalOntologyAnnotation());
+			const fieldCodings = odState.rows
 				.filter(r => r.targetType === 'field' && r.targetName === rowId)
-				.forEach(r => {
-					stub.dataElement.coding.push(r.annotation);
-				});
-			const isEmpty = (stub.dataElement.coding.length === 0 && Object.keys(stub.dataElement.valueCodingMap).length === 0);
-			if (stub.dataElement.coding.length === 0) {
+				.map(r => r.annotation);
+
+			if (fieldCodings.length > 0) {
+				stub.dataElement.coding = fieldCodings;
+			}
+			else {
 				delete stub.dataElement.coding;
 			}
+			if (unitCodings.length > 0) {
+				stub.dataElement.unit = {
+					coding: unitCodings.slice(),
+					text: unitCodings[0]?.display ?? ''
+				};
+			}
+			else {
+				delete stub.dataElement.unit;
+			}
+			stub.dataElement.valueCodingMap = cloneCodingMap(choiceCodingMap);
 			if (Object.keys(stub.dataElement.valueCodingMap).length === 0) {
 				delete stub.dataElement.valueCodingMap;
 			}
+			const isEmpty = fieldCodings.length === 0
+				&& unitCodings.length === 0
+				&& Object.keys(choiceCodingMap).length === 0;
 			const jsonString = isEmpty ? '' : `${config.atName}=${JSON.stringify(stub, null, 2)}`;
 			const prevParsed = odState.parseResults[rowId] ?? null;
+			if (prevParsed === null) return;
 			if (prevParsed.start === -1) {
 				// Append to end - but we need to determine if we should add newlines (max 2, considering any already present)
 				let delim = '';
@@ -406,12 +419,24 @@
 				const newVal = prevParsed.originalText.substring(0, prevParsed.start) + jsonString + prevParsed.originalText.substring(prevParsed.end);
 				$annotation.val(newVal.trimEnd());
 			}
-			// Clear codings for next iteration
-			stub.dataElement.coding = [];
 		});
 		getWatcher()?.resume();
 		initAnnotationState();
 		log('Updating annotations with current state.', odState);
+	}
+
+	/**
+	 * Clones choice coding buckets so each generated annotation owns its arrays.
+	 * @param {Object<string, {coding: OntologyAnnotationCoding[]}>} map
+	 * @returns {Object<string, {coding: OntologyAnnotationCoding[]}>}
+	 */
+	function cloneCodingMap(map) {
+		/** @type {Object<string, {coding: OntologyAnnotationCoding[]}>} */
+		const clone = {};
+		for (const [code, entry] of Object.entries(map)) {
+			clone[code] = { coding: entry.coding.slice() };
+		}
+		return clone;
 	}
 
 	//#region DataTable Rendering
@@ -420,26 +445,42 @@
 	 * Initializes the DataTable instance for annotation display and manipulation.
 	 */
 	function initDatatable() {
-		const $table = odState.$dlg?.find('#rome-annotation-table');
-		odState.dtInstance = $table.DataTable({
+		const $table = /** @type {ROMEDataTableJQuery} */ (odState.$dlg.find('#rome-annotation-table'));
+		odState.dtInstance = $table.DataTable(/** @type {any} */ ({
 			autoWidth: true,
 			data: odState.rows,
 			columns: [
 				{
 					data: null,
-					render: (_data, _type, row) => renderSystemColumn(row)
+					render: (
+						/** @type {any} */ _data,
+						/** @type {string} */ _type,
+						/** @type {ROME_AnnotationRow} */ row
+					) => renderSystemColumn(row)
 				},
 				{
 					data: null,
-					render: (_data, _type, row) => renderCodeColumn(row)
+					render: (
+						/** @type {any} */ _data,
+						/** @type {string} */ _type,
+						/** @type {ROME_AnnotationRow} */ row
+					) => renderCodeColumn(row)
 				},
 				{
 					data: null,
-					render: (_data, _type, row) => renderDisplayColumn(row)
+					render: (
+						/** @type {any} */ _data,
+						/** @type {string} */ _type,
+						/** @type {ROME_AnnotationRow} */ row
+					) => renderDisplayColumn(row)
 				},
 				{
 					data: null,
-					render: (_data, type, row) => {
+					render: (
+						/** @type {any} */ _data,
+						/** @type {string} */ type,
+						/** @type {ROME_AnnotationRow} */ row
+					) => {
 						if (type === 'sort' || type === 'type') {
 							return getTargetSortKey(row);
 						}
@@ -450,7 +491,11 @@
 					data: null,
 					orderable: false,
 					searchable: false,
-					render: (_data, _type, row) => renderActionColumn(row)
+					render: (
+						/** @type {any} */ _data,
+						/** @type {string} */ _type,
+						/** @type {ROME_AnnotationRow} */ row
+					) => renderActionColumn(row)
 				}
 			],
 			language: {
@@ -462,10 +507,13 @@
 			lengthChange: false,
 			pageLength: 10,
 			order: [[3, 'asc']],
-			createdRow: (rowEl, rowData) => {
+			createdRow: (
+				/** @type {HTMLElement} */ rowEl,
+				/** @type {ROME_AnnotationRow} */ rowData
+			) => {
 				$(rowEl).data('rome-entry', rowData);
 			}
-		});
+		}));
 	}
 
 	/**
@@ -526,6 +574,10 @@
 		</select>`;
 	}
 
+	/**
+	 * @param {ROME_AnnotationRow} row
+	 * @returns {string}
+	 */
 	function getRowTargetValue(row) {
 		if (row.targetType === 'field') {
 			return `field:${row.targetName}`;
@@ -618,13 +670,13 @@
 		dtInstance: null,
 		dtAdvancedUiEnabled: false,
 		selected: null,
-		$dlg: null,
-		$editor: null,
-		$add: null,
-		$error: null,
-		$info: null,
-		$search: null,
-		$searchSpinner: null,
+		$dlg: $(),
+		$editor: $(),
+		$add: $(),
+		$error: $(),
+		$info: $(),
+		$search: $(),
+		$searchSpinner: $(),
 		helpContent: null,
 		minItemsForSelect2: 7,
 		targetOptions: [],
@@ -649,23 +701,31 @@
 	 * field annotation, and choices. Watchers are attached once only.
 	 */
 	function initUserChangeWatcher() {
+		/** @type {any[]} */
 		const elements = [];
+		/** @type {string[]} */
 		const filters = [];
 		const watcher = odState.editType === 'field' ? 'fieldWatcher' : 'matrixWatcher';
 		if (odState.editType === 'field' && odState.fieldWatcher == null) {
 			// Annotation
-			elements.push(document.getElementById('field_annotation'));
+			const annotationEl = document.getElementById('field_annotation');
+			if (annotationEl) elements.push(annotationEl);
 			// Choices
-			elements.push(document.getElementById('element_enum'));
+			const enumEl = document.getElementById('element_enum');
+			if (enumEl) elements.push(enumEl);
 			// Field type
-			elements.push(document.getElementById('field_type'));
+			const fieldTypeEl = document.getElementById('field_type');
+			if (fieldTypeEl) elements.push(fieldTypeEl);
 		}
 		else if (odState.editType === 'matrix' && odState.matrixWatcher == null) {
 			// Table of matrix fields (including field names and annotations)
-			elements.push(document.querySelector('table.addFieldMatrixRowParent'));
+			const matrixTable = document.querySelector('table.addFieldMatrixRowParent');
+			if (matrixTable) elements.push(matrixTable);
 			// Choices
-			elements.push(document.getElementById('element_enum_matrix'));
-			elements.push(document.getElementById('section_header_matrix'));
+			const enumMatrixEl = document.getElementById('element_enum_matrix');
+			if (enumMatrixEl) elements.push(enumMatrixEl);
+			const sectionHeaderEl = document.getElementById('section_header_matrix');
+			if (sectionHeaderEl) elements.push(sectionHeaderEl);
 			filters.push(
 				'input[name^=addFieldMatrixRow-varname_]',
 				'textarea[name=addFieldMatrixRow-annotation]',
@@ -673,8 +733,7 @@
 			);
 		}
 		if (elements.length > 0) {
-			// @ts-ignore
-			odState[watcher] = WatchTargets.watch(elements, {
+			const handle = WatchTargets.watch(elements, {
 				onEvent: (info) => {
 					if (info.kind === 'edit') {
 						const $el = $(info.el);
@@ -708,6 +767,12 @@
 				fireOnInput: false,
 				patchProgrammatic: true
 			});
+			if (watcher === 'fieldWatcher') {
+				odState.fieldWatcher = handle;
+			}
+			else {
+				odState.matrixWatcher = handle;
+			}
 		}
 	}
 
@@ -730,7 +795,7 @@
 
 	/**
 	 * Ensures ontology annotation JSON is normalized for draft-state operations.
-	 * @param {OntologyAnnotationJSON|Object} raw
+	 * @param {unknown} raw
 	 * @returns {OntologyAnnotationJSON}
 	 */
 	function normalizeAnnotation(raw) {
@@ -821,12 +886,12 @@
 
 
 	function initInfoPopover() {
-		odState.$info.popover({
+		/** @type {ROMEBootstrapPopoverJQuery} */ (odState.$info).popover({
 			trigger: 'click hover focus',
 			customClass: 'rome-annotation-popover',
 			html: true,
 			sanitize: false,
-			container: odState.$dlg?.get(0),
+			container: odState.$dlg.get(0),
 			content: () => getSelectedAnnotationPopoverHtml(),
 			title: 'Annotation to be added',
 			placement: 'top'
@@ -854,13 +919,14 @@
 				if (checkCodingUnique(rows, coding, 'unit')) {
 					rows.push({
 						targetType: 'unit',
-						targetName: null,
+						targetName: '',
 						annotation: coding,
 					});
 				}
 			}
-			for (const code in annotations?.valueCodingMap ?? {}) {
-				const codings = annotations.valueCodingMap[code]?.coding ?? [];
+			const valueCodingMap = annotations.valueCodingMap ?? {};
+			for (const code in valueCodingMap) {
+				const codings = valueCodingMap[code]?.coding ?? [];
 				for (const coding of codings) {
 					if (checkCodingUnique(rows, coding, 'choice')) {
 						rows.push({
@@ -920,7 +986,7 @@
 	 */
 	function parseRowAnnotation($row) {
 		const value = `${$row.find('textarea[name="addFieldMatrixRow-annotation"]').first().val() ?? ''}`;
-		return ontologyParser.parse(value);
+		return ontologyParser.parse(ensureMatrixRowId($row), value);
 	}
 
 
@@ -929,47 +995,13 @@
 
 	/**
 	 * Ensures current UI draft can be saved and blocks submit if ONTOLOGY JSON is invalid.
+	 * @param {null|(() => void)} [onProceedAfterMissingChoiceWarning=null]
+	 * @param {boolean} [skipMissingChoicePrompt=false]
 	 * @returns {boolean}
 	 */
 	function validateBeforeSave(onProceedAfterMissingChoiceWarning = null, skipMissingChoicePrompt = false) {
 
-		// TODO: Reimplement warning for missing choice targets and other issues
 		setAnnotations();
-
-		return true;
-
-		if (designerState.isMatrix) {
-			syncAllMatrixDraftsToTextareas();
-			const invalidRows = [];
-			getMatrixRows().forEach(($row) => {
-				const rowId = ensureMatrixRowId($row);
-				const rowState = matrixDraftState.rows[rowId];
-				if (!rowState) return;
-				const parse = parseRowAnnotation($row);
-				if (parse.error) {
-					invalidRows.push({ rowId, rowName: rowState.varName || rowId, message: parse.errorMessage });
-				}
-			});
-			if (invalidRows.length > 0) {
-				log('Blocked matrix save due to invalid rows:', invalidRows);
-				showInvalidSaveDialog(
-					`Cannot save matrix. ${invalidRows.length} row(s) contain invalid ontology JSON.`,
-					() => syncAllMatrixDraftsToTextareas()
-				);
-				return false;
-			}
-			return maybeWarnMissingChoiceTargetsOnSave(onProceedAfterMissingChoiceWarning, skipMissingChoicePrompt);
-		}
-		syncSingleDraftToTextarea(true);
-		const parse = getOntologyAnnotation();
-		if (parse.error) {
-			log('Blocked field save due to invalid ontology JSON:', parse.errorMessage);
-			showInvalidSaveDialog(
-				`Cannot save field. ${parse.errorMessage}`,
-				() => syncSingleDraftToTextarea(true)
-			);
-			return false;
-		}
 		return maybeWarnMissingChoiceTargetsOnSave(onProceedAfterMissingChoiceWarning, skipMissingChoicePrompt);
 	}
 
@@ -977,6 +1009,7 @@
 	 * Warns and blocks save when annotations are still mapped to missing choice targets.
 	 * Save can continue only after explicit user acknowledgement.
 	 * @param {null|(() => void)} onProceedAfterWarning
+	 * @param {boolean} [skipMissingChoicePrompt=false]
 	 * @returns {boolean}
 	 */
 	function maybeWarnMissingChoiceTargetsOnSave(onProceedAfterWarning = null, skipMissingChoicePrompt = false) {
@@ -1086,10 +1119,10 @@
 	 * @returns {void}
 	 */
 	function ensureFieldSaveHook() {
-		const existing = window['addEditFieldSave'];
+		const existing = /** @type {ROMEWrappedFunction|undefined} */ (globalWindow['addEditFieldSave']);
 		if (typeof existing !== 'function') return;
 		if (existing.__romeWrapped === true) return;
-		const wrapped = function () {
+		const wrapped = /** @type {ROMEWrappedFunction} */ (/** @this {any} */ function () {
 			const self = this;
 			const args = Array.from(arguments);
 			let skipMissingChoicePrompt = false;
@@ -1100,14 +1133,14 @@
 			}
 			if (!validateBeforeSave(() => {
 				window.setTimeout(() => {
-					window['addEditFieldSave'].apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
+					globalWindow['addEditFieldSave'].apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
 				}, 0);
 			}, skipMissingChoicePrompt)) return false;
 			updateExcludedCheckboxHiddenInput();
 			return existing.apply(self, args);
-		};
+		});
 		wrapped.__romeWrapped = true;
-		window['addEditFieldSave'] = wrapped;
+		globalWindow['addEditFieldSave'] = wrapped;
 	}
 
 	/**
@@ -1115,14 +1148,14 @@
  	 * @returns {void}
 	 */
 	function ensureFitDialogHook() {
-		const existing = window['fitDialog'];
+		const existing = /** @type {ROMEWrappedFunction|undefined} */ (globalWindow['fitDialog']);
 		if (typeof existing !== 'function') return;
 		if (existing['__romeWrapped'] === true) return;
-		const wrapped = function () {
+		const wrapped = /** @type {ROMEWrappedFunction} */ (/** @this {any} */ function () {
 			const self = this;
 			const args = Array.from(arguments);
 
-			const ob = args[0];
+			const ob = /** @type {(HTMLElement & {id?: string})|undefined} */ (args[0]);
 			if (ob && ob['id'] && ['div_add_field', 'addMatrixPopup'].includes(ob.id)) {
 				odState.$dlg = $(ob);
 				if (ob.id === 'addMatrixPopup') {
@@ -1143,9 +1176,9 @@
 				}
 			}
 			return existing.apply(self, args);
-		};
+		});
 		wrapped.__romeWrapped = true;
-		window['fitDialog'] = wrapped;
+		globalWindow['fitDialog'] = wrapped;
 	}
 
 	/**
@@ -1153,10 +1186,10 @@
 	 * @returns {void}
 	 */
 	function ensureMatrixSaveHook() {
-		const existing = window['matrixGroupSave'];
+		const existing = /** @type {ROMEWrappedFunction|undefined} */ (globalWindow['matrixGroupSave']);
 		if (typeof existing !== 'function') return;
 		if (existing.__romeWrapped === true) return;
-		const wrapped = function () {
+		const wrapped = /** @type {ROMEWrappedFunction} */ (/** @this {any} */ function () {
 			const self = this;
 			const args = Array.from(arguments);
 			let skipMissingChoicePrompt = false;
@@ -1167,13 +1200,13 @@
 			}
 			if (!validateBeforeSave(() => {
 				window.setTimeout(() => {
-					window['matrixGroupSave'].apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
+					globalWindow['matrixGroupSave'].apply(self, [...args, { [SAVE_SKIP_SENTINEL_KEY]: true }]);
 				}, 0);
 			}, skipMissingChoicePrompt)) return false;
 			return existing.apply(self, args);
-		};
+		});
 		wrapped.__romeWrapped = true;
-		window['matrixGroupSave'] = wrapped;
+		globalWindow['matrixGroupSave'] = wrapped;
 	}
 
 	/**
@@ -1187,10 +1220,9 @@
 				const matrixGroupName = String($('#grid_name').val());
 				const exclude = isExcludedCheckboxChecked();
 				const originalSuccess = options.success;
-				options.success = function (data, textStatus, jqXHR) {
+				options.success = /** @this {any} */ function (data, textStatus, jqXHR) {
 					saveMatrixFormExclusion(matrixGroupName, exclude);
-					if (originalSuccess) {
-						// @ts-ignore
+					if (typeof originalSuccess === 'function') {
 						originalSuccess.call(this, data, textStatus, jqXHR);
 					}
 				}
@@ -1198,15 +1230,15 @@
 			else if (options.url?.includes('Design/online_designer_render_fields.php')) {
 				// Design table reloading - get updated exclusion
 				const originalSuccess = options.success
-				options.success = function (data, textStatus, jqXHR) {
+				options.success = /** @this {any} */ function (data, textStatus, jqXHR) {
+					const ajaxContext = this;
 					JSMO.ajax('refresh-exclusions', config.form).then(function (response) {
 						log('Updated config data:', response);
 						config.fieldsExcluded = response.fieldsExcluded;
 						config.matrixGroupsExcluded = response.matrixGroupsExcluded;
 					}).finally(function () {
-						if (originalSuccess) {
-							// @ts-ignore
-							originalSuccess.call(this, data, textStatus, jqXHR);
+						if (typeof originalSuccess === 'function') {
+							originalSuccess.call(ajaxContext, data, textStatus, jqXHR);
 						}
 					});
 				}
@@ -1344,6 +1376,7 @@
 					}
 
 					// Optional quote wrapper around the JSON object
+					/** @type {string|null} */
 					let quote = null;
 					if (s[i] === "'" || s[i] === '"') {
 						quote = s[i];
@@ -1375,7 +1408,8 @@
 					try {
 						parsed = JSON.parse(jsonText);
 					} catch (e) {
-						return { ok: false, reason: `JSON.parse failed: ${e && e.message ? e.message : String(e)}` };
+						const message = e instanceof Error ? e.message : String(e);
+						return { ok: false, reason: `JSON.parse failed: ${message}` };
 					}
 
 					if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -1386,7 +1420,7 @@
 					if (validate) {
 						const ok = validate(parsed);
 						if (!ok) {
-							const msg = formatValidatorErrors(validate.errors);
+							const msg = formatValidatorErrors(validate.errors ?? []);
 							return { ok: false, reason: `Schema validation failed: ${msg}` };
 						}
 					}
@@ -1420,7 +1454,7 @@
 		 * Scans text from opening `{` to matching `}` while respecting string escapes.
 		 * @param {string} s
 		 * @param {number} start
-		 * @returns {{ok:boolean, start?:number, end?:number, reason?:string}}
+		 * @returns {{ok:true, start:number, end:number} | {ok:false, reason:string}}
 		 */
 		function scanJsonObject(s, start) {
 			let depth = 0;
@@ -1582,7 +1616,9 @@
 	function buildTargetOptions() {
 		/** @type {ROME_TargetOption[]} */
 		const options = [];
+		/** @type {Object<string, {label: string, pos: Number}>} */
 		const choiceLabelMap = {};
+		/** @type {Object<string, string>} */
 		const rowIdFieldMap = {};
 		if (odState.editType === 'matrix') {
 			// Fields
@@ -1705,16 +1741,29 @@
 	 * @returns {ROME_AnnotationRow[]}
 	 */
 	function getMissingChoiceTargetRows() {
-		return []; // TODO
+		return odState.rows.filter(row => {
+			return row.targetType === 'choice' && !odState.choiceLabelMap[row.targetName];
+		});
+	}
+
+	/**
+	 * Removes draft rows that target choice codes which are no longer available.
+	 * @returns {void}
+	 */
+	function removeMissingChoiceTargetsFromDraft() {
+		odState.rows = odState.rows.filter(row => {
+			return row.targetType !== 'choice' || !!odState.choiceLabelMap[row.targetName];
+		});
+		setAnnotations(true);
 	}
 
 
 	/**
 	 * Returns the preferred Select2 dropdown parent for current dialog context.
-	 * @returns {JQuery<HTMLElement>|undefined}
+	 * @returns {JQuery<HTMLElement>}
 	 */
 	function getSelect2DropdownParent() {
-		const $dialog = odState.$dlg?.closest('[role="dialog"]');
+		const $dialog = odState.$dlg.closest('[role="dialog"]');
 		if ($dialog && $dialog.length > 0) return $dialog;
 		return odState.$dlg;
 	}
@@ -1726,13 +1775,14 @@
 	 */
 	function applySelect2ToTargetSelects($selects) {
 		if (!$selects || $selects.length === 0) return;
-		if (typeof $.fn.select2 !== 'function') return;
+		const jqueryPlugins = /** @type {ROMESelect2PluginRegistry} */ ($.fn);
+		if (typeof jqueryPlugins.select2 !== 'function') return;
 		const threshold = Number.parseInt(`${odState.minItemsForSelect2 ?? 7}`, 10);
 		const minItems = Number.isFinite(threshold) && threshold > 0 ? threshold : 7;
 		const effectiveCount = odState.targetOptions.length;
 		const showSearch = effectiveCount > minItems;
 		$selects.each(function () {
-			const $el = $(this);
+			const $el = /** @type {ROMESelect2JQuery} */ ($(this));
 			const syncMissingClass = () => {
 				const $container = $el.next('.select2-container');
 				if ($container.length === 0) return;
@@ -1759,18 +1809,20 @@
 	 * @param {string|false} errorMessage
 	 */
 	function showSearchErrorBadge(errorMessage) {
+		const errorEl = odState.$error.get(0);
+		if (!errorEl || !bootstrapGlobal) return;
 		if (errorMessage) {
 			odState.$error
 			.css('display', 'block')
 			.attr('data-bs-tooltip', 'hover')
 			.attr('title', errorMessage);
-			const tt = new bootstrap.Tooltip(odState.$error.get(0));
+			const tt = new bootstrapGlobal.Tooltip(errorEl);
 			tt.enable();
 		}
 		else {
 			odState.$error
 			.css('display', 'none');
-			const tt = new bootstrap.Tooltip(odState.$error.get(0));
+			const tt = new bootstrapGlobal.Tooltip(errorEl);
 			tt.dispose();
 		}
 	}
@@ -1794,6 +1846,7 @@
 
 	//#region Search Implementation
 
+	/** @type {ROMESearchState} */
 	const searchState = {
 		rid: 0,
 		term: '',
@@ -1862,7 +1915,10 @@
 			open: function () {
 				raiseAutocompleteMenu();
 			},
-			source: function (request, responseCb) {
+			source: function (
+				/** @type {{term?: string}} */ request,
+				/** @type {(items: ROMESearchAutocompleteItem[]) => void} */ responseCb
+			) {
 				const term = (request.term || '').trim();
 				if (term.length < 2) {
 					showNoResultsState(false);
@@ -1881,6 +1937,7 @@
 				const ck = makeCacheKey(term, desiredSourceIds);
 				if (searchState.cache.has(ck)) {
 					const snap = searchState.cache.get(ck);
+					if (!snap) return;
 
 					searchState.term = term;
 					searchState.resultsBySource = snap.resultsBySource || {};
@@ -1914,7 +1971,10 @@
 				queueSearch(term, responseCb);
 			}
 		})
-			.data('ui-autocomplete')._renderItem = function (ul, item) {
+			.data('ui-autocomplete')._renderItem = function (
+				/** @type {JQuery<HTMLElement>} */ ul,
+				/** @type {ROMESearchAutocompleteItem} */ item
+			) {
 				const sys = shortSystem(item.hit.system);
 				const code = item.hit.code ? ` [${item.hit.code}]` : '';
 
@@ -1939,7 +1999,7 @@
 				system: h.system,
 				code: h.code,
 				display: h.display,
-				type: h.type || null
+				type: h.type || undefined
 			});
 		});
 		odState.$search.on('keydown keyup', function (event) {
@@ -1991,12 +2051,13 @@
 	 * @returns {string}
 	 */
 	function getSelectedAnnotationPopoverHtml() {
-		if (!odState.selected) return 'No selection made.';
-		const source = (config.sources || []).find(s => s.id === odState.selected.sourceId);
-		const sourceLabel = source?.label || odState.selected.sourceId || 'Unknown source';
-		const system = odState.selected.system || '?';
-		const code = odState.selected.code || '?';
-		const display = odState.selected.display || '';
+		const selected = odState.selected;
+		if (!selected) return 'No selection made.';
+		const source = (config.sources || []).find(s => s.id === selected.sourceId);
+		const sourceLabel = source?.label || selected.sourceId || 'Unknown source';
+		const system = selected.system || '?';
+		const code = selected.code || '?';
+		const display = selected.display || '';
 		const linkPrefix = config.knownLinks?.[system] || '';
 		const linkHtml = linkPrefix
 			? `<a target="_blank" href="${escapeHTML(linkPrefix + code)}">Open in browser</a>`
@@ -2028,7 +2089,7 @@
 	/**
 	 * Queues a debounced search request for autocomplete.
 	 * @param {string} term
-	 * @param {(items: any[]) => void} responseCb
+	 * @param {(items: ROMESearchAutocompleteItem[]) => void} responseCb
 	 * @returns {void}
 	 */
 	function queueSearch(term, responseCb) {
@@ -2073,7 +2134,7 @@
 	/**
 	 * Executes search request and merges response into search state.
 	 * @param {string} term
-	 * @param {(items: any[]) => void|null} responseCb
+	 * @param {((items: ROMESearchAutocompleteItem[]) => void)|null} responseCb
 	 * @param {{sourceIds?: string[], merge?: boolean}=} opts
 	 * @returns {void}
 	 */
@@ -2119,6 +2180,7 @@
 
 		const rid = searchState.rid;
 
+		/** @type {{rid: number, q: string, source_ids?: string[]}} */
 		const payload = { rid, q: term };
 		if (sourceIds && sourceIds.length) payload.source_ids = sourceIds;
 
@@ -2239,6 +2301,7 @@
 		if (rid !== searchState.rid) return;
 		if (!Object.keys(searchState.pending).length) return;
 
+		/** @type {Object<string, string>} */
 		const pendingMap = {};
 		for (const [src, p] of Object.entries(searchState.pending)) pendingMap[src] = p.token;
 
@@ -2350,9 +2413,10 @@
 	 * Converts grouped source results into sorted autocomplete items.
 	 * @param {Object<string, any[]>} resultsBySource
 	 * @param {string} term
-	 * @returns {any[]}
+	 * @returns {ROMESearchAutocompleteItem[]}
 	 */
 	function flattenResults(resultsBySource, term) {
+		/** @type {ROMESearchAutocompleteItem[]} */
 		const out = [];
 
 		for (const [sourceId, hits] of Object.entries(resultsBySource)) {
@@ -2479,7 +2543,9 @@
 	 */
 	function getDesiredSourceIds() {
 		// TODO: later: return subset chosen in UI
-		return (config.sources || []).map(s => s.id);
+		return /** @type {string[]} */ ((config.sources || [])
+			.map(s => s.id)
+			.filter(id => typeof id === 'string' && id !== ''));
 	}
 
 	//#endregion Search Implementation
