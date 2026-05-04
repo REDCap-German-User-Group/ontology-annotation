@@ -1676,6 +1676,9 @@
 			else if (odState.fieldType === 'yesno') {
 				enumText = config.fixedEnums.yesno;
 			}
+			else if (odState.fieldType === 'slider') {
+				enumText = config.fixedEnums.slider;
+			}
 			else {
 				enumText = String($('#element_enum').val() ?? '');
 			}

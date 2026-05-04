@@ -469,6 +469,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		return [
 			'truefalse' => "1, " . \RCView::getLangStringByKey('design_186') . "\n0, " . \RCView::getLangStringByKey('design_187'),
 			'yesno' => "1, " . \RCView::getLangStringByKey('design_100') . "\n0, " . \RCView::getLangStringByKey('design_99'),
+			// We treat 'slider' as a special case of a categorical variable
+			'slider' => "L, " . $this->framework->tt("fieldedit_20") . "\nM, " . $this->framework->tt("fieldedit_21") . "\nR, " . $this->framework->tt("fieldedit_22"),
 		];
 	}
 
