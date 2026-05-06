@@ -65,8 +65,6 @@
 	"project-settings": [
 	],
 	"auth-ajax-actions": [
-		"search",
-		"parse",
 		"get-fieldhelp",
 		"set-matrix-exclusion",
 		"refresh-exclusions",

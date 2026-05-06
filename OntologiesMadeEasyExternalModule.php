@@ -114,11 +114,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 	{
 		$this->initProject($project_id);
 		switch ($action) {
-			case 'search':
-				return $this->search_ontologies($payload);
-			case 'parse':
-				$ontology = $this->parseOntology($payload);
-				return $ontology;
 			case 'get-fieldhelp':
 				return $this->getFieldHelp();
 			case 'set-matrix-exclusion':
@@ -1185,117 +1180,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		];
 	}
 
-	private function search_ontologies($payload)
-	{
-
-		$term = trim($payload['term'] ?? '');
-		if ($term == '') return null;
-
-		$result = [];
-
-		// search configured minimal datasets first
-		$minimal_datasets  = [];
-		// project specific jsons
-		foreach ($this->getProjectSetting('minimal-dataset') as $minimal_dataset_string) {
-			if ($minimal_dataset_string == null) continue;
-			$minimal_datasets[] = $minimal_dataset_string;
-			return json_decode($minimal_dataset_string);
-		}
-		// enabled standard minimal datasets
-		foreach (glob(__DIR__ . '/minimal_datasets/*.json') as $filename) {
-			if ($this->getProjectSetting('minimal-dataset-file-' . basename($filename, '.json'))) {
-				$minimal_datasets[] = file_get_contents($filename);
-			}
-		}
-
-		foreach ($minimal_datasets as $minimal_dataset_string) {
-			$minimal_dataset = json_decode($minimal_dataset_string, true);
-			$title = $minimal_dataset['title'];
-			$items_stack = $minimal_dataset['item'];
-			while (!empty($items_stack)) {
-				$current_item = array_shift($items_stack);
-				if (is_array($current_item['item'])) {
-					array_push($items_stack, ...$current_item['item']);
-				}
-				if ($current_item['text'] && is_array($current_item['code'])) {
-					$display_item = $current_item['text'];
-					if (preg_match("/$term/i", $display_item)) {
-						$pos = stripos($display_item, $term);
-						if ($pos !== false) {
-							$term_length = strlen($term);
-							$display_item = substr($display_item, 0, $pos) .
-								'<span class="rome-edit-field-ui-search-match">' . substr($display_item, $pos, $term_length) . '</span>' .
-								substr($display_item, $pos + $term_length);
-						}
-						$result[] = [
-							'value' => $this->romeJsonEncode($current_item),
-							'label' => $current_item['text'],
-							'display' => "<b>$title</b>: " . $display_item
-						];
-					}
-				}
-			}
-		}
-
-		if ($this->getProjectSetting('minimal-datasets-only')) {
-			return $result;
-		}
-
-
-
-		$bioportal_api_token = $GLOBALS['bioportal_api_token'] ?? '';
-		if ($bioportal_api_token == '') return null;
-
-		$bioportal_api_url = $GLOBALS['bioportal_api_url'] ?? '';
-		if ($bioportal_api_url == '') return null;
-
-		// Fixed
-		$ontology_acronym = 'SNOMEDCT';
-		$ontology_system  = 'http://snomed.info/sct';
-
-
-		// Build URL to call
-		$url = $bioportal_api_url . 'search?q=' . urlencode($term) . '&ontologies=' . urlencode($ontology_acronym)
-			. '&suggest=true&include=prefLabel,notation,cui&display_links=false&display_context=false&format=json&apikey=' . $bioportal_api_token;
-		// Call the URL
-		$json = http_get($url);
-
-		$response = json_decode($json, true);
-
-		if (!$response || !$response['collection']) return null;
-
-		$dummy_data = [];
-		foreach ($response['collection'] as $item) {
-			$dummy_data[$item['notation']] = $item['prefLabel'];
-		}
-
-		foreach ($dummy_data as $val => $label) {
-			$display_item = "[$val] $label";
-			$display_item = filter_tags(label_decode($display_item));
-			$pos = stripos($display_item, $term);
-			if ($pos !== false) {
-				$term_length = strlen($term);
-				$display_item = substr($display_item, 0, $pos) .
-					'<span class="rome-edit-field-ui-search-match">' . substr($display_item, $pos, $term_length) . '</span>' .
-					substr($display_item, $pos + $term_length);
-				$result[] = [
-					'value' => $this->romeJsonEncode(['code' => ['system' => $ontology_system, 'code' => $val, 'display' => $label]]),
-					'label' => $label,
-					'display' => '<b>' . $ontology_acronym . '</b>: ' . $display_item,
-				];
-			}
-		}
-		if (count($result) == 0) {
-			$result[] = [
-				'value' => '',
-				'label' => '',
-				'display' => $this->tt('fieldedit_16'),
-			];
-		}
-
-		return $result;
-	}
-
 
 	/**
 	 * Gets the "Learn about using Ontology Annotations" content 
@@ -1308,12 +1192,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 
 	#endregion
 
-
-	// Method not currently implemented - used for ??
-	private function parseOntology($payload)
-	{
-		return [];
-	}
 
 	#region Discover Page
 
