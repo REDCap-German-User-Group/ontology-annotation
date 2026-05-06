@@ -535,7 +535,8 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		if ($fmd['element_type'] === 'text') {
 			$out['type'] = 'string';
 			switch ($vt) {
-				case '': break;
+				case '':
+					break;
 				case 'time':
 					$out['type'] = 'time';
 					$out['precision'] = 'minutes';
@@ -586,8 +587,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					$out['format'] = $vt;
 					break;
 			}
-		}
-		else if ($fmd['element_type'] === 'textarea') {
+		} else if ($fmd['element_type'] === 'textarea') {
 			$out['type'] = 'text';
 		}
 		return $out;
@@ -710,7 +710,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		// Remaining are all text
 		$vt = (string)($fmd['element_validation_type'] ?? '');
 		switch ($vt) {
-			case '': 
+			case '':
 				return 'string';
 			case 'time':
 			case 'time_hh_mm_ss':
@@ -856,13 +856,11 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$source['message'] = "The system source for this source is no longer available. This source should be deleted.";
 				$source['system_state'] = 'deleted';
 				$source['enabled'] = false;
-			}
-			else if (!$systemSource['enabled']) {
+			} else if (!$systemSource['enabled']) {
 				$source['message'] = "This system source for this source is currently disabled.";
 				$source['system_state'] = 'disabled';
 				$source['enabled'] = false;
-			}
-			else {
+			} else {
 				$source['system_state'] = 'enabled';
 			}
 			$type = strpos($source['system_source_id'], 'sys-ls_') === 0 ? 'local' : 'remote';
@@ -872,8 +870,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 				$source['system_counts'] = $systemSource['system_counts'];
 			}
 			$source['from_system'] = true;
-		}
-		else {
+		} else {
 			$source['from_system'] = false;
 			if ($type === 'remote') {
 				// Add indicator whether the source uses its own credentials (proj-defined sources only)
@@ -2476,9 +2473,13 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					$meta['title'] = 'BioPortal: ' . $acronym;
 					$bp = $this->getBioPortalApiDetails();
 					$bp_ontologies = json_decode($bp['ontology_list'], true);
-					$bp_ontology = array_find($bp_ontologies, function ($o) use ($acronym) {
-						return $o['acronym'] === $acronym;
-					});
+					$bp_ontology = null;
+					foreach ($bp_ontologies as $o) {
+						if ($o['acronym'] === $acronym) {
+							$bp_ontology = $o;
+							break;
+						}
+					}
 					$meta['description'] = 'Search via BioPortal: ' . $bp_ontology['name'];
 					$meta['acronym'] = $acronym;
 					$token = trim($payload['bp_token'] ?? '');
@@ -2801,7 +2802,7 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 					return [
 						'error' => 'Missing or invalid system source id. The system source may have been deleted. Please refresh the page.',
 					];
-				} 
+				}
 				$meta = $source;
 				// Resolve title and description
 				$meta['title_resolved'] = strlen(trim($payload['title'])) > 0
