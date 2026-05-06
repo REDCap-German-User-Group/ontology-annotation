@@ -2151,7 +2151,6 @@ class OntologiesMadeEasyExternalModule extends \ExternalModules\AbstractExternal
 		$body = curl_exec($ch);
 		$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 		$err   = curl_error($ch);
-		curl_close($ch);
 		return $code !== 401 && $code !== 403;
 	}
 
