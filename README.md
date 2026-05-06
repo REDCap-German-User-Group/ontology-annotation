@@ -1,4 +1,6 @@
-# ROME: REDCap Ontology Metadata Extension
+# ROME: REDCap Ontologies Made Easy
+
+*A REDCap Ontology Metadata Extension.*
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18525817.svg)](https://doi.org/10.5281/zenodo.18525817)
 
@@ -12,7 +14,7 @@ This module provides support to annotate fields in REDCap with references to var
   - Store structured metadata (CodeableConcept-like JSON)
 
 - **Configurable Ontology Sources**  
-  - Allows uploading of minimal datasets (FHIR Questionnaire format)
+  - Allows uploading local sources in FHIR Questionnaire or native ROME JSON format
   - Supports connection to BioPortal (any supported ontology)
   - Supports connection to Snowstorm (SNOMED CT server)
 
@@ -26,6 +28,9 @@ This module provides support to annotate fields in REDCap with references to var
 - **Structured Storage**
   - Annotations are stored as JSON within field metadata
   - Designed to be both human-editable and machine-readable
+
+- **Export**
+  - Export project annotations as native ROME JSON or as a FHIR Questionnaire
 
 ## Purpose
 
@@ -61,7 +66,7 @@ Manual installation:
 
 After installation, the module's cache mechanism needs to be set up using the built-in external module configuration in Control Center. ROME will not work until this step has been completed.
 
-Further configuration is done on the **ROME: REDCap Ontology Metadata Extension** plugin page. To be able to annotate fields, at least one ontology source has to be added to a project.
+Further configuration is done on the **ROME: REDCap Ontologies Made Easy** plugin page. To be able to annotate fields, at least one ontology source has to be added to a project.
 
 To add ontology sources to a project, go to the **Manage** tab and add:
 - Local sources (such as an annotated [FHIR Questionnaire](https://build.fhir.org/questionnaire.html))
@@ -92,7 +97,13 @@ Annotation is done in the _Online Designer_'s **Edit Field** dialog. In future v
 
 ### Searching an instance
 
-Use the **Discover** tab on the  plugin page in any project with the module enabled. Ontology codes can be selected and a list of projects that capture data matching these ontologies is displayed. Only projects that have opted in to be discoverable are included in the search.
+Use the **Discover** tab on the plugin page in any project with the module enabled. Ontology codes can be selected and a list of projects that capture data matching these ontologies is displayed. Only projects that have opted in to be discoverable are included in the search.
+
+### Exporting annotations
+
+Use the **Export** tab to download annotations from selected forms. The current export formats are:
+- Native ROME JSON
+- FHIR Questionnaire
 
 ### Merging annotated data
 

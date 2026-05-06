@@ -1,11 +1,14 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
-	"$id": "https://github.com/REDCap-German-User-Group/ontology-annotation/schemas/rome-annotation.schema.json",
+	"$id": "https://github.com/REDCap-German-User-Group/ontology-annotation/schemas/rome-export.schema.json",
 	"title": "ROME Ontology Export Schema",
 	"type": "object",
 	"required": [
 		"resourceType",
 		"meta",
+		"url",
+		"title",
+		"description",
 		"dataElements"
 	],
 	"properties": {
@@ -17,7 +20,8 @@
 			"required": [
 				"version",
 				"created",
-				"creator"
+				"creator",
+				"metadataState"
 			],
 			"properties": {
 				"version": {
@@ -34,6 +38,14 @@
 				"creator": {
 					"type": "string"
 				},
+				"metadataState": {
+					"type": "string",
+					"enum": [
+						"development",
+						"production",
+						"draft"
+					]
+				},
 				"language": {
 					"type": "string"
 				},
@@ -47,11 +59,21 @@
 			},
 			"additionalProperties": true
 		},
+		"url": {
+			"type": "string"
+		},
+		"title": {
+			"type": "string"
+		},
+		"description": {
+			"type": "string"
+		},
 		"dataElements": {
 			"type": "array",
 			"items": {
 				"$ref": "#/$defs/DataElement"
-			}
+			},
+			"minItems": 1
 		}
 	},
 	"additionalProperties": true,
@@ -79,8 +101,7 @@
 		"CodeableConcept": {
 			"type": "object",
 			"required": [
-				"coding",
-				"text"
+				"coding"
 			],
 			"properties": {
 				"coding": {
@@ -121,8 +142,7 @@
 			"required": [
 				"name",
 				"text",
-				"type",
-				"coding"
+				"type"
 			],
 			"properties": {
 				"name": {
@@ -138,11 +158,15 @@
 						"checkbox",
 						"dropdown",
 						"number",
+						"string",
 						"text",
-						"date",
-						"datetime",
+						"time",
 						"yesno",
-						"truefalse"
+						"truefalse",
+						"slider",
+						"file",
+						"sql",
+						"calc"
 					]
 				},
 				"coding": {
@@ -153,12 +177,7 @@
 					"minItems": 1
 				},
 				"format": {
-					"type": "string",
-					"enum": [
-						"email",
-						"url",
-						"phone"
-					]
+					"type": "string"
 				},
 				"numericType": {
 					"type": "string",
@@ -168,8 +187,19 @@
 					]
 				},
 				"precision": {
-					"type": "integer",
-					"minimum": 0
+					"oneOf": [
+						{
+							"type": "integer",
+							"minimum": 0
+						},
+						{
+							"type": "string",
+							"enum": [
+								"minutes",
+								"seconds"
+							]
+						}
+					]
 				},
 				"unit": {
 					"$ref": "#/$defs/CodeableConcept"
@@ -177,11 +207,11 @@
 				"valueCodingMap": {
 					"type": "object",
 					"patternProperties": {
-						"^[^\\s]+$": {
+						"^.+$": {
 							"$ref": "#/$defs/ValueCodingMapEntry"
 						}
 					},
-					"additionalProperties": true
+					"additionalProperties": false
 				}
 			},
 			"additionalProperties": true
