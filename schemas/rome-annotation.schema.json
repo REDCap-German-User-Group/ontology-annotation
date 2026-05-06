@@ -37,7 +37,7 @@
 				"valueCodingMap": {
 					"type": "object",
 					"patternProperties": {
-						"^[^\\s]+$": {
+						"^.+$": {
 							"type": "object",
 							"required": [
 								"coding"
@@ -78,9 +78,12 @@
 				},
 				"display": {
 					"type": "string"
+				},
+				"version": {
+					"type": "string"
 				}
 			},
-			"additionalProperties": false
+			"additionalProperties": true
 		}
 	}
 }
