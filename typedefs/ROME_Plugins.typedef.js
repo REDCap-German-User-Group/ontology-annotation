@@ -194,6 +194,18 @@ function showToast(title, message, type) {}
  */
 
 /**
+ * Minimal Select2 options used by the plugin pages.
+ * @typedef {Object} ROMEPluginSelect2Options
+ * @property {string=} width
+ * @property {JQuery<HTMLElement>|Element|string=} dropdownParent
+ * @property {Select2Option[]=} data
+ * @property {(data: Select2Option) => string|JQuery<HTMLElement>=} templateResult
+ * @property {(data: Select2Option) => string|JQuery<HTMLElement>=} templateSelection
+ * @property {string=} placeholder
+ * @property {boolean=} allowClear
+ */
+
+/**
  * @typedef {Object} SnowstormAuthData
  * @property {string} snowstorm_auth_mode
  * @property {string=} snowstorm_basic_user
@@ -206,6 +218,28 @@ function showToast(title, message, type) {}
  * @property {() => MinimalDataTableApi} clear
  * @property {{ add: (data: PluginSourceInfo[]) => MinimalDataTableApi }} rows
  * @property {() => MinimalDataTableApi} draw
+ */
+
+/**
+ * Minimal DataTables options and jQuery plugin bridge used by the plugin pages.
+ * @typedef {Object} MinimalPluginDataTableOptions
+ * @property {boolean=} autoWidth
+ * @property {PluginSourceInfo[]=} data
+ * @property {any[]=} columns
+ * @property {Object<string,string>=} language
+ * @property {boolean=} paging
+ * @property {boolean=} searching
+ * @property {boolean=} info
+ * @property {boolean=} lengthChange
+ * @property {number=} pageLength
+ * @property {any[]=} order
+ * @property {(rowEl: HTMLElement, rowData: unknown) => void=} createdRow
+ */
+
+/**
+ * @typedef {JQuery<HTMLElement> & {
+ *   DataTable: (options?: MinimalPluginDataTableOptions) => MinimalDataTableApi
+ * }} ROMEPluginDataTableJQuery
  */
 
 //#endregion
@@ -231,6 +265,31 @@ function showToast(title, message, type) {}
 
 /**
  * @typedef {HTMLSelectElement & { tomselect?: TomSelectInstance }} TomSelectElement
+ */
+
+/**
+ * Minimal Bootstrap modal API used by the plugin pages.
+ * @typedef {Object} BootstrapModal
+ * @property {() => void} show
+ * @property {() => void} hide
+ * @property {() => void} dispose
+ */
+
+/**
+ * @typedef {Object} BootstrapGlobal
+ * @property {new (element: Element, options?: Object) => BootstrapModal} Modal
+ */
+
+/** @type {BootstrapGlobal} */
+var bootstrap;
+
+/**
+ * @typedef {JQuery<HTMLElement> & {
+ *   select2: {
+ *     (options?: ROMEPluginSelect2Options): JQuery<HTMLElement>,
+ *     (method: string, ...args: any[]): JQuery<HTMLElement>
+ *   }
+ * }} ROMEPluginSelect2JQuery
  */
 
 /**

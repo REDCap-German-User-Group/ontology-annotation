@@ -565,7 +565,7 @@
 					$bioRefreshBtn.remove();
 					rcBioPortalTokenAvailable = res.rc_enabled;
 				}
-				$bioOntEl.select2({
+				(/** @type {ROMEPluginSelect2JQuery} */ ($bioOntEl)).select2({
 					width: '80%',
 					dropdownParent: $modalEl[0],
 					data: select2Data,
@@ -816,7 +816,7 @@
 					id: o,
 					text: o
 				}));
-				$snowBranchesEl.select2({
+				(/** @type {ROMEPluginSelect2JQuery} */ ($snowBranchesEl)).select2({
 					width: '80%',
 					dropdownParent: $modalEl[0],
 					data: select2Data,
@@ -1142,7 +1142,7 @@
 			const $table = $('#rome-system-sources-table');
 
 			//#region Datatable
-			ssDtInstance = /** @type {MinimalDataTableApi} */ ($table.DataTable({
+			ssDtInstance = (/** @type {ROMEPluginDataTableJQuery} */ ($table)).DataTable({
 				autoWidth: true,
 				data: config.sysSources ?? [],
 				columns: [
@@ -1197,7 +1197,7 @@
 					const source = /** @type {PluginSourceInfo} */ (rowData);
 					$(rowEl).data('source-key', source.key ?? '');
 				}
-			}));
+			});
 
 
 			/**
@@ -1324,7 +1324,7 @@
 		const adv = data.length > 10;
 
 		//#region Datatable
-		dtInstance = /** @type {MinimalDataTableApi} */ ($table.DataTable({
+		dtInstance = (/** @type {ROMEPluginDataTableJQuery} */ ($table)).DataTable({
 			autoWidth: true,
 			data: data,
 			columns: [
@@ -1385,7 +1385,7 @@
 				const source = /** @type {PluginSourceInfo} */ (rowData);
 				$(rowEl).data('source-entry', source);
 			}
-		}));
+		});
 
 
 		/**
