@@ -105,7 +105,7 @@ if (!$module->checkCacheConfigured()) {
 </div>
 
 <div id="rome-tab">
-	<?php include __DIR__ . "/tabs/{$active_tab}.php"; ?>
+	<?php include $module->framework->getSafePath(__DIR__ . "/tabs/{$active_tab}.php"); ?>
 </div>
 
 <?php if ($active_tab !== 'about'): ?>
