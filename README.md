@@ -5,13 +5,13 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18525817.svg)](https://doi.org/10.5281/zenodo.18525817)
 
 
-This module provides support to annotate fields in REDCap with references to various ontologies. The aim is to make data *Findable* as described in [FAIR data](https://en.wikipedia.org/wiki/FAIR_data). This is different from using ontologies like ICD10 or SNOMED-CT to describe *data*, which is already supported by REDCap. 
+This module provides support to annotate **metadata elements** (fields and answer options or units, where applicable) in REDCap using configurable ontologies to make **(meta)data** *Findable* (as described in [FAIR data](https://en.wikipedia.org/wiki/FAIR_data)) across projects in a REDCap instance. This is different from using ontologies like SNOMED-CT or ICD10 *as data*, which is already supported by REDCap (fields with "searching within a biomedical ontology" enabled). 
 
 ## Features
 
 - **Ontology Annotations**
   - Annotate fields with standardized concepts (e.g., SNOMED CT, LOINC)
-  - Store structured metadata (CodeableConcept-like JSON)
+  - Store structured metadata annotations in a FHIR CodeableConcept-like JSON
 
 - **Configurable Ontology Sources**  
   - Allows uploading local sources in FHIR Questionnaire or native ROME JSON format
@@ -26,11 +26,11 @@ This module provides support to annotate fields in REDCap with references to var
   - Caching strategies for remote terminology queries
 
 - **Structured Storage**
-  - Annotations are stored as JSON within field metadata
+  - Annotations are stored as JSON inside each field's 'Action Tags / Field Annotation' space
   - Designed to be both human-editable and machine-readable
 
 - **Export**
-  - Export project annotations as native ROME JSON or as a FHIR Questionnaire
+  - Export project annotations as native ROME JSON or in the FHIR Questionnaire format
 
 ## Purpose
 
@@ -42,7 +42,7 @@ ROME adds a semantic layer to REDCap projects by enabling:
 
 ## How does it work?
 
-This module provides a user interface (accessible at various places) that facilitates annotation of fields:
+This module provides a convenient user interface that is embedded in the Online Designer's _Edit Field_ dialog and facilitates the annotation of the field's elements:
 - The field itself, i.e., what it captures
 - For categorical fields, what the choices represent
 - For numerical fields, the unit
@@ -50,6 +50,8 @@ This module provides a user interface (accessible at various places) that facili
 The full annotation is captured as a JSON structure in the `@ONTOLOGY` action tag inside the _Field Annotation_ of a field. 
 
 Thus, annotations are integral parts of fields and consequently part of the data dictionary. The annotation format is described in detail [here](technical_docs/Annotation_Format.md).
+
+![Screenshot of a field for a patient's age](images/fig1.png)
 
 ## Installation
 
@@ -69,7 +71,7 @@ After installation, the module's cache mechanism needs to be set up using the bu
 Further configuration is done on the **ROME: REDCap Ontologies Made Easy** plugin page. To be able to annotate fields, at least one ontology source has to be added to a project.
 
 To add ontology sources to a project, go to the **Manage** tab and add:
-- Local sources (such as an annotated [FHIR Questionnaire](https://build.fhir.org/questionnaire.html))
+- Local sources (such as an annotated [FHIR Questionnaire](https://www.hl7.org/fhir/questionnaire.html))
 - Remote sources (such as [BioPortal](https://bioportal.bioontology.org/) or [Snowstorm](https://github.com/IHTSDO/snowstorm))
 - System sources (these are local or remote sources set up by a REDCap admin to be available for use in projects)
 
@@ -130,4 +132,4 @@ These instructions are also available on [GitHub](https://github.com/REDCap-Germ
 
 ## Support
 
-This work was supported by [TMF – Technologie- und Metho­den­plattform für die ver­netzte medi­zi­nische Forschung e.V.](https://www.tmf-ev.de/) (project V141-01).
+This work has been supported by [TMF – Technologie- und Metho­den­plattform für die ver­netzte medi­zi­nische Forschung e.V.](https://www.tmf-ev.de/) (project V141-01).
