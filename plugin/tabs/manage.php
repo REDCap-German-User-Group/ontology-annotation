@@ -48,7 +48,7 @@ $discoverable = $module->framework->getProjectSetting('proj-discoverable') ?? fa
 			<i class="fa-solid fa-hard-drive"></i> Add a system source
 		</button>
 	</div>
-	<table id="rome-sources" class="table table-sm table-striped align-middle rome-sources-table">
+	<table id="rome-sources" class="table table-sm table-hover align-middle rome-sources-table">
 		<thead>
 			<tr>
 				<th class="rome-sources-col-type">Type</th>
