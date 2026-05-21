@@ -303,8 +303,14 @@
 #rome-annotation-table .rome-row-target {
 	min-width: 150px;
 }
+#rome-annotation-table tbody th,
 #rome-annotation-table tbody td {
 	padding: 2px;
+}
+table.dataTable#rome-annotation-table > tbody > tr > th:first-child,
+table.dataTable#rome-annotation-table > tbody > tr > td:first-child {
+	background-color: var(--bs-table-bg, transparent);
+	font-weight: 400;
 }
 #rome-search-bar .select2-container {
 	min-width: 180px;
